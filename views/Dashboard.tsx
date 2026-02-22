@@ -10,15 +10,16 @@ import {
   AlertTriangle as AlertTriangleIcon, Brain as BrainIcon, Target as TargetIcon, 
   DollarSign as DollarSignIcon, Building2 as Building2Icon,
   Layers as LayersIcon, Package as PackageIcon, ShieldCheck as ShieldCheckIcon,
-  Percent as PercentIcon, Tag as TagIcon
+  Percent as PercentIcon, Tag as TagIcon, Car, Loader2 as Loader2Icon, MapPin
 } from 'lucide-react';
 import { 
   getDashboardMetricsSync, getWorkOrders, getRetailers, 
   getFleetCompanies, getExpertiseCenters, getInsuranceData, 
   getIndividualUsers, getDealers, getProductIntelligenceData,
-  getServiceWorkOrders
+  getServiceWorkOrders, getTopPartBrandsFromWorkOrders, getTopVehiclesByConsumptionFromWorkOrders,
+  getAftermarketHistory30d, getNationalBehaviorSummary, NationalBehaviorSummary
 } from '../services/dataService';
-import { ViewState, ServiceWorkOrder } from '../types';
+import { ViewState, ServiceWorkOrder, AftermarketHistory30d } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, AreaChart, Area } from 'recharts';
 import { computeOperationalMetrics } from '../utils/operationalMetrics';
 import { computeRepairRevenueIntel } from '../utils/repairRevenueIntel';
@@ -47,9 +48,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [individuals, setIndividuals] = useState<any[]>([]);
   const [dealers, setDealers] = useState<any[]>([]);
   const [productIntel, setProductIntel] = useState<any>(null);
+  const [topPartBrands, setTopPartBrands] = useState<any[]>([]);
+  const [topVehicleConsumption, setTopVehicleConsumption] = useState<any[]>([]);
+  const [aftermarketHistory30d, setAftermarketHistory30d] = useState<AftermarketHistory30d | null>(null);
+  const [loadingAftermarket, setLoadingAftermarket] = useState(false);
+  const [nationalBehavior, setNationalBehavior] = useState<NationalBehaviorSummary | null>(null);
+  const [loadingNationalBehavior, setLoadingNationalBehavior] = useState(false);
+  const [nationalBehaviorDays, setNationalBehaviorDays] = useState(30);
+  const [nationalBehaviorCity, setNationalBehaviorCity] = useState<string | undefined>(undefined);
 
   const fetchDynamicData = async () => {
-    const [wo, ret, fl, exp, ins, ind, dlr, intel, swo] = await Promise.all([
+    const [wo, ret, fl, exp, ins, ind, dlr, intel, swo, topBrands, topVehicles] = await Promise.all([
       getWorkOrders(), 
       getRetailers(), 
       getFleetCompanies(), 
@@ -58,7 +67,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       getIndividualUsers(), 
       getDealers(),
       getProductIntelligenceData(),
-      getServiceWorkOrders(currentUser.institutionId)
+      getServiceWorkOrders(currentUser.institutionId),
+      getTopPartBrandsFromWorkOrders(),
+      getTopVehiclesByConsumptionFromWorkOrders()
     ]);
     setWorkOrders(wo);
     setRetailers(ret);
@@ -69,6 +80,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
     setDealers(dlr);
     setProductIntel(intel);
     setServiceWorkOrders(swo);
+    setTopPartBrands(topBrands);
+    setTopVehicleConsumption(topVehicles);
 
     // 17.02.2026 - Ekonomik Zeka için ham kalemli feed'i oku
     const rawFeed = localStorage.getItem(REPAIR_WORKORDERS_FEED_KEY);
@@ -89,6 +102,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
     return () => window.removeEventListener('REPAIR_DASH_FEED_UPDATED', handleFeedUpdate);
   }, [currentUser.institutionId]);
 
+  // Fetch Aftermarket 30-day history when tab is active
+  useEffect(() => {
+    if (activeTab === 'AFTERMARKET') {
+      setLoadingAftermarket(true);
+      getAftermarketHistory30d().then(data => {
+        setAftermarketHistory30d(data);
+        setLoadingAftermarket(false);
+      });
+
+      // Fetch national behavior data
+      setLoadingNationalBehavior(true);
+      getNationalBehaviorSummary({ days: nationalBehaviorDays, city: nationalBehaviorCity }).then(data => {
+        setNationalBehavior(data);
+        setLoadingNationalBehavior(false);
+      });
+    }
+  }, [activeTab, nationalBehaviorDays, nationalBehaviorCity]);
+
   const opMetrics = computeOperationalMetrics(serviceWorkOrders);
   const repairIntel = computeRepairRevenueIntel(repairSourceData);
 
@@ -105,6 +136,133 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       {label}
     </button>
   );
+
+  const AftermarketSummarySection = () => {
+    if (loadingAftermarket || !aftermarketHistory30d) {
+      return (
+        <div className="flex items-center justify-center h-96 text-slate-400">
+          <Loader2Icon size={32} className="animate-spin" />
+        </div>
+      );
+    }
+
+    const kpis = [
+      { label: '30 Gün Ciro', value: `₺${(aftermarketHistory30d.kpis.revenue30d / 1000).toFixed(0)}K`, icon: ShoppingBagIcon, color: 'blue' },
+      { label: '30 Gün Sipariş', value: aftermarketHistory30d.kpis.orders30d, icon: ClipboardCheckIcon, color: 'orange' },
+      { label: 'Stok Devir Endeksi', value: aftermarketHistory30d.kpis.turnoverIndex.toFixed(1), icon: TrendingUpIcon, color: 'emerald' },
+      { label: 'İade Oranı (%)', value: aftermarketHistory30d.kpis.returnRate.toFixed(1), icon: AlertTriangleIcon, color: 'rose' }
+    ];
+
+    const colorMap = {
+      blue: 'bg-blue-50 text-blue-600 border-blue-100',
+      orange: 'bg-orange-50 text-orange-600 border-orange-100',
+      emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      rose: 'bg-rose-50 text-rose-600 border-rose-100'
+    };
+
+    return (
+      <div className="space-y-6 mb-8">
+        <div>
+          <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-2">
+            <BoxIcon size={18} className="text-orange-500" /> Aftermarket Özet (30 Gün)
+          </h4>
+          <p className="text-xs text-slate-500">Anonim agregasyon • kullanıcılar arası veri karıştırılmaz</p>
+        </div>
+
+        {/* 4 KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {kpis.map((kpi, idx) => {
+            const Icon = kpi.icon;
+            const bgColor = colorMap[kpi.color as keyof typeof colorMap];
+            return (
+              <div key={idx} className={`p-4 rounded-xl border ${bgColor}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold opacity-70 uppercase">{kpi.label}</p>
+                    <p className="text-xl font-bold mt-2">{kpi.value}</p>
+                  </div>
+                  <Icon size={20} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 2 Column Lists */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Top Brands */}
+          <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+            <h5 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
+              <TagIcon size={14} className="text-orange-500" /> En Çok Satılan Markalar (Top 5)
+            </h5>
+            <div className="space-y-2">
+              {aftermarketHistory30d.topBrands.map((brand, idx) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700">{brand.name}</span>
+                  <span className="font-bold text-orange-600">₺{(brand.value / 1000).toFixed(0)}K</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Categories */}
+          <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+            <h5 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
+              <LayersIcon size={14} className="text-blue-500" /> En Çok Satılan Kategoriler (Top 5)
+            </h5>
+            <div className="space-y-2">
+              {aftermarketHistory30d.topCategories.map((cat, idx) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700">{cat.name}</span>
+                  <span className="font-bold text-blue-600">₺{(cat.value / 1000).toFixed(0)}K</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Mini Vehicle Table */}
+        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+          <h5 className="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
+            <Car size={14} className="text-slate-600" /> Araç Tüketim (Top 5)
+          </h5>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="border-b border-slate-200">
+                <tr>
+                  <th className="text-left py-2 font-bold text-slate-600">Araç</th>
+                  <th className="text-left py-2 font-bold text-slate-600">Kategori</th>
+                  <th className="text-center py-2 font-bold text-slate-600">Endeks</th>
+                  <th className="text-left py-2 font-bold text-slate-600">Şehir</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {aftermarketHistory30d.topVehicleConsumption.slice(0, 5).map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-2 font-medium text-slate-800">{row.vehicle}</td>
+                    <td className="py-2 text-slate-600">{row.topCategory}</td>
+                    <td className="py-2 text-center">
+                      <span className="inline-block bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs font-bold">
+                        {row.index}
+                      </span>
+                    </td>
+                    <td className="py-2 text-slate-600">{row.region}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Privacy Note */}
+        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg">
+          <p className="text-xs text-emerald-700 font-medium text-center">
+            💡 Bu veriler anonimleştirilmiş ve agregedir. Tekil kullanıcı bilgisi içermez.
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   const ProductIntelligenceView = () => {
       if (!productIntel) return <div className="p-8 text-center text-slate-400">Veriler Yükleniyor...</div>;
@@ -235,60 +393,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 mb-8 animate-in slide-in-from-top-4 duration-500 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity"><WrenchIcon size={160} /></div>
-          <div className="flex items-center justify-between mb-8 relative z-10">
-              <div>
-                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                      <LayersIcon size={24} className="text-indigo-600" /> Bakım Merkezi - Operasyon Özeti
-                  </h3>
-                  <p className="text-slate-500 text-xs mt-1 font-medium italic">Gerçek zamanlı iş emri sinyal analitiği</p>
-              </div>
-              <button onClick={() => onChangeView(ViewState.REPAIR_SHOPS)} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2">
-                  Bakım Paneline Git <ChevronRightIcon size={14} />
-              </button>
-          </div>
-          {serviceWorkOrders.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 font-medium italic">Henüz iş emri verisi yok.</div>
-          ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 relative z-10">
-                  <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group-hover:bg-white transition-colors group-hover:border-indigo-100 group-hover:shadow-sm">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam İş Emri</p>
-                      <p className="text-3xl font-black text-slate-800">{opMetrics.total}</p>
-                  </div>
-                  <div className="p-5 bg-amber-50/30 rounded-2xl border border-amber-100/50 group-hover:bg-white transition-colors group-hover:border-amber-200 group-hover:shadow-sm">
-                      <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Onay Bekleyen</p>
-                      <p className="text-3xl font-black text-amber-600">{opMetrics.approvalWaiting}</p>
-                  </div>
-                  <div className="p-5 bg-blue-50/30 rounded-2xl border border-blue-100/50 group-hover:bg-white transition-colors group-hover:border-blue-200 group-hover:shadow-sm">
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Teslimata Hazır</p>
-                      <p className="text-3xl font-black text-blue-600">{opMetrics.readyForDelivery}</p>
-                  </div>
-                  <div className="p-5 bg-indigo-50/30 rounded-2xl border border-indigo-100/50 group-hover:bg-white transition-colors group-hover:border-indigo-200 group-hover:shadow-sm">
-                      <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">ERP Bekleyen</p>
-                      <p className="text-3xl font-black text-indigo-600">{opMetrics.erpPending}</p>
-                  </div>
-              </div>
-          )}
-          {serviceWorkOrders.length > 0 && (
-              <div className="mt-8 pt-8 border-t border-slate-100 flex flex-wrap items-center gap-x-10 gap-y-4 relative z-10">
-                  {[
-                      { label: 'Araç Kabul', key: 'INTAKE', color: 'bg-slate-400' },
-                      { label: 'Teşhis', key: 'DIAGNOSIS', color: 'bg-blue-500' },
-                      { label: 'Onay', key: 'APPROVAL', color: 'bg-purple-500' },
-                      { label: 'İşlemde', key: 'IN_PROGRESS', color: 'bg-amber-500' },
-                      { label: 'Teslimat', key: 'DELIVERY', color: 'bg-emerald-500' },
-                  ].map(b => (
-                      <div key={b.key} className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${b.color} shadow-sm`} />
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">{b.label}:</span>
-                          <span className="text-[11px] font-black text-slate-900 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">{opMetrics.buckets[b.key as any]}</span>
-                      </div>
-                  ))}
-              </div>
-          )}
-      </div>
-
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
         <div className="bg-slate-50/50 border-b border-slate-200 flex flex-wrap scrollbar-hide overflow-x-auto">
           <TabButton id="REPAIR" label="Bakım Merkezi" icon={WrenchIcon} />
@@ -382,48 +486,315 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
                       </div>
                   </div>
 
-                  <div className="flex justify-between items-center mb-6 pt-6 border-t border-slate-50">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <ActivityIcon size={18} className="text-blue-500" /> Aktif İş Emri Takibi
-                    </h4>
-                    <button onClick={() => onChangeView(ViewState.REPAIR_SHOPS)} className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1">Tümünü Yönet <ChevronRightIcon size={14}/></button>
-                  </div>
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase font-bold">
-                      <tr>
-                        <th className="px-4 py-3">İş Emri</th>
-                        <th className="px-4 py-3">Araç</th>
-                        <th className="px-4 py-3">Müşteri / Servis</th>
-                        <th className="px-4 py-3">İlerleme</th>
-                        <th className="px-4 py-3 text-right">Maliyet</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {workOrders.map(wo => (
-                        <tr key={wo.id} className="hover:bg-slate-50 transition-colors text-sm">
-                          <td className="px-4 py-4 font-mono text-xs text-slate-500">{wo.id}</td>
-                          <td className="px-4 py-4 font-bold text-slate-700">{wo.vehicleName}</td>
-                          <td className="px-4 py-4 text-slate-600">{wo.serviceName}</td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="bg-emerald-500 h-full" style={{width: `${wo.progress}%`}}></div>
+                  {/* Bakım Merkezi Verileri Kartı - Son 30 Gün */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 mt-8">
+                    <div className="mb-6">
+                      <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3 mb-2">
+                        <WrenchIcon size={24} className="text-indigo-600" /> Bakım Merkezi Verileri
+                      </h3>
+                      <p className="text-xs text-slate-500">Son 30 gün içinde kayıtlı veriler</p>
+                    </div>
+
+                    {/* Top 10 Başlık */}
+                    {repairSourceData.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400 text-sm italic">Henüz iş emri verisi yok.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* En Çok Ürün Satan Markalar */}
+                        <div className="border border-slate-100 rounded-lg p-5 bg-slate-50/30">
+                          <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <BoxIcon size={16} className="text-orange-500" /> En Çok Ürün Satan Markalar (Top 10)
+                          </h4>
+                          {(() => {
+                            const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                            const filtered = repairSourceData.filter(w => {
+                              try {
+                                const wDate = new Date(w.createdAt);
+                                return wDate >= last30Days;
+                              } catch {
+                                return true;
+                              }
+                            });
+
+                            const brandRevenue: Record<string, { count: number; revenue: number }> = {};
+                            filtered.forEach(w => {
+                              w.diagnosisItems?.forEach(item => {
+                                const brand = item.item || 'Bilinmeyen';
+                                if (!brandRevenue[brand]) {
+                                  brandRevenue[brand] = { count: 0, revenue: 0 };
+                                }
+                                brandRevenue[brand].count += 1;
+                                brandRevenue[brand].revenue += item.signalCost || 0;
+                              });
+                            });
+
+                            const topBrands = Object.entries(brandRevenue)
+                              .sort((a, b) => b[1].revenue - a[1].revenue)
+                              .slice(0, 10)
+                              .map(([brand, data]) => ({ brand, ...data }));
+
+                            return topBrands.length > 0 ? (
+                              <div className="space-y-2">
+                                {topBrands.map((item, i) => (
+                                  <div key={item.brand} className="flex items-center justify-between text-xs py-2 border-b border-slate-100 last:border-0">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="w-5 h-5 flex items-center justify-center bg-orange-100 rounded font-bold text-orange-600 text-[9px]">{i+1}</span>
+                                      <span className="text-slate-700 font-medium">{item.brand}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-[10px] text-slate-500">{item.count} Adet</p>
+                                      <p className="font-bold text-orange-600">{item.revenue.toLocaleString('tr-TR', {maximumFractionDigits: 0})} ₺</p>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <span className="text-[10px] font-bold">%{wo.progress}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-right font-bold text-slate-800">{wo.estimatedCost.toLocaleString()} ₺</td>
-                        </tr>
-                      ))}
-                      {workOrders.length === 0 && (
-                          <tr><td colSpan={5} className="py-12 text-center text-slate-400 italic">Aktif iş emri bulunmuyor.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic text-center py-4">Veri yok</p>
+                            );
+                          })()}
+                        </div>
+
+                        {/* En Çok Satılan Kategoriler */}
+                        <div className="border border-slate-100 rounded-lg p-5 bg-slate-50/30">
+                          <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <LayersIcon size={16} className="text-blue-500" /> En Çok Satılan Kategoriler (Top 10)
+                          </h4>
+                          {(() => {
+                            const ITEM_CATEGORY_MAP: Record<string, string> = {
+                              "Fren Balatası": "Fren",
+                              "Triger Seti": "Motor",
+                              "Yağ Bakımı": "Bakım",
+                              "Lastik Değişimi": "Lastik",
+                              "Disk Fren": "Fren",
+                              "Motor Yağı": "Bakım",
+                              "Filtru": "Bakım",
+                              "Pil": "Elektrik",
+                              "Şamandıra": "Elektrik",
+                            };
+
+                            const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                            const filtered = repairSourceData.filter(w => {
+                              try {
+                                const wDate = new Date(w.createdAt);
+                                return wDate >= last30Days;
+                              } catch {
+                                return true;
+                              }
+                            });
+
+                            const categoryRevenue: Record<string, { count: number; revenue: number }> = {};
+                            filtered.forEach(w => {
+                              w.diagnosisItems?.forEach(item => {
+                                const category = ITEM_CATEGORY_MAP[item.item] || 'Diğer';
+                                if (!categoryRevenue[category]) {
+                                  categoryRevenue[category] = { count: 0, revenue: 0 };
+                                }
+                                categoryRevenue[category].count += 1;
+                                categoryRevenue[category].revenue += item.signalCost || 0;
+                              });
+                            });
+
+                            const topCategories = Object.entries(categoryRevenue)
+                              .sort((a, b) => b[1].revenue - a[1].revenue)
+                              .slice(0, 10)
+                              .map(([category, data]) => ({ category, ...data }));
+
+                            return topCategories.length > 0 ? (
+                              <div className="space-y-2">
+                                {topCategories.map((item, i) => (
+                                  <div key={item.category} className="flex items-center justify-between text-xs py-2 border-b border-slate-100 last:border-0">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="w-5 h-5 flex items-center justify-center bg-blue-100 rounded font-bold text-blue-600 text-[9px]">{i+1}</span>
+                                      <span className="text-slate-700 font-medium">{item.category}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-[10px] text-slate-500">{item.count} Adet</p>
+                                      <p className="font-bold text-blue-600">{item.revenue.toLocaleString('tr-TR', {maximumFractionDigits: 0})} ₺</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic text-center py-4">Veri yok</p>
+                            );
+                          })()}
+                        </div>
+
+                        {/* En Çok Bakıma Giren Araçlar */}
+                        <div className="border border-slate-100 rounded-lg p-5 bg-slate-50/30">
+                          <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <Car size={16} className="text-teal-500" /> En Çok Bakıma Giren Araçlar (Top 10)
+                          </h4>
+                          {(() => {
+                            const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                            const filtered = repairSourceData.filter(w => {
+                              try {
+                                const wDate = new Date(w.createdAt);
+                                return wDate >= last30Days;
+                              } catch {
+                                return true;
+                              }
+                            });
+
+                            const vehicleCount: Record<string, number> = {};
+                            filtered.forEach(w => {
+                              const vehicle = w.operationalDetails?.plate || 'Bilinmeyen Araç';
+                              vehicleCount[vehicle] = (vehicleCount[vehicle] || 0) + 1;
+                            });
+
+                            const topVehicles = Object.entries(vehicleCount)
+                              .sort((a, b) => b[1] - a[1])
+                              .slice(0, 10)
+                              .map(([vehicle, count]) => ({ vehicle, count }));
+
+                            return topVehicles.length > 0 ? (
+                              <div className="space-y-2">
+                                {topVehicles.map((item, i) => (
+                                  <div key={item.vehicle} className="flex items-center justify-between text-xs py-2 border-b border-slate-100 last:border-0">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="w-5 h-5 flex items-center justify-center bg-teal-100 rounded font-bold text-teal-600 text-[9px]">{i+1}</span>
+                                      <span className="text-slate-700 font-medium font-mono">{item.vehicle}</span>
+                                    </div>
+                                    <p className="font-bold text-teal-600">{item.count} İş Emri</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic text-center py-4">Veri yok</p>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {activeTab === 'AFTERMARKET' && (
-                <div className="animate-in slide-in-from-left-2 duration-300">
+                <div className="animate-in slide-in-from-left-2 duration-300 space-y-6">
+                  <AftermarketSummarySection />
+                  
+                  {/* National Behavior Statistics Block */}
+                  <div className="bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-blue-100 p-6 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <BrainIcon size={20} className="text-blue-600" /> 
+                        Ulusal Davranış İstatistiği (Anonim) — Son 30 Gün
+                      </h3>
+                      <p className="text-[10px] text-slate-500 italic">💡 Bu veri Dashboard'da gösterilir, kullanıcıya gösterilmez</p>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="mb-6 flex gap-4 items-end bg-white p-4 rounded-xl border border-blue-100">
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 uppercase block mb-2">Zaman Aralığı</label>
+                        <select 
+                          value={nationalBehaviorDays}
+                          onChange={(e) => setNationalBehaviorDays(parseInt(e.target.value))}
+                          className="px-3 py-2 border border-blue-200 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500/30"
+                        >
+                          <option value={7}>Son 7 Gün</option>
+                          <option value={30}>Son 30 Gün (Default)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 uppercase block mb-2">Şehir (Opsiyonel)</label>
+                        <select 
+                          value={nationalBehaviorCity || ''}
+                          onChange={(e) => setNationalBehaviorCity(e.target.value || undefined)}
+                          className="px-3 py-2 border border-blue-200 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500/30"
+                        >
+                          <option value="">Tümü</option>
+                          <option value="İstanbul">İstanbul</option>
+                          <option value="Ankara">Ankara</option>
+                          <option value="İzmir">İzmir</option>
+                          <option value="Bursa">Bursa</option>
+                          <option value="Gaziantep">Gaziantep</option>
+                          <option value="Antalya">Antalya</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {loadingNationalBehavior ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2Icon size={24} className="animate-spin text-blue-500" />
+                      </div>
+                    ) : nationalBehavior ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Top Districts */}
+                        <div className="bg-white p-4 rounded-xl border border-blue-100">
+                          <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                            <MapPin size={16} className="text-blue-600" /> En Çok Tüketim: Şehir/İlçe
+                          </h4>
+                          <div className="space-y-2">
+                            {nationalBehavior.topDistricts.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-100">
+                                <span className="text-sm font-medium text-slate-700">{item.district}, {item.city}</span>
+                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-1 rounded">{item.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Top Part Brands */}
+                        <div className="bg-white p-4 rounded-xl border border-blue-100">
+                          <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                            <TagIcon size={16} className="text-blue-600" /> En Çok Kullanılan Parça Markası
+                          </h4>
+                          <div className="space-y-2">
+                            {nationalBehavior.topBrands.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-100">
+                                <span className="text-sm font-medium text-slate-700">{item.brand}</span>
+                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-1 rounded">{item.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Top Vehicles */}
+                        <div className="bg-white p-4 rounded-xl border border-blue-100">
+                          <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                            <Car size={16} className="text-blue-600" /> En Çok İşlem Gören Araç
+                          </h4>
+                          <div className="space-y-2">
+                            {nationalBehavior.topVehicles.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-100">
+                                <span className="text-sm font-medium text-slate-700">{item.brand} {item.model}</span>
+                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-1 rounded">{item.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Top Categories */}
+                        <div className="bg-white p-4 rounded-xl border border-blue-100">
+                          <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                            <BoxIcon size={16} className="text-blue-600" /> En Çok Satılan Kategori
+                          </h4>
+                          <div className="space-y-2">
+                            {nationalBehavior.topCategories.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-100">
+                                <span className="text-sm font-medium text-slate-700">{item.category}</span>
+                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-1 rounded">{item.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center text-slate-500">
+                        <p className="text-sm">Veri yüklemeye çalışılıyor...</p>
+                      </div>
+                    )}
+
+                    {/* Stats Summary */}
+                    {nationalBehavior && (
+                      <div className="mt-4 pt-4 border-t border-blue-100 flex justify-between items-center text-xs text-slate-600">
+                        <span>Toplam İşlem: <span className="font-bold text-slate-800">{nationalBehavior.totalEvents}</span></span>
+                        <span className="italic">Dönem: {nationalBehavior.period}</span>
+                      </div>
+                    )}
+                  </div>
+                  
                   <div className="flex justify-between items-center mb-6">
                     <h4 className="font-bold text-slate-800 flex items-center gap-2">
                       <BoxIcon size={18} className="text-orange-500" /> Parça Tedarik Zinciri

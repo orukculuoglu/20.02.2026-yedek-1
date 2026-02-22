@@ -11,6 +11,7 @@ import { UsageHistory } from './views/UsageHistory';
 import { Settings } from './views/Settings';
 import { PartLifeAnalysis } from './views/PartLifeAnalysis';
 import { RiskAnalysis } from './views/RiskAnalysis';
+import { DataEngine } from './views/DataEngine';
 import { SpareParts } from './views/SpareParts';
 import { Subscription } from './views/Subscription';
 import { UserManagement } from './views/UserManagement';
@@ -134,6 +135,7 @@ export default function App() {
       case ViewState.DETAILS: return selectedVehicleId ? <VehicleDetail vehicleId={selectedVehicleId} onBack={() => handleViewChange(ViewState.LIBRARY)} onNavigate={handleViewChange}/> : <Dashboard onChangeView={handleViewChange} />;
       case ViewState.PART_LIFE_ANALYSIS: return <PartLifeAnalysis />;
       case ViewState.RISK_ANALYSIS: return <RiskAnalysis />;
+      case ViewState.DATA_ENGINE: return <DataEngine />;
       case ViewState.SPARE_PARTS: return <SpareParts preSelectedVehicleId={selectedVehicleId} />;
       case ViewState.HISTORY: return <UsageHistory />;
       case ViewState.SETTINGS: return <Settings />;
@@ -157,7 +159,7 @@ export default function App() {
 
       <div className="ml-64 relative">
         <Header onNavigate={handleNavigationFromHeader} />
-        <main className="pt-16 min-h-screen pb-20">{renderContent()}</main>
+        <main className="pt-16 pb-20">{renderContent()}</main>
         
         <button 
           onClick={handleOpenVinModal}

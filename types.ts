@@ -85,6 +85,7 @@ export enum ViewState {
   SETTINGS = 'SETTINGS',
   PART_LIFE_ANALYSIS = 'PART_LIFE_ANALYSIS',
   RISK_ANALYSIS = 'RISK_ANALYSIS',
+  DATA_ENGINE = 'DATA_ENGINE',
   SPARE_PARTS = 'SPARE_PARTS',
   SUBSCRIPTION = 'SUBSCRIPTION',
   KVKK = 'KVKK',
@@ -356,6 +357,7 @@ export interface OperationalDetails {
     customerName: string;
     customerPhone: string;
     plate: string;
+    mileage?: number; // Kilometre (KM) - Odometer reading
     consentStatus: 'GRANTED' | 'PENDING' | 'DENIED';
     internalNotes: string;
     vinHash?: string;
@@ -491,3 +493,202 @@ export const DEFAULT_SERVICE_INTAKE_POLICY: ServiceIntakePolicy = {
     assistantPrivilege: 'SUGGEST_ONLY',
     consultantFinalSay: true
 };
+
+// Aftermarket / Parts Management Types
+export type PartTier = 'OEM' | 'EQUIVALENT' | 'ECONOMY' | 'PREMIUM';
+
+export interface VehicleFitment {
+  make: string;
+  model: string;
+  modelCode?: string;
+  engineCode?: string;
+  years?: string;
+}
+
+export interface SimulationSuggestion {
+  region: string;        // "İstanbul" / "Ankara"
+  district?: string;     // "Maslak" / "Ostim" (opsiyonel)
+  partGroup: string;     // "Fren Sistemi"
+  changePercent: number; // +20 (stok değişim yüzdesi)
+  confidence: number;    // 0..1 (güven oranı)
+  impact: number;        // 0..100 (etki skoru)
+}
+
+export interface AftermarketProductCard {
+  sku: string;
+  name: string;
+  brand: string;
+  category: string;
+  oemCodes: string[];
+  tier: PartTier;
+  segment?: 'OEM' | 'PREMIUM' | 'EQUIVALENT' | 'ECONOMY';
+
+  stock: number;
+  reserved: number;
+  price: number;
+
+  last30Sales: number;
+  fitment: string[]; // Uyumlu araç modelleri (örn: ["BMW 3 Series", "Mercedes C Class"])
+  
+  city?: string;
+  district?: string;
+
+  dailyAvg?: number;
+  daysToZero?: number;
+  riskScore?: number;
+  orderSuggestion?: number;
+  targetStock?: number;
+  minStock?: number;
+  turnoverScore?: number;
+  marginPercent?: number;        // Kar marjı %
+  brandTier?: 'OEM' | 'PREMIUM' | 'EQUIVALENT' | 'UNKNOWN';  // Marka seviyesi
+  simulationSuggestion?: SimulationSuggestion; // V1: Veri Motoru simülasyon önerisi
+}
+
+export interface AftermarketHistoryKPI {
+  revenue30d: number;
+  orders30d: number;
+  turnoverIndex: number;
+  returnRate: number;
+}
+
+export interface AftermarketBrandData {
+  name: string;
+  value: number;
+}
+
+export interface AftermarketCategoryData {
+  name: string;
+  value: number;
+}
+
+export interface AftermarketVehicleConsumption {
+  vehicle: string;
+  topCategory: string;
+  index: number;
+  region: string;
+}
+
+export interface AftermarketHistory30d {
+  kpis: AftermarketHistoryKPI;
+  topBrands: AftermarketBrandData[];
+  topCategories: AftermarketCategoryData[];
+  topVehicleConsumption: AftermarketVehicleConsumption[];
+}
+
+// Aftermarket Operations - CANLI Flow
+export type OrderStatus = 'PENDING' | 'PREPARING' | 'SHIPPED' | 'DELIVERED';
+
+export interface OrderItem {
+  sku: string;
+  name: string;
+  qty: number;
+  brand?: string;
+}
+
+export interface AftermarketOrder {
+  id: string;
+  createdAt: string;
+  customer: string;
+  region: string;
+  items: OrderItem[];
+  total: number;
+  status: OrderStatus;
+  etaMinutes?: number;
+  vehiclePlate?: string;
+  orderType?: 'SALES' | 'PROCUREMENT'; // SALES=satış, PROCUREMENT=stok tamamlama
+  source?: 'LENT' | 'ERP'; // Tedarik kaynağı
+  explanation?: string; // 'Satış Siparişi' | 'Stok Tamamlama'
+}
+
+export interface LogisticsFeedItem {
+  plate: string;
+  route: string;
+  etaMinutes: number;
+  orderId: string;
+}
+
+// ========== AFTERMARKET CIRCULATION ENGINE (D2-D5) ==========
+
+export interface AftermarketInventoryItem {
+  sku: string;
+  name: string;
+  brand: string;
+  category: string;
+  onHand: number;
+  reserved: number;
+  last30SalesUnits: number;
+  
+  // Financial
+  cogs: number; // maliyet
+  price: number; // satış fiyatı
+  margin?: number; // price - cogs
+  
+  // Metrics
+  stockTurnover30: number; // last30SalesUnits / avgInventory
+  daysOfCover: number; // onHand / dailyAvg
+  dailyAvg: number; // last30SalesUnits / 30
+  
+  // Reordering
+  leadTimeDays: number; // 7/14/21 mock
+  safetyStock: number; // dailyAvg * 7
+  reorderPoint: number; // dailyAvg * leadTimeDays
+  suggestedOrderQty: number; // max(0, reorderPoint + safetyStock - onHand)
+  
+  segment?: 'OEM' | 'PREMIUM' | 'EQUIVALENT' | 'ECONOMY';
+}
+
+export interface TopProduct {
+  sku: string;
+  name: string;
+  brand: string;
+  value: number; // turnover/margin/daysOfCover
+  label?: string;
+}
+
+export interface CriticalCoverageItem {
+  sku: string;
+  name: string;
+  brand: string;
+  daysOfCover: number;
+  onHand: number;
+  dailyAvg: number;
+  reorderPoint: number;
+  suggestedOrderQty: number;
+}
+
+export interface AftermarketOperationsDashboard {
+  topFastMoving10: TopProduct[]; // stockTurnover30 desc
+  criticalCoverage: CriticalCoverageItem[]; // daysOfCover < 7
+  highMarginOpportunities: TopProduct[]; // margin desc
+  summary: {
+    totalInventoryValue: number;
+    avgTurnover: number;
+    criticalCount: number;
+    totalSKUs: number;
+  };
+}
+
+export type SupplierPreference = 'LENT' | 'ERP';
+
+export interface PurchaseRequest {
+  id: string;
+  sku: string;
+  qty: number;
+  preferredSupplier: SupplierPreference;
+  createdAt: string;
+  status: 'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED';
+  eta?: string;
+  cost?: number;
+  notes?: string;
+}
+
+export interface RetailerRole {
+  key: 'DISTRIBUTOR' | 'RETAIL';
+  label: 'Dağıtıcı' | 'Perakende';
+}
+
+export interface UserRetailerRole {
+  role: 'DISTRIBUTOR' | 'RETAIL';
+  retailerId?: string;
+}

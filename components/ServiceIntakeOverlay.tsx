@@ -41,6 +41,7 @@ export default function ServiceIntakeOverlay({
     const [vin, setVin] = useState('');
     const [plate, setPlate] = useState('');
     const [customer, setCustomer] = useState('');
+    const [mileage, setMileage] = useState(0);
     
     // Local flow tracking
     const [lastCreatedWorkOrderId, setLastCreatedWorkOrderId] = useState<string | null>(null);
@@ -62,6 +63,10 @@ export default function ServiceIntakeOverlay({
             alert("Lütfen geçerli bir 17 haneli Şase No giriniz.");
             return;
         }
+        if (!mileage || mileage < 0) {
+            alert("Lütfen geçerli bir kilometre değeri giriniz.");
+            return;
+        }
 
         setIsSubmitting(true);
         try {
@@ -77,6 +82,7 @@ export default function ServiceIntakeOverlay({
                     vinLast4: vLast4,
                     plate: plate.trim().toUpperCase(),
                     customer: customer.trim(),
+                    mileage: mileage,
                     hasContext: true
                 },
                 timestamp: Date.now()
@@ -209,6 +215,18 @@ export default function ServiceIntakeOverlay({
                                     placeholder="Ad Soyad"
                                 />
                             </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Kilometre (KM)</label>
+                                <input 
+                                    type="number" 
+                                    min="0"
+                                    value={mileage}
+                                    onChange={e => setMileage(parseInt(e.target.value, 10) || 0)}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="64500"
+                                />
+                            </div>
                         </div>
 
                         <div className="mt-auto">
@@ -298,7 +316,7 @@ export default function ServiceIntakeOverlay({
                                 
                                 <button 
                                     onClick={handleCreateWorkOrder}
-                                    disabled={!vin || vin.length < 17 || isSubmitting}
+                                    disabled={!vin || vin.length < 17 || !mileage || mileage < 0 || isSubmitting}
                                     className="w-full max-w-xs py-4 bg-slate-900 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3"
                                 >
                                     {isSubmitting ? (
