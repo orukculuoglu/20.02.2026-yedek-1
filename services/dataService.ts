@@ -5,10 +5,11 @@ import {
     WorkOrder, RetailerProfile, FleetVehicle, ExpertiseProfile, InsurancePolicy,
     DealerProfile, OEMPart, DamageRecord, PartRiskAnalysis, ServicePoint,
     SubscriptionDetails, Invoice, UsageLog, ViewState, AutoOrderConfig, AutoOrderSuggestion,
-    ErpSyncLog, ServiceIntakePolicy, DEFAULT_SERVICE_INTAKE_POLICY, B2BNetworkState
+    ErpSyncLog, ServiceIntakePolicy, DEFAULT_SERVICE_INTAKE_POLICY, B2BNetworkState, AftermarketHistory30d
 } from '../types';
 import * as b2bNetworkService from './b2bNetworkService';
 import { dataEngine } from './dataEngine/dataEngine';
+import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
 
 // --- PERSISTENCE KEYS ---
 export const REPAIR_DASH_FEED_KEY = "LENT_REPAIR_DASH_FEED_V1";
@@ -294,7 +295,9 @@ export const addSearchedVehicle = async (id: string, vin?: string): Promise<void
     return Promise.resolve();
 };
 
-export const getVehicleList = async (): Promise<VehicleProfile[]> => Promise.resolve(MOCK_VEHICLES);
+export const getVehicleList = async (): Promise<VehicleProfile[]> => {
+    return Promise.resolve(MOCK_VEHICLES.map(applyVehicleRiskEngine));
+};
 export const getVehicleProfile = async (id: string): Promise<VehicleProfile | undefined> => {
     return Promise.resolve(MOCK_VEHICLES.find(v => v.vehicle_id === id));
 };
@@ -753,9 +756,7 @@ export const getTopVehiclesByConsumptionFromWorkOrders = async (): Promise<Vehic
 
 // --- AFTERMARKET HISTORY (30 DAYS ANALYTICS) ---
 export const getAftermarketHistory30d = async () => {
-    const { AftermarketHistory30d } = await import('../types');
-    
-    const mockData: import('../types').AftermarketHistory30d = {
+    const mockData: AftermarketHistory30d = {
         kpis: {
             revenue30d: 2850000,
             orders30d: 342,

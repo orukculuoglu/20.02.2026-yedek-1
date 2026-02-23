@@ -1,17 +1,26 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldAlert, TrendingUp, AlertOctagon, Car, Activity, Zap, Info, ArrowUpRight, BarChart3, AlertTriangle, X, CheckCircle, Gauge, Thermometer, DollarSign, Calendar, ArrowRight, FileText, Search, MapPin, Printer, Download, Wrench, History, ChevronRight } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, Cell } from 'recharts';
 import { getVehicleList, getVehicleDamageHistory, getPartAnalysisForVehicle } from '../services/dataService';
 import { VehicleProfile, DamageRecord, PartRiskAnalysis } from '../types';
+import { RiskExplainDrawer, RiskExplainType } from './RiskExplainDrawer';
+import { buildFleetRiskSummary, FleetRiskSummary } from '../src/engine/fleetRisk/fleetRiskAggregator';
+import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
+import { getRiskTier, getRiskLabel, getRiskColor, getRiskBgColor, getRiskBadgeClasses } from '../src/utils/riskLabel';
 
 export const RiskAnalysis: React.FC = () => {
   const [vehicles, setVehicles] = useState<VehicleProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fleetSummary, setFleetSummary] = useState<FleetRiskSummary | null>(null);
   
   // State for Critical List Modal
   const [showCriticalList, setShowCriticalList] = useState(false);
   const [selectedRiskVehicle, setSelectedRiskVehicle] = useState<VehicleProfile | null>(null);
+
+  // State for Explain Drawer
+  const [explainDrawerOpen, setExplainDrawerOpen] = useState(false);
+  const [explainDrawerType, setExplainDrawerType] = useState<RiskExplainType>('average');
 
   // State for PDF Report Generation Flow
   const [isReportSelectionOpen, setIsReportSelectionOpen] = useState(false);
@@ -23,55 +32,44 @@ export const RiskAnalysis: React.FC = () => {
 
   useEffect(() => {
     getVehicleList().then(data => {
-        setVehicles(data);
+        // Apply risk engine to all vehicles
+        const appliedVehicles = data.map(applyVehicleRiskEngine);
+        
+        // Set vehicles with risk calculations applied
+        setVehicles(appliedVehicles);
+        
+        // Build summary from applied vehicles
+        const summary = buildFleetRiskSummary(appliedVehicles);
+        setFleetSummary(summary);
         setLoading(false);
     });
   }, []);
 
-  // --- REPORT LOGIC ---
+  // ---- DERIVED FROM FLEET SUMMARY (NO HARDCODED CALCULATIONS) ----
+  const averageRiskScore = fleetSummary?.avgRisk ?? 0;
+  const lowCount = fleetSummary?.riskDistribution.low ?? 0;
+  const midCount = fleetSummary?.riskDistribution.mid ?? 0;
+  const highCount = fleetSummary?.riskDistribution.high ?? 0;
+  const criticalCountKPI = fleetSummary?.criticalCount ?? 0;
+  const financialExposure = fleetSummary?.exposure ?? 0;
+  const topRiskyVehicles = fleetSummary?.topRiskVehicles ?? [];
+  const trendData = fleetSummary?.trend ?? [];
+  const categoryRiskData = fleetSummary?.categoryRadar ?? [];
+  const securityIndexData = fleetSummary?.securityIndex ?? { grade: 'A+', score01: 1.0, reasons: [] };
+
+  // ---- REPORT LOGIC ----
   const handleSelectVehicleForReport = async (vehicle: VehicleProfile) => {
-      // Close selection, show loading state if needed (omitted for speed), fetch data
-      const history = await getVehicleDamageHistory(vehicle.vehicle_id);
-      const risks = await getPartAnalysisForVehicle(vehicle.vehicle_id);
-      
-      setReportData({
-          vehicle,
-          history,
-          risks
-      });
-      setIsReportSelectionOpen(false);
+    const history = await getVehicleDamageHistory(vehicle.vehicle_id);
+    const risks = await getPartAnalysisForVehicle(vehicle.vehicle_id);
+    setReportData({ vehicle, history, risks });
+    setIsReportSelectionOpen(false);
   };
 
-  // Mock Aggregated Data Calculations
-  const averageRiskScore = vehicles.length > 0 
-    ? Math.round(vehicles.reduce((acc, v) => acc + v.risk_score, 0) / vehicles.length) 
-    : 0;
-
-  const highRiskVehiclesList = vehicles.filter(v => v.risk_score > 50);
-  const highRiskVehiclesCount = vehicles.filter(v => v.risk_score > 60).length;
-  const financialExposure = vehicles.reduce((acc, v) => acc + (v.risk_score > 50 ? v.resale_value_prediction * 0.15 : 0), 0);
-
-  // Mock Chart Data
-  const trendData = [
-    { month: 'Ocak', risk: 45, exposure: 120 },
-    { month: 'Şubat', risk: 48, exposure: 135 },
-    { month: 'Mart', risk: 42, exposure: 110 },
-    { month: 'Nisan', risk: 55, exposure: 160 },
-    { month: 'Mayıs', risk: averageRiskScore, exposure: 180 },
-  ];
-
-  const categoryRiskData = [
-    { subject: 'Mekanik', A: 85, fullMark: 100 },
-    { subject: 'Elektronik', A: 65, fullMark: 100 },
-    { subject: 'Yasal/Tramer', A: 45, fullMark: 100 },
-    { subject: 'Kullanıcı', A: 70, fullMark: 100 },
-    { subject: 'Çevresel', A: 50, fullMark: 100 },
-  ];
-
+  // ---- DISTRIBUTION DATA ----
   const distributionData = [
-    { name: 'Düşük Risk', value: vehicles.filter(v => v.risk_score <= 30).length + 15 },
-    { name: 'Orta Risk', value: vehicles.filter(v => v.risk_score > 30 && v.risk_score <= 60).length + 8 },
-    { name: 'Yüksek Risk', value: highRiskVehiclesCount + 2 },
+    { name: 'Düşük Risk', value: lowCount },
+    { name: 'Orta Risk', value: midCount },
+    { name: 'Yüksek Risk', value: highCount },
   ];
   
   const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
@@ -102,7 +100,7 @@ export const RiskAnalysis: React.FC = () => {
                 </div>
 
                 <div className="overflow-y-auto p-2 space-y-2">
-                    {vehicles.map(v => (
+                    {vehicles.map((v: VehicleProfile) => (
                         <div key={v.vehicle_id} 
                             onClick={() => handleSelectVehicleForReport(v)}
                             className="p-3 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
@@ -328,21 +326,53 @@ export const RiskAnalysis: React.FC = () => {
   const CriticalListModal = () => {
     if (!showCriticalList) return null;
 
+    const [criticalTab, setCriticalTab] = React.useState<'critical' | 'high'>(localStorage.getItem('criticalTab') === 'high' ? 'high' : 'critical');
+    
+    const criticalVehicles = vehicles.filter((v: VehicleProfile) => (v.risk_score ?? 0) >= 60);
+    const highRiskVehicles = vehicles.filter((v: VehicleProfile) => (v.risk_score ?? 0) >= 50 && (v.risk_score ?? 0) < 60);
+    
+    const displayVehicles = criticalTab === 'critical' ? criticalVehicles : highRiskVehicles;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
                 <div className="bg-rose-600 px-6 py-4 flex items-center justify-between text-white shrink-0">
                     <div>
                         <h3 className="font-bold text-lg flex items-center gap-2">
-                            <AlertOctagon size={20} /> Kritik Seviyedeki Araçlar
+                            <AlertOctagon size={20} /> Yüksek Riskli Araçlar
                         </h3>
-                        <p className="text-rose-100 text-xs mt-1">Risk skoru 50 ve üzeri olan araçların listesi.</p>
+                        <p className="text-rose-100 text-xs mt-1">Risk skoruna göre kategorize edilmiş araçlar.</p>
                     </div>
                     <button onClick={() => setShowCriticalList(false)} className="hover:bg-rose-700 p-1.5 rounded-lg transition-colors"><X size={20} /></button>
                 </div>
+
+                {/* Tabs */}
+                <div className="shrink-0 bg-white border-b border-slate-200 px-6 flex gap-0">
+                    <button 
+                      onClick={() => { setCriticalTab('critical'); localStorage.setItem('criticalTab', 'critical'); }}
+                      className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
+                        criticalTab === 'critical'
+                          ? 'border-rose-600 text-rose-600'
+                          : 'border-transparent text-slate-600 hover:text-slate-800'
+                      }`}
+                    >
+                      🔴 KRİTİK (≥ 60) — {criticalVehicles.length}
+                    </button>
+                    <button 
+                      onClick={() => { setCriticalTab('high'); localStorage.setItem('criticalTab', 'high'); }}
+                      className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
+                        criticalTab === 'high'
+                          ? 'border-amber-600 text-amber-600'
+                          : 'border-transparent text-slate-600 hover:text-slate-800'
+                      }`}
+                    >
+                      🟡 YÜKSEK (50-59) — {highRiskVehicles.length}
+                    </button>
+                </div>
                 
                 <div className="flex-1 overflow-y-auto p-0">
-                    <table className="w-full text-left">
+                    {displayVehicles.length > 0 ? (
+                      <table className="w-full text-left">
                         <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold sticky top-0 z-10 shadow-sm">
                             <tr>
                                 <th className="px-6 py-4">Araç ID</th>
@@ -353,41 +383,26 @@ export const RiskAnalysis: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {/* Combine real mock data with static high risk rows for demo visualization */}
-                            {[...highRiskVehiclesList, 
-                                { vehicle_id: 'WBALZ7C5-XXXX', brand: 'Ford', model: 'Focus 2017', risk_score: 85, reason: 'Kronik Şanzıman Hatası' },
-                                { vehicle_id: 'WBAVM135-XXXX', brand: 'BMW', model: '520d 2018', risk_score: 72, reason: 'Yüksek KM / Turbo' },
-                                { vehicle_id: 'JTDKN3DU-XXXX', brand: 'Toyota', model: 'Corolla 2021', risk_score: 65, reason: 'Ağır Hasar Kaydı' }
-                            ].map((row: any, i) => (
+                            {displayVehicles.map((v: VehicleProfile, i: number) => (
                                 <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-mono text-xs text-slate-600">{row.vehicle_id}</td>
-                                    <td className="px-6 py-4 text-sm font-bold text-slate-800">{row.brand} {row.model}</td>
+                                    <td className="px-6 py-4 font-mono text-xs text-slate-600">{v.vehicle_id}</td>
+                                    <td className="px-6 py-4 text-sm font-bold text-slate-800">{v.brand} {v.model}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-sm font-bold ${row.risk_score > 75 ? 'text-rose-600' : 'text-amber-600'}`}>{row.risk_score}</span>
+                                            <span className={`text-sm font-bold ${getRiskColor(v.risk_score)}`}>{v.risk_score}</span>
                                             <div className="w-20 h-1.5 bg-slate-100 rounded-full">
-                                                <div className={`h-1.5 rounded-full ${row.risk_score > 75 ? 'bg-rose-500' : 'bg-amber-500'}`} style={{width: `${row.risk_score}%`}}></div>
+                                                <div className={`h-1.5 rounded-full ${getRiskBgColor(v.risk_score)}`} style={{width: `${v.risk_score}%`}}></div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className="text-xs font-medium text-rose-700 bg-rose-50 px-2 py-1 rounded inline-flex items-center gap-1">
-                                            <AlertTriangle size={10} /> {row.reason || 'Çoklu Risk Faktörü'}
+                                        <span className={`text-xs font-medium px-2 py-1 rounded inline-flex items-center gap-1 ${getRiskBadgeClasses(v.risk_score)}`}>
+                                            <AlertTriangle size={10} /> {getRiskLabel(v.risk_score)}: {v.risk_primary_reason || 'Çoklu risk faktörü'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button 
-                                            onClick={() => {
-                                                // Create a fuller profile object for the demo rows
-                                                const fullProfile = vehicles.find(v => v.vehicle_id === row.vehicle_id) || {
-                                                    ...vehicles[0], // fallback
-                                                    vehicle_id: row.vehicle_id,
-                                                    brand: row.brand,
-                                                    model: row.model,
-                                                    risk_score: row.risk_score
-                                                };
-                                                setSelectedRiskVehicle(fullProfile);
-                                            }}
+                                            onClick={() => setSelectedRiskVehicle(v)}
                                             className="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
                                         >
                                             İncele
@@ -396,7 +411,15 @@ export const RiskAnalysis: React.FC = () => {
                                 </tr>
                             ))}
                         </tbody>
-                    </table>
+                      </table>
+                    ) : (
+                      <div className="p-8 text-center">
+                        <CheckCircle size={48} className="mx-auto text-emerald-500 mb-3 opacity-50" />
+                        <p className="text-slate-600 font-medium">
+                          {criticalTab === 'critical' ? 'Kritik seviyede araç bulunmamaktadır.' : 'Yüksek riskli araç bulunmamaktadır.'}
+                        </p>
+                      </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -456,18 +479,27 @@ export const RiskAnalysis: React.FC = () => {
                              </svg>
                              <div className="absolute inset-0 flex flex-col items-center justify-center">
                                 <span className="text-4xl font-bold text-slate-800">{v.risk_score}</span>
-                                <span className={`text-sm font-medium ${v.risk_score > 70 ? 'text-rose-600' : 'text-amber-600'}`}>
-                                    {v.risk_score > 70 ? 'KRİTİK' : 'YÜKSEK'}
+                                <span className={`text-sm font-medium ${getRiskColor(v.risk_score)}`}>
+                                    {getRiskLabel(v.risk_score).toUpperCase()}
                                 </span>
                              </div>
                         </div>
                         
                         <div className="mt-6 w-full bg-rose-50 border border-rose-100 p-3 rounded-lg text-left">
-                            <p className="text-xs font-bold text-rose-700 uppercase mb-1">Tespit Edilen Ana Sorun</p>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs font-bold text-rose-700 uppercase">Tespit Edilen Ana Sorun</p>
+                              <button 
+                                onClick={() => { setExplainDrawerType('component-breakdown'); setExplainDrawerOpen(true); }}
+                                className="text-xs text-rose-600 hover:text-rose-800 font-medium hover:underline"
+                              >
+                                Neye göre? →
+                              </button>
+                            </div>
                             <p className="text-sm text-rose-900">
-                                {v.brand === 'Ford' ? 'Powershift Şanzıman Kavrama Hatası riski %85 üzerinde.' : 
-                                 v.brand === 'BMW' ? 'Zincir Sesi ve Turbo Basınç Düşüklüğü tespit edildi.' : 
-                                 'Periyodik bakım aralığı 15.000 KM aşılmış.'}
+                                {v.risk_primary_reason || 'Birincil risk nedeni hesaplanamadı.'}
+                            </p>
+                            <p className="text-[10px] text-slate-500 italic mt-2">
+                                Güven: {Number(v.risk_confidence ?? 0).toFixed(2)} • KM: {Number(v.mileage || 0).toLocaleString()} • Hasar Olasılığı: {Number(v.damage_probability || 0)} • FFI: {Number(v.failure_frequency_index || 0)}
                             </p>
                         </div>
                     </div>
@@ -478,35 +510,45 @@ export const RiskAnalysis: React.FC = () => {
                             <Activity size={18} className="text-slate-400" /> Bileşen Bazlı Risk Analizi
                         </h3>
                         <div className="space-y-6">
-                            {[
-                                { name: 'Motor Performansı & Turbo', score: v.risk_score > 60 ? 35 : 75, icon: Zap },
-                                { name: 'Şanzıman & Aktarma', score: v.brand === 'Ford' ? 20 : 80, icon: Activity },
-                                { name: 'Elektronik Aksam', score: 60, icon: AlertOctagon },
-                                { name: 'Kaporta & Şasi Bütünlüğü', score: 90, icon: ShieldAlert },
-                            ].map((comp, idx) => (
+                            {(() => {
+                              const b = v.risk_breakdown;
+                              const components = [
+                                { name: 'Motor/Turbo', score: Number(b?.powertrain ?? 0), icon: Zap },
+                                { name: 'Şanzıman', score: Number(b?.transmission ?? 0), icon: Activity },
+                                { name: 'Elektronik', score: Number(b?.electronics ?? 0), icon: AlertOctagon },
+                                { name: 'Hasar/Şasi', score: Number(b?.body ?? 0), icon: ShieldAlert },
+                              ];
+                              return components.map((comp, idx) => (
                                 <div key={idx}>
                                     <div className="flex justify-between items-center mb-1">
                                         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
                                             <comp.icon size={16} className="text-slate-400" />
                                             {comp.name}
                                         </div>
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${comp.score < 50 ? 'bg-rose-100 text-rose-700' : comp.score < 80 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                            {comp.score < 50 ? 'RİSKLİ' : comp.score < 80 ? 'ORTA' : 'İYİ'}
+                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                          comp.score >= 75 ? 'bg-rose-100 text-rose-700' : comp.score >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                        }`}>
+                                            {comp.score >= 75 ? 'RİSKLİ' : comp.score >= 55 ? 'ORTA' : 'İYİ'}
                                         </span>
                                     </div>
+
                                     <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                                        <div 
-                                            className={`h-full rounded-full transition-all duration-1000 ${comp.score < 50 ? 'bg-rose-500' : comp.score < 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                                            style={{width: `${comp.score}%`}}
-                                        ></div>
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-1000 ${
+                                              comp.score >= 75 ? 'bg-rose-500' : comp.score >= 55 ? 'bg-amber-500' : 'bg-emerald-500'
+                                            }`}
+                                            style={{ width: `${Math.max(0, Math.min(100, comp.score))}%` }}
+                                        />
                                     </div>
-                                    {comp.score < 50 && (
+
+                                    {comp.score >= 75 && (
                                         <p className="text-[10px] text-rose-600 mt-1 pl-6">
-                                            * Öngörülen arıza süresi: &lt; 2.500 KM
+                                            * Yüksek risk bileşeni (breakdown): {comp.score}/100
                                         </p>
                                     )}
                                 </div>
-                            ))}
+                              ));
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -522,8 +564,10 @@ export const RiskAnalysis: React.FC = () => {
                             <div className="flex items-center justify-between border-b border-slate-700 pb-4">
                                 <div>
                                     <p className="text-slate-400 text-xs">Risk Sinyal Gücü</p>
-                                    <p className="text-2xl font-bold text-rose-400">%82 - %89</p>
-                                    <p className="text-[10px] text-slate-500 italic mt-1">Güven Aralığı (Confidence Interval)</p>
+                                    <p className="text-2xl font-bold text-rose-400">%{Math.round((v.risk_confidence ?? 0.6) * 100)}</p>
+                                    <p className="text-[10px] text-slate-500 italic mt-1">
+                                      Güven: %{Math.round((v.risk_confidence ?? 0.6) * 100)}
+                                    </p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-slate-400 text-xs">Tahmini Masraf Aralığı</p>
@@ -589,7 +633,7 @@ export const RiskAnalysis: React.FC = () => {
   }
 
   return (
-    <div className="p-8 relative">
+    <div className="p-10 relative max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
             <h2 className="text-2xl font-bold text-slate-800">Filo Risk Analizi</h2>
@@ -607,10 +651,17 @@ export const RiskAnalysis: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group">
              <div className="absolute top-0 right-0 p-3 opacity-10">
                  <ShieldAlert size={60} className="text-slate-900" />
              </div>
+             <button 
+               onClick={() => { setExplainDrawerType('average'); setExplainDrawerOpen(true); }}
+               className="absolute top-3 right-3 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100 rounded-lg bg-white border border-slate-200"
+               title="Hesaplama kaynağını aç"
+             >
+               <Info size={16} className="text-slate-600" />
+             </button>
              <p className="text-sm font-medium text-slate-500 mb-1">Ortalama Filo Risk Skoru</p>
              <h3 className={`text-3xl font-bold ${averageRiskScore > 50 ? 'text-amber-600' : 'text-emerald-600'}`}>
                  {averageRiskScore}<span className="text-lg font-normal text-slate-400">/100</span>
@@ -625,40 +676,61 @@ export const RiskAnalysis: React.FC = () => {
 
         <div 
             onClick={() => setShowCriticalList(true)}
-            className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md hover:border-rose-200 group"
+            className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md hover:border-rose-200 group relative"
         >
+             <button 
+               onClick={(e) => { e.stopPropagation(); setExplainDrawerType('critical'); setExplainDrawerOpen(true); }}
+               className="absolute top-3 right-3 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100 rounded-lg bg-white border border-slate-200"
+               title="Eşik ve araçları aç"
+             >
+               <Info size={16} className="text-slate-600" />
+             </button>
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-rose-50 text-rose-600 rounded-lg group-hover:bg-rose-100 transition-colors">
                      <AlertOctagon size={20} />
                  </div>
-                 <h3 className="font-semibold text-slate-700 group-hover:text-rose-700 transition-colors">Kritik Araç Sayısı</h3>
+                 <h3 className="font-semibold text-slate-700 group-hover:text-rose-700 transition-colors">Kritik Araç Sayısı (≥60)</h3>
              </div>
-             <p className="text-3xl font-bold text-slate-800">{highRiskVehiclesCount + 3} <span className="text-sm font-normal text-slate-500">Araç</span></p>
+             <p className="text-3xl font-bold text-slate-800">{criticalCountKPI} <span className="text-sm font-normal text-slate-500">Araç</span></p>
              <p className="text-xs text-rose-500 mt-2 font-medium flex items-center gap-1">
                 Acil aksiyon gerektirir <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0" />
              </p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm group relative">
+             <button 
+               onClick={() => { setExplainDrawerType('exposure'); setExplainDrawerOpen(true); }}
+               className="absolute top-3 right-3 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100 rounded-lg bg-white border border-slate-200"
+               title="Formülü ve katkıyı aç"
+             >
+               <Info size={16} className="text-slate-600" />
+             </button>
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                      <Activity size={20} />
                  </div>
                  <h3 className="font-semibold text-slate-700">Risk Maruziyeti</h3>
              </div>
-             <p className="text-2xl font-bold text-slate-800">{(financialExposure + 450000).toLocaleString('tr-TR')} ₺</p>
-             <p className="text-xs text-slate-500 mt-2">Potansiyel arıza maliyet tahmini</p>
+             <p className="text-2xl font-bold text-slate-800">{financialExposure.toLocaleString('tr-TR')} ₺</p>
+             <p className="text-xs text-slate-500 mt-2">Potansiyel arıza maliyet tahmini (risk_score &gt; 50)</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm group relative">
+             <button 
+               onClick={() => { setExplainDrawerType('security'); setExplainDrawerOpen(true); }}
+               className="absolute top-3 right-3 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-100 rounded-lg bg-white border border-slate-200"
+               title="Endeks hakkında bilgi"
+             >
+               <Info size={16} className="text-slate-600" />
+             </button>
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                      <Zap size={20} />
                  </div>
                  <h3 className="font-semibold text-slate-700">Güvenlik Endeksi</h3>
              </div>
-             <p className="text-3xl font-bold text-slate-800">A+</p>
-             <p className="text-xs text-emerald-600 mt-2 font-medium">Sektör ortalamasının üzerinde</p>
+             <p className="text-3xl font-bold text-slate-800">{securityIndexData.grade}</p>
+             <p className="text-xs text-emerald-600 mt-2 font-medium">{securityIndexData.reasons[0] || 'Güvenlik endeksi hesaplanıyor'}</p>
         </div>
       </div>
 
@@ -671,7 +743,7 @@ export const RiskAnalysis: React.FC = () => {
                 <TrendingUp size={18} className="text-slate-400" />
                 Dönemsel Risk Eğilimi
             </h3>
-            <div className="h-72 w-full">
+            <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={trendData}>
                         <defs>
@@ -694,7 +766,7 @@ export const RiskAnalysis: React.FC = () => {
         <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
             <h3 className="font-bold text-slate-800 mb-2">Risk Kategorizasyonu</h3>
             <p className="text-xs text-slate-500 mb-4">Filo genelindeki risklerin kaynak dağılımı.</p>
-            <div className="h-64 w-full">
+            <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <RadarChart cx="50%" cy="50%" outerRadius="80%" data={categoryRiskData}>
                         <PolarGrid stroke="#e2e8f0" />
@@ -712,7 +784,7 @@ export const RiskAnalysis: React.FC = () => {
           {/* Risk Distribution Bar Chart */}
           <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
              <h3 className="font-bold text-slate-800 mb-6">Risk Seviyesi Dağılımı</h3>
-             <div className="h-64">
+             <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={distributionData} layout="vertical">
                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
@@ -750,45 +822,67 @@ export const RiskAnalysis: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {[
-                                { id: 'WBALZ7C5-XXXX', model: 'Ford Focus 2017', score: 85, factor: 'Kronik Şanzıman Hatası', color: 'text-rose-600', brand: 'Ford' },
-                                { id: 'WBAVM135-XXXX', model: 'BMW 520d 2018', score: 72, factor: 'Yüksek KM / Turbo', color: 'text-amber-600', brand: 'BMW' },
-                                { id: 'JTDKN3DU-XXXX', model: 'Toyota Corolla 2021', score: 65, factor: 'Ağır Hasar Kaydı', color: 'text-amber-600', brand: 'Toyota' },
-                                { id: 'WVWZZZ3C-XXXX', model: 'VW Passat 2019', score: 55, factor: 'Periyodik Bakım Gecikmesi', color: 'text-amber-600', brand: 'Volkswagen' },
-                            ].map((row, i) => (
-                                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            {topRiskyVehicles.map((v, i) => (
+                                <tr key={v.vehicle_id ?? i} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4">
                                         <div className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded inline-block border border-slate-200">
-                                            {row.id}
+                                            {(v.vehicle_id || '').slice(0, 10)}...
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-800">{row.model}</td>
+
+                                    <td className="px-6 py-4 text-sm font-medium text-slate-800">
+                                        {v.brand} {v.model} {v.year ? v.year : ''}
+                                    </td>
+
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-sm font-bold ${row.color}`}>{row.score}</span>
+                                            <span className={`text-sm font-bold ${getRiskColor(v.risk_score)}`}>
+                                                {v.risk_score ?? 0}
+                                            </span>
                                             <div className="w-16 h-1.5 bg-slate-100 rounded-full">
-                                                <div className={`h-1.5 rounded-full ${row.score > 80 ? 'bg-rose-500' : 'bg-amber-500'}`} style={{width: `${row.score}%`}}></div>
+                                                <div
+                                                    className={`h-1.5 rounded-full ${getRiskBgColor(v.risk_score)}`}
+                                                    style={{ width: `${Math.max(0, Math.min(100, Number(v.risk_score ?? 0)))}%` }}
+                                                />
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <span className="text-xs font-medium text-slate-600 bg-red-50 border border-red-100 px-2 py-1 rounded flex items-center gap-1 w-fit">
-                                            <Info size={12} /> {row.factor}
+
+                                    <td className="px-6 py-4 relative group">
+                                        <span className={`text-xs font-medium px-2 py-1 rounded inline-flex items-center gap-1 ${getRiskBadgeClasses(v.risk_score)}`}>
+                                            <Info size={12} /> {getRiskLabel(v.risk_score)}: {v.risk_primary_reason || 'Çoklu risk faktörü'}
                                         </span>
+                                        
+                                        {/* Breakdown Tooltip */}
+                                        <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 bg-slate-900 text-white rounded-lg shadow-lg z-20 text-xs min-w-max p-3">
+                                          <div className="font-bold mb-2 border-b border-slate-700 pb-2">Breakdown Detayları:</div>
+                                          <div className="space-y-1">
+                                            <div className="flex justify-between gap-3">
+                                              <span className="text-slate-400">Motor/Turbo:</span>
+                                              <span className="font-mono font-bold text-cyan-300">{v.risk_breakdown?.powertrain ?? 0}/100</span>
+                                            </div>
+                                            <div className="flex justify-between gap-3">
+                                              <span className="text-slate-400">Şanzıman:</span>
+                                              <span className="font-mono font-bold text-blue-300">{v.risk_breakdown?.transmission ?? 0}/100</span>
+                                            </div>
+                                            <div className="flex justify-between gap-3">
+                                              <span className="text-slate-400">Elektronik:</span>
+                                              <span className="font-mono font-bold text-purple-300">{v.risk_breakdown?.electronics ?? 0}/100</span>
+                                            </div>
+                                            <div className="flex justify-between gap-3">
+                                              <span className="text-slate-400">Hasar/Şasi:</span>
+                                              <span className="font-mono font-bold text-rose-300">{v.risk_breakdown?.body ?? 0}/100</span>
+                                            </div>
+                                          </div>
+                                          <div className="mt-2 pt-2 border-t border-slate-700 text-[10px] text-slate-400">
+                                            Bu metrik computeVehicleRisk() çıktısından gelir.
+                                          </div>
+                                        </div>
                                     </td>
+
                                     <td className="px-6 py-4 text-right">
-                                        <button 
-                                            onClick={() => {
-                                                const mockProfile = { 
-                                                    ...vehicles[0], 
-                                                    vehicle_id: row.id, 
-                                                    brand: row.brand, 
-                                                    model: row.model, 
-                                                    risk_score: row.score, 
-                                                    year: parseInt(row.model.split(' ').pop() || '2020') 
-                                                };
-                                                setSelectedRiskVehicle(mockProfile);
-                                            }}
+                                        <button
+                                            onClick={() => setSelectedRiskVehicle(v)}
                                             className="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1 ml-auto"
                                         >
                                             İncele <ArrowUpRight size={12} />
@@ -807,6 +901,16 @@ export const RiskAnalysis: React.FC = () => {
       <DetailedRiskInspectionModal />
       <ReportSelectionModal />
       <DetailedReportPreviewModal />
+      
+      {/* Explain Drawer */}
+      <RiskExplainDrawer 
+        isOpen={explainDrawerOpen}
+        onClose={() => setExplainDrawerOpen(false)}
+        type={explainDrawerType}
+        vehicles={vehicles}
+        fleetSummary={fleetSummary}
+        data={{ vehicle: selectedRiskVehicle }}
+      />
 
     </div>
   );

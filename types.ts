@@ -1,3 +1,12 @@
+export type RiskAction = 'KEEP' | 'SERVICE' | 'INSPECT' | 'SELL';
+
+export interface VehicleRiskBreakdown {
+  powertrain: number;   // motor/turbo
+  transmission: number; // şanzıman
+  electronics: number;  // elektronik
+  body: number;         // şasi/kaporta + tramer etkisi
+}
+
 export interface VehicleProfile {
   vehicle_id: string; 
   brand: string;
@@ -18,6 +27,17 @@ export interface VehicleProfile {
   resale_value_prediction: number; 
   damage_probability: number; 
   compatible_parts_count: number;
+  
+  // Risk engine fields (optional, computed)
+  risk_breakdown?: {
+    powertrain: number;
+    transmission: number;
+    electronics: number;
+    body: number;
+  };
+  risk_primary_reason?: string;
+  risk_confidence?: number; // 0..1
+  risk_action?: 'KEEP' | 'SERVICE' | 'INSPECT' | 'SELL';
 }
 
 export interface SlaMetric {
