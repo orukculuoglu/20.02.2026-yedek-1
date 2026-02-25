@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X } from 'lucide-react';
 import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
-import { AftermarketProductCard } from '../types';
+import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
+import { buildFleetRiskSummary } from '../src/engine/fleetRisk/fleetRiskAggregator';
+import { AftermarketProductCard, VehicleProfile } from '../types';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -17,6 +19,108 @@ export const DataEngine: React.FC = () => {
 
   // Mock veriyi yükle
   const mockData = mockDataEngineV1;
+
+  // Demo fleet for V2 data engine (Real-world simulation)
+  const demoFleet: VehicleProfile[] = useMemo(() => [
+    {
+      vehicle_id: 'V001',
+      brand: 'Toyota',
+      model: 'Corolla',
+      year: 2018,
+      engine: '1.6L',
+      transmission: 'Manual',
+      last_query: '2025-02-20',
+      total_queries: 45,
+      mileage: 125000,
+      institutionId: 'INST-001',
+      average_part_life_score: 72,
+      failure_frequency_index: 28,
+      risk_score: 45,
+      resale_value_prediction: 85000,
+      damage_probability: 0.22,
+      compatible_parts_count: 324,
+    },
+    {
+      vehicle_id: 'V002',
+      brand: 'Honda',
+      model: 'Civic',
+      year: 2016,
+      engine: '1.5L',
+      transmission: 'Automatic',
+      last_query: '2025-02-21',
+      total_queries: 52,
+      mileage: 165000,
+      institutionId: 'INST-001',
+      average_part_life_score: 58,
+      failure_frequency_index: 42,
+      risk_score: 68,
+      resale_value_prediction: 72000,
+      damage_probability: 0.52,
+      compatible_parts_count: 287,
+    },
+    {
+      vehicle_id: 'V003',
+      brand: 'Ford',
+      model: 'Focus',
+      year: 2017,
+      engine: '1.6L',
+      transmission: 'Manual',
+      last_query: '2025-02-19',
+      total_queries: 38,
+      mileage: 145000,
+      institutionId: 'INST-001',
+      average_part_life_score: 65,
+      failure_frequency_index: 35,
+      risk_score: 52,
+      resale_value_prediction: 78000,
+      damage_probability: 0.35,
+      compatible_parts_count: 295,
+    },
+    {
+      vehicle_id: 'V004',
+      brand: 'Volkswagen',
+      model: 'Golf',
+      year: 2015,
+      engine: '1.4L',
+      transmission: 'Automatic',
+      last_query: '2025-02-21',
+      total_queries: 61,
+      mileage: 195000,
+      institutionId: 'INST-001',
+      average_part_life_score: 42,
+      failure_frequency_index: 58,
+      risk_score: 75,
+      resale_value_prediction: 65000,
+      damage_probability: 0.71,
+      compatible_parts_count: 278,
+    },
+    {
+      vehicle_id: 'V005',
+      brand: 'Hyundai',
+      model: 'Elantra',
+      year: 2019,
+      engine: '1.6L',
+      transmission: 'Manual',
+      last_query: '2025-02-20',
+      total_queries: 32,
+      mileage: 95000,
+      institutionId: 'INST-001',
+      average_part_life_score: 82,
+      failure_frequency_index: 15,
+      risk_score: 28,
+      resale_value_prediction: 95000,
+      damage_probability: 0.12,
+      compatible_parts_count: 306,
+    },
+  ], []);
+
+  // Build Data Engine Summary V2 (Real calculations from fleet)
+  const dataEngineSummary = useMemo(() => {
+    return buildDataEngineSummary(demoFleet, {
+      maintenanceCompliance: 0.87,
+      dataCompletenessRate: 0.94,
+    });
+  }, [demoFleet]);
 
   // Demo inventory item (Aftermarket metric hesaplaması için)
   const demoItem: AftermarketProductCard = {
@@ -142,94 +246,215 @@ export const DataEngine: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT: Endeks Paneli (V0) + V1 Stratejik Öneriler */}
+        {/* RIGHT: Endeks Paneli (V2) – Yeni Endeksler + Trendler */}
         <div className="space-y-6">
-          {/* Endeks Paneli (V0) */}
+          {/* Endeks Paneli (V2) */}
           <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 shadow-sm p-6">
             <div className="flex justify-between items-start mb-6">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <TrendingUp size={20} className="text-indigo-600" />
-                Endeks Paneli (V0)
+                Endeks Paneli (V2 - Geliştirilmiş)
               </h3>
               <div className="text-right">
-                <p className="text-[10px] text-slate-500 uppercase font-bold">Seçili Bölge</p>
-                <p className="text-sm font-semibold text-slate-700">{selectedCity} / {selectedDistrict}</p>
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Filo</p>
+                <p className="text-sm font-semibold text-slate-700">{dataEngineSummary.vehicleCount} araç</p>
               </div>
             </div>
 
             <div className="space-y-4 mb-6">
               {(() => {
-                // Data Engine Scores (now dynamic from demoMetrics)
-                const scores = {
-                  genelRisk: Math.round(demoMetrics?.generalRisk ?? 0),
-                  dayanıklılık: Math.round(demoMetrics?.durability ?? 0),
-                  maliyetBaskısı: Math.round(demoMetrics?.costPressure ?? 0),
-                  tedarikStresi: Math.round(demoMetrics?.supplyStress ?? 0),
-                  guvenSkoru: Math.round(demoMetrics?.trustScore ?? 0),
-                  markaEtkisi: Math.round(demoMetrics?.brandImpact ?? 0),
-                };
-
+                // V2 Endeks Listesi
                 const indices = [
-                  { key: 'genelRisk', label: 'Genel Risk', scoreKey: 'genelRisk' as const },
-                  { key: 'dayanıklılık', label: 'Dayanıklılık', scoreKey: 'dayanıklılık' as const },
-                  { key: 'maliyetBaskısı', label: 'Maliyet Baskısı', scoreKey: 'maliyetBaskısı' as const },
-                  { key: 'tedarikStresi', label: 'Tedarik Stresi', scoreKey: 'tedarikStresi' as const },
-                  { key: 'guvenSkoru', label: 'Güven Skoru', scoreKey: 'guvenSkoru' as const },
-                  { key: 'markaEtkisi', label: 'Marka Etkisi', scoreKey: 'markaEtkisi' as const, isNew: true },
+                  {
+                    key: 'riskIndex',
+                    label: 'Risk Endeksi (Son 6 Ay)',
+                    value: dataEngineSummary.riskIndex,
+                    tooltip: 'Filoningel ortalama risk puanı',
+                    isNew: true,
+                  },
+                  {
+                    key: 'durabilityIndex',
+                    label: 'Filo Dayanıklılık Ortalaması',
+                    value: dataEngineSummary.durabilityIndex,
+                    tooltip: 'Araçların yaşlanması ve dayanıklılık göstergesi',
+                    isNew: true,
+                  },
+                  {
+                    key: 'costPressureIndex',
+                    label: 'Operasyonel Maliyet Endeksi',
+                    value: dataEngineSummary.costPressureIndex,
+                    tooltip: 'Tamir/bakım maliyet yükü',
+                    isNew: true,
+                  },
+                  {
+                    key: 'maintenanceComplianceRatio',
+                    label: 'Bakım Uyum Oranı',
+                    value: dataEngineSummary.maintenanceComplianceRatio,
+                    tooltip: 'Zamanında yapılan bakım yüzdesi',
+                    isNew: true,
+                  },
+                  {
+                    key: 'criticalDensity',
+                    label: 'Kritik Yoğunluk (% risk ≥60)',
+                    value: dataEngineSummary.criticalDensity,
+                    tooltip: `Yüksek riskli araçlar: ${dataEngineSummary.criticalVehicleCount}/${dataEngineSummary.vehicleCount}`,
+                    isNew: true,
+                  },
+                  {
+                    key: 'dataReliabilityScore',
+                    label: 'Veri Güvenilirlik Skoru',
+                    value: dataEngineSummary.dataReliabilityScore,
+                    tooltip: 'Eksiksiz ve doğru veri oranı',
+                    isNew: true,
+                  },
                 ];
 
+                // Önceki ayın değerleri (demirbaş - genellikle trend ile hesaplanır)
+                const previousValues: Record<string, number> = {
+                  riskIndex: dataEngineSummary.trend[dataEngineSummary.trend.length - 1]?.risk || 48,
+                  durabilityIndex: 70,
+                  costPressureIndex: 42,
+                  maintenanceComplianceRatio: 85,
+                  criticalDensity: 32,
+                  dataReliabilityScore: 93,
+                };
+
                 return indices.map((index) => {
-                  const value = scores[index.scoreKey];
+                  const value = index.value;
+                  const prevValue = previousValues[index.key];
+                  const trendArrow = getTrendArrow(value, prevValue);
+
+                  // Renk seçimi: Daha düşük genellikle daha iyi risk endekslerinde
+                  const getColor = (val: number, isRisk: boolean = false) => {
+                    if (isRisk) {
+                      // Risk endeksleri için: düşük iyi, yüksek kötü
+                      if (val < 35) return 'text-emerald-600';
+                      if (val < 60) return 'text-amber-600';
+                      return 'text-rose-600';
+                    }
+                    // Pozitif endeksler için: yüksek iyi, düşük kötü
+                    if (val > 70) return 'text-emerald-600';
+                    if (val > 40) return 'text-amber-600';
+                    return 'text-rose-600';
+                  };
+
+                  const getBarColor = (val: number, isRisk: boolean = false) => {
+                    if (isRisk) {
+                      if (val < 35) return 'bg-emerald-500';
+                      if (val < 60) return 'bg-amber-500';
+                      return 'bg-rose-500';
+                    }
+                    if (val > 70) return 'bg-emerald-500';
+                    if (val > 40) return 'bg-amber-500';
+                    return 'bg-rose-500';
+                  };
+
+                  const isRiskMetric =
+                    index.key === 'riskIndex' || index.key === 'costPressureIndex' || index.key === 'criticalDensity';
+
                   return (
-                    <div key={index.key} className="bg-white rounded-lg p-4 border border-slate-100">
+                    <div key={index.key} className="bg-white rounded-lg p-4 border border-slate-100 hover:border-indigo-200 transition-colors">
                       <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-2">
                           <p className="text-xs font-bold text-slate-500 uppercase">{index.label}</p>
-                          {index.isNew && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">V1</span>}
+                          {index.isNew && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">V2</span>}
                         </div>
-                        <button
-                          onClick={() => setSelectedIndexDetail(selectedIndexDetail === index.key ? null : index.key)}
-                          className="p-1 hover:bg-slate-100 rounded transition-colors"
-                          title="Detay göster"
-                        >
-                          <Info size={14} className="text-indigo-600" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-lg font-bold ${trendArrow === '→' ? 'text-slate-400' : trendArrow === '↑' ? (isRiskMetric ? 'text-rose-600' : 'text-emerald-600') : (isRiskMetric ? 'text-emerald-600' : 'text-rose-600')}`}>
+                            {trendArrow}
+                          </span>
+                          <button
+                            onClick={() => setSelectedIndexDetail(selectedIndexDetail === index.key ? null : index.key)}
+                            className="p-1 hover:bg-slate-100 rounded transition-colors"
+                            title="Detay göster"
+                          >
+                            <Info size={14} className="text-indigo-600" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="flex justify-between items-center mb-2">
-                        <span className={`text-2xl font-bold ${value > 70 ? 'text-rose-600' : value > 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {value || '—'}
+                        <span className={`text-2xl font-bold ${getColor(value, isRiskMetric)}`}>
+                          {Math.round(value)}
                         </span>
+                        <span className="text-xs text-slate-500 font-mono">← {Math.round(prevValue)}</span>
                       </div>
 
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full ${
-                            value > 70 ? 'bg-rose-500' : value > 40 ? 'bg-amber-500' : 'bg-emerald-500'
-                          }`}
+                          className={`h-full rounded-full ${getBarColor(value, isRiskMetric)}`}
                           style={{ width: `${Math.min(value, 100) || 0}%` }}
                         ></div>
                       </div>
 
-                      {/* Detay Açıklaması (Dinamik) */}
-                      {selectedIndexDetail === index.key && mockData.indexMeta[index.key as keyof typeof mockData.indexMeta] && (
-                        <div className="mt-4 pt-4 border-t border-slate-200 bg-slate-50 rounded p-3">
-                          <p className="text-xs font-bold text-slate-700 mb-2">Formül:</p>
-                          <p className="text-xs text-slate-600 font-mono mb-3">{mockData.indexMeta[index.key as keyof typeof mockData.indexMeta].formula}</p>
-                          <p className="text-xs font-bold text-slate-700 mb-1">Veri Kaynakları:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {mockData.indexMeta[index.key as keyof typeof mockData.indexMeta].dataSources.map((src) => (
-                              <span key={src} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">
-                                {src}
-                              </span>
-                            ))}
+                      {/* Detay Açıklaması - Single Source of Truth von fleetSummary */}
+                      {selectedIndexDetail === index.key && (() => {
+                        const explanation = getFormulaExplanation(dataEngineSummary, index.key as keyof typeof dataEngineSummary.formulaNotes);
+                        return (
+                          <div className="mt-4 pt-4 border-t border-slate-200 bg-slate-50 rounded p-3">
+                            <p className="text-xs font-bold text-slate-700 mb-2">📋 Açıklama:</p>
+                            <p className="text-xs text-slate-600 mb-2">{explanation.rationale}</p>
+                            <p className="text-xs font-bold text-slate-700 mb-2">🧮 Formül (buildFleetRiskSummary):</p>
+                            <p className="text-xs text-slate-600 font-mono bg-white p-2 rounded border border-blue-200 mb-3 text-blue-900">
+                              {explanation.formula}
+                            </p>
+                            <p className="text-xs font-bold text-slate-700 mb-1">🔗 Veri Kaynakları:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {explanation.sources.map((src) => (
+                                <span key={src} className="text-[10px] bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">
+                                  {src}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 });
               })()}
+            </div>
+
+            {/* Özet Bilgiler + Security Assessment */}
+            <div className="space-y-4">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-[10px] text-slate-600 uppercase font-bold">Kritik Araçlar</p>
+                    <p className="text-xl font-bold text-slate-800">{dataEngineSummary.criticalVehicleCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-600 uppercase font-bold">Ort. Maruz Kalma</p>
+                    <p className="text-xl font-bold text-slate-800">₺{dataEngineSummary.averageExposure.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-600 uppercase font-bold">Toplam Filo</p>
+                    <p className="text-xl font-bold text-slate-800">{dataEngineSummary.vehicleCount}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Index (from fleetSummary) */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4">
+                <p className="text-xs font-bold text-slate-700 mb-2">🛡️ Filo Güvenlik Derecesi</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">{dataEngineSummary.securityIndex.grade}</p>
+                    <p className="text-xs text-slate-600">{Math.round(dataEngineSummary.securityIndex.score01 * 100)}% Güven</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 mb-1">Nedenler:</p>
+                    <ul className="text-xs text-slate-600 space-y-0.5">
+                      {dataEngineSummary.securityIndex.reasons.map((reason, idx) => (
+                        <li key={idx} className="flex items-start gap-1">
+                          <span className="text-slate-400">•</span>
+                          <span>{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

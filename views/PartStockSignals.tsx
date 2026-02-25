@@ -1,55 +1,84 @@
 import React from 'react';
 import { Search, Zap, CheckCircle, Package, Info } from 'lucide-react';
+import { getPartMasterSnapshot } from '../services/dataService';
+import { PartMasterSnapshot, Part, InventoryItem, SalesSignal } from '../types/partMaster';
 
-interface StockItem {
-    id: string;
-    name: string;
-    stock: number;
-    last30Sales: number;
-    unit: string;
-    category: string;
+interface ProcessedStockItem extends Part {
+    inventory?: InventoryItem;
+    salesSignal?: SalesSignal;
+    dailyAvg: number;
+    daysToZero: number;
+    riskScore: number;
+    orderSuggestion: number;
 }
 
-const MOCK_DATA: StockItem[] = [
-    { id: 'P001', name: 'Fren Balatası Ön', stock: 15, last30Sales: 120, unit: 'Adet', category: 'Fren Sistemi' },
-    { id: 'P002', name: 'Yağ Filtresi', stock: 45, last30Sales: 90, unit: 'Adet', category: 'Filtreler' },
-    { id: 'P003', name: 'Hava Filtresi', stock: 8, last30Sales: 30, unit: 'Adet', category: 'Filtreler' },
-    { id: 'P004', name: 'Triger Kayışı', stock: 2, last30Sales: 5, unit: 'Set', category: 'Motor' },
-    { id: 'P005', name: 'Ateşleme Bujisi', stock: 12, last30Sales: 60, unit: 'Adet', category: 'Ateşleme' },
-    { id: 'P006', name: 'Silecek Takımı', stock: 30, last30Sales: 10, unit: 'Set', category: 'Aksesuar' },
-    { id: 'P007', name: 'Motor Yağı 5W30', stock: 120, last30Sales: 400, unit: 'Litre', category: 'Sıvılar' },
-    { id: 'P008', name: 'Antifriz (Kırmızı)', stock: 50, last30Sales: 200, unit: 'Litre', category: 'Sıvılar' },
-    { id: 'P009', name: 'Debriyaj Seti', stock: 1, last30Sales: 0, unit: 'Set', category: 'Şanzıman' },
-    { id: 'P010', name: 'Amortisör Ön', stock: 4, last30Sales: 15, unit: 'Adet', category: 'Süspansiyon' },
-];
-
 export const PartStockSignals: React.FC = () => {
-    // Predictive Inventory Engine Logic - Component Local
-    const processedData = MOCK_DATA.map(item => {
-        // rule: dailyAvg = last30Sales / 30. If last30Sales = 0 then dailyAvg = 0.1
-        const dailyAvg = item.last30Sales === 0 ? 0.1 : item.last30Sales / 30;
-        
-        // rule: daysToZero = stock / dailyAvg
-        const daysToZero = Math.round(item.stock / dailyAvg);
-        
-        // rule: riskScore mapping
-        let riskScore = 10;
-        if (daysToZero < 7) riskScore = 90;
-        else if (daysToZero < 15) riskScore = 60;
-        else if (daysToZero < 30) riskScore = 30;
-
-        // rule: targetStock = dailyAvg * 30, orderSuggestion = max(0, round(targetStock - stock))
-        const targetStock = dailyAvg * 30;
-        const orderSuggestion = Math.max(0, Math.round(targetStock - item.stock));
-
-        return {
-            ...item,
-            dailyAvg,
-            daysToZero,
-            riskScore,
-            orderSuggestion
+    const [stockData, setStockData] = React.useState<ProcessedStockItem[]>([]);
+    const [snapshot, setSnapshot] = React.useState<PartMasterSnapshot | null>(null);
+    const [loading, setLoading] = React.useState(true);
+    
+    const tenantId = 'LENT-CORP-DEMO'; // From env or auth context
+    
+    React.useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            console.log('[PartStockSignals] Loading PartMasterSnapshot...');
+            
+            try {
+                // Load complete PM snapshot (single source of truth)
+                const pmSnapshot = await getPartMasterSnapshot(tenantId);
+                console.log('[PartStockSignals] Snapshot loaded:', {
+                    parts: pmSnapshot.parts?.length,
+                    inventory: pmSnapshot.inventory?.length,
+                    salesSignals: pmSnapshot.salesSignals?.length,
+                    source: pmSnapshot.source,
+                });
+                setSnapshot(pmSnapshot);
+                
+                // Process data for display
+                const processed = pmSnapshot.parts.map(part => {
+                    // Find inventory for this part
+                    const inv = pmSnapshot.inventory.find(i => i.partId === part.partId);
+                    const sales = pmSnapshot.salesSignals.find(s => s.partId === part.partId);
+                    
+                    const dailyAvg = sales?.dailyAverage || 0.1;
+                    const onHand = inv?.onHand || 0;
+                    const daysToZero = Math.round(onHand / dailyAvg);
+                    
+                    let riskScore = 10;
+                    if (daysToZero < 7) riskScore = 90;
+                    else if (daysToZero < 15) riskScore = 60;
+                    else if (daysToZero < 30) riskScore = 30;
+                    
+                    const targetStock = dailyAvg * 30;
+                    const orderSuggestion = Math.max(0, Math.round(targetStock - onHand));
+                    
+                    return {
+                        ...part,
+                        inventory: inv,
+                        salesSignal: sales,
+                        dailyAvg,
+                        daysToZero,
+                        riskScore,
+                        orderSuggestion,
+                    };
+                });
+                
+                setStockData(processed);
+                setLoading(false);
+            } catch (error) {
+                console.error('[PartStockSignals] Error loading PM snapshot:', error);
+                setLoading(false);
+            }
         };
-    });
+        
+        loadData();
+    }, [tenantId]);
+    
+    // Predictive Inventory Engine Logic - Component Local
+    const processedData = stockData;
+    const dataSource = snapshot?.source || 'UNKNOWN';
+    const summary = snapshot?.summary;
 
     return (
         <div className="p-8 animate-in fade-in duration-500 space-y-8 h-full flex flex-col bg-slate-50/50">
@@ -58,18 +87,49 @@ export const PartStockSignals: React.FC = () => {
                     <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                         <Package size={28} className="text-indigo-600" /> Parça & Stok Sinyalleri
                     </h2>
-                    <p className="text-slate-500 text-sm mt-1 italic font-medium">Analiz Modu: Sadece yerel tahminleme aktif.</p>
+                    <p className="text-slate-500 text-sm mt-1 italic font-medium">Veri Kaynağı: <span className="font-bold text-slate-700">{dataSource}</span> | TenantId: <span className="font-bold text-slate-700">{tenantId}</span></p>
                 </div>
                 <div className="flex gap-3">
+                    <div className="bg-cyan-50 border border-cyan-100 px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm">
+                        <span className="text-[9px] font-black text-cyan-400 uppercase tracking-widest">Veri Kaynağı</span>
+                        <span className="text-xs font-bold text-cyan-700 uppercase px-2 py-1 bg-cyan-100 rounded">{dataSource}</span>
+                    </div>
                     <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
                         <Zap size={18} className="text-indigo-600 fill-indigo-600 animate-pulse" />
                         <div>
                             <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">Engine Status</p>
-                            <p className="text-xs font-bold text-indigo-700 uppercase">Predictive On-Device</p>
+                            <p className="text-xs font-bold text-indigo-700 uppercase">PartMaster Live</p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {summary && (
+                <div className="grid grid-cols-5 gap-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Toplam Stok Değeri</p>
+                        <p className="text-2xl font-black text-slate-800">₺{(summary.totalStockValue / 1000).toFixed(1)}K</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Elden Mevcut</p>
+                        <p className="text-2xl font-black text-slate-800">{summary.totalOnHand}</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Orta Devir 30d</p>
+                        <p className="text-2xl font-black text-slate-800">{summary.avgTurnover30d}</p>
+                    </div>
+                    <div className="bg-white border border-red-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-red-600 uppercase">Kritik Stok</p>
+                        <p className="text-2xl font-black text-red-700">{summary.criticalStockCount}</p>
+                    </div>
+                    <div className="bg-white border border-orange-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-orange-600 uppercase">Ölü Stok Riski</p>
+                        <p className="text-2xl font-black text-orange-700">{summary.deadStockCount}</p>
+                    </div>
+                </div>
+            )}
+            
+            {loading && <div className="text-center py-8 text-slate-500">Parça verisi yükleniyor...</div>}
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
@@ -102,10 +162,10 @@ export const PartStockSignals: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {processedData.map((item) => (
-                                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                                <tr key={item.partId || item.sku} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-800 text-sm">{item.name}</div>
-                                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.id}</div>
+                                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.sku}</div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase border border-slate-200">
@@ -114,15 +174,15 @@ export const PartStockSignals: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex flex-col items-center">
-                                            <span className="font-bold text-slate-700 text-sm">{item.stock}</span>
+                                            <span className="font-bold text-slate-700 text-sm">{item.inventory?.onHand || 0}</span>
                                             <span className="text-[9px] text-slate-400 font-medium">{item.unit}</span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className="font-bold text-slate-600 text-sm">{item.last30Sales}</span>
+                                        <span className="font-bold text-slate-600 text-sm">{item.salesSignal?.soldQty || 0}</span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className="font-black text-indigo-600 text-sm">{item.dailyAvg.toFixed(2)}</span>
+                                        <span className="font-black text-indigo-600 text-sm">{(item.salesSignal?.dailyAverage || 0).toFixed(2)}</span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex flex-col items-center">

@@ -31,6 +31,7 @@ export const RiskAnalysis: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
+    console.log('[ENV] VITE_USE_REAL_API:', import.meta.env.VITE_USE_REAL_API);
     getVehicleList().then(data => {
         // Apply risk engine to all vehicles
         const appliedVehicles = data.map(applyVehicleRiskEngine);

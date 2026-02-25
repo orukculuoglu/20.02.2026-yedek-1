@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, PieChart, Cpu } from 'lucide-react';
+import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, PieChart, Cpu, Globe } from 'lucide-react';
 import { ViewState, SystemPermission } from '../types';
 import { getCurrentUserSecurity } from '../services/securityService';
 
@@ -78,6 +78,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
                 </div>
                 <div onClick={() => onChangeView(ViewState.DEALERS)} className={navClass(ViewState.DEALERS)}>
                     <Store size={18} /> Oto Galericiler
+                </div>
+                <div onClick={() => onChangeView(ViewState.B2B_NETWORK)} className={navClass(ViewState.B2B_NETWORK)}>
+                    <Globe size={18} /> B2B Parça Ağı
                 </div>
             </div>
         )}

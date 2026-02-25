@@ -12,6 +12,7 @@ import { Settings } from './views/Settings';
 import { PartLifeAnalysis } from './views/PartLifeAnalysis';
 import { RiskAnalysis } from './views/RiskAnalysis';
 import { DataEngine } from './views/DataEngine';
+import B2BNetwork from './views/B2BNetwork';
 import { SpareParts } from './views/SpareParts';
 import { Subscription } from './views/Subscription';
 import { UserManagement } from './views/UserManagement';
@@ -137,6 +138,7 @@ export default function App() {
       case ViewState.RISK_ANALYSIS: return <RiskAnalysis />;
       case ViewState.DATA_ENGINE: return <DataEngine />;
       case ViewState.SPARE_PARTS: return <SpareParts preSelectedVehicleId={selectedVehicleId} />;
+      case ViewState.B2B_NETWORK: return <B2BNetwork />;
       case ViewState.HISTORY: return <UsageHistory />;
       case ViewState.SETTINGS: return <Settings />;
       case ViewState.SUBSCRIPTION: return <Subscription />;

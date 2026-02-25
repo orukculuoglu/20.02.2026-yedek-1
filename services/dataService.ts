@@ -5,11 +5,15 @@ import {
     WorkOrder, RetailerProfile, FleetVehicle, ExpertiseProfile, InsurancePolicy,
     DealerProfile, OEMPart, DamageRecord, PartRiskAnalysis, ServicePoint,
     SubscriptionDetails, Invoice, UsageLog, ViewState, AutoOrderConfig, AutoOrderSuggestion,
-    ErpSyncLog, ServiceIntakePolicy, DEFAULT_SERVICE_INTAKE_POLICY, B2BNetworkState, AftermarketHistory30d
+    ErpSyncLog, ServiceIntakePolicy, DEFAULT_SERVICE_INTAKE_POLICY, B2BNetworkState, AftermarketHistory30d,
+    GetVehiclesResponse, GetDamageHistoryResponse, GetPartAnalysisResponse, GetB2BNetworkResponse,
+    PartMasterItem, AftermarketSummaryMetrics, GetAftermarketCriticalResponse, GetAftermarketTopTurnoverResponse, GetAftermarketTopMarginResponse, GetAftermarketRecommendationsResponse
 } from '../types';
+import { PartMasterSnapshot, GetPartMasterSnapshotResponse } from '../types/partMaster';
 import * as b2bNetworkService from './b2bNetworkService';
 import { dataEngine } from './dataEngine/dataEngine';
 import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
+import { createApiConfig, apiGet, handleApiError, isRealApiEnabled } from './apiClient';
 
 // --- PERSISTENCE KEYS ---
 export const REPAIR_DASH_FEED_KEY = "LENT_REPAIR_DASH_FEED_V1";
@@ -191,7 +195,44 @@ export const updateServiceIntakePolicy = async (tenantId: string, policy: Servic
 
 // B2B Network Integration
 export async function getB2BNetwork(): Promise<B2BNetworkState> {
-  return await b2bNetworkService.getB2BNetwork();
+  const useRealApi = isRealApiEnabled();
+  console.log('[B2B] useRealApi:', useRealApi);
+  
+  if (!useRealApi) {
+    // Mock mode: return demo data from service
+    console.log('[B2B] mode: MOCK');
+    return await b2bNetworkService.getB2BNetwork();
+  }
+
+  // Real API mode - GUARANTEED TO MAKE HTTP REQUEST
+  try {
+    console.log('[B2B] mode: REAL - fetching from /b2b-network...');
+    const config = createApiConfig();
+    console.log('[B2B] config.baseURL:', config.baseURL);
+    
+    const response = await apiGet<GetB2BNetworkResponse>('/b2b-network', config);
+    console.log('[B2B] API response received:', response);
+    
+    // Handle both response shapes
+    let data: B2BNetworkState;
+    if (response && (response as any).success && (response as any).data) {
+      data = (response as any).data;
+    } else if (response && (response as any).suppliers) {
+      data = response as any;
+    } else {
+      throw new Error('Invalid API response shape');
+    }
+
+    console.log('[B2B] Successfully parsed data:', data);
+    return data;
+  } catch (error) {
+    const errorInfo = handleApiError(error);
+    console.error('[B2B] API failed:', errorInfo.message, error);
+    
+    // Graceful fallback to mock
+    console.warn('[B2B] Falling back to mock data');
+    return await b2bNetworkService.getB2BNetwork();
+  }
 }
 
 // ERP Functions
@@ -296,7 +337,38 @@ export const addSearchedVehicle = async (id: string, vin?: string): Promise<void
 };
 
 export const getVehicleList = async (): Promise<VehicleProfile[]> => {
-    return Promise.resolve(MOCK_VEHICLES.map(applyVehicleRiskEngine));
+    const useRealApi = isRealApiEnabled();
+    console.log('[VEHICLES] mode:', useRealApi ? 'REAL' : 'MOCK');
+    
+    if (!useRealApi) {
+        // Mock mode: return demo data
+        return Promise.resolve(MOCK_VEHICLES.map(applyVehicleRiskEngine));
+    }
+
+    // Real API mode
+    try {
+        console.log('[VEHICLES] endpoint: GET /api/vehicles');
+        const config = createApiConfig();
+        const response = await apiGet<GetVehiclesResponse>('/vehicles', config);
+        
+        if (!response.success || !response.data) {
+            throw new Error('Invalid API response');
+        }
+
+        // Apply vehicle risk engine to real data
+        return response.data.map(applyVehicleRiskEngine);
+    } catch (error) {
+        const errorInfo = handleApiError(error);
+        console.error('[getVehicleList] API Error:', errorInfo.message);
+        
+        // Graceful fallback to mock if real API fails
+        if (errorInfo.isDemoFallback) {
+            console.warn('[getVehicleList] Falling back to mock data');
+            return Promise.resolve(MOCK_VEHICLES.map(applyVehicleRiskEngine));
+        }
+        
+        throw error;
+    }
 };
 export const getVehicleProfile = async (id: string): Promise<VehicleProfile | undefined> => {
     return Promise.resolve(MOCK_VEHICLES.find(v => v.vehicle_id === id));
@@ -437,19 +509,91 @@ export const getVehicleOEMParts = async (vehicleId: string): Promise<OEMPart[]> 
 };
 
 export const getVehicleDamageHistory = async (vehicleId: string): Promise<DamageRecord[]> => {
-    return Promise.resolve([
-        { id: 'D1', date: '2023-11-15', type: 'ACCIDENT', source: 'SBM', amount: 45000, description: 'Ön tampon ve far değişimi', serviceProvider: 'Yetkili Servis', partsReplaced: ['Ön Tampon', 'Sağ Far'] },
-        { id: 'D2', date: '2023-05-20', type: 'MAINTENANCE', source: 'SERVICE', amount: 8500, description: '60.000 KM Bakımı', serviceProvider: 'Borusan Oto', partsReplaced: ['Yağ', 'Filtreler', 'Balata'] }
-    ]);
+    const useRealApi = isRealApiEnabled();
+    console.log('[VEHICLES] mode:', useRealApi ? 'REAL' : 'MOCK', '| vehicleId:', vehicleId);
+
+    if (!useRealApi) {
+        // Mock mode: return demo data
+        return Promise.resolve([
+            { id: 'D1', date: '2023-11-15', type: 'ACCIDENT', source: 'SBM', amount: 45000, description: 'Ön tampon ve far değişimi', serviceProvider: 'Yetkili Servis', partsReplaced: ['Ön Tampon', 'Sağ Far'] },
+            { id: 'D2', date: '2023-05-20', type: 'MAINTENANCE', source: 'SERVICE', amount: 8500, description: '60.000 KM Bakımı', serviceProvider: 'Borusan Oto', partsReplaced: ['Yağ', 'Filtreler', 'Balata'] }
+        ]);
+    }
+
+    // Real API mode
+    try {
+        console.log('[VEHICLES] endpoint: GET /api/vehicles/' + vehicleId + '/damage-history');
+        const config = createApiConfig();
+        const response = await apiGet<GetDamageHistoryResponse>(
+            `/vehicles/${vehicleId}/damage-history`,
+            config
+        );
+
+        if (!response.success || !response.data) {
+            throw new Error('Invalid API response');
+        }
+
+        return response.data;
+    } catch (error) {
+        const errorInfo = handleApiError(error);
+        console.error(`[getVehicleDamageHistory] API Error for ${vehicleId}:`, errorInfo.message);
+
+        // Graceful fallback to mock if real API fails
+        if (errorInfo.isDemoFallback) {
+            console.warn(`[getVehicleDamageHistory] Falling back to mock data for ${vehicleId}`);
+            return Promise.resolve([
+                { id: 'D1', date: '2023-11-15', type: 'ACCIDENT', source: 'SBM', amount: 45000, description: 'Ön tampon ve far değişimi', serviceProvider: 'Yetkili Servis', partsReplaced: ['Ön Tampon', 'Sağ Far'] },
+                { id: 'D2', date: '2023-05-20', type: 'MAINTENANCE', source: 'SERVICE', amount: 8500, description: '60.000 KM Bakımı', serviceProvider: 'Borusan Oto', partsReplaced: ['Yağ', 'Filtreler', 'Balata'] }
+            ]);
+        }
+
+        throw error;
+    }
 };
 
-// Analysis
 export const getPartAnalysisForVehicle = async (vehicleId: string): Promise<PartRiskAnalysis[]> => {
-    return Promise.resolve([
-        { id: 'RA1', partName: 'Triger Kayışı', riskLevel: 'CRITICAL', healthScore: 15, demographicImpact: 'Yüksek KM', insuranceRef: 'IRC-992', regionName: 'Marmara', partCost: 4500, laborCost: 2000, estimatedTime: 240 },
-        { id: 'RA2', partName: 'Fren Diskleri', riskLevel: 'HIGH', healthScore: 45, demographicImpact: 'Trafik Yoğunluğu', insuranceRef: 'IRC-102', regionName: 'İstanbul', partCost: 3000, laborCost: 800, estimatedTime: 90 },
-        { id: 'RA3', partName: 'Amortisörler', riskLevel: 'LOW', healthScore: 85, demographicImpact: '-', insuranceRef: 'IRC-001', regionName: 'Genel', partCost: 0, laborCost: 0, estimatedTime: 0 },
-    ]);
+    const useRealApi = isRealApiEnabled();
+    console.log('[VEHICLES] mode:', useRealApi ? 'REAL' : 'MOCK', '| vehicleId:', vehicleId);
+
+    if (!useRealApi) {
+        // Mock mode: return demo data
+        return Promise.resolve([
+            { id: 'RA1', partName: 'Triger Kayışı', riskLevel: 'CRITICAL', healthScore: 15, demographicImpact: 'Yüksek KM', insuranceRef: 'IRC-992', regionName: 'Marmara', partCost: 4500, laborCost: 2000, estimatedTime: 240 },
+            { id: 'RA2', partName: 'Fren Diskleri', riskLevel: 'HIGH', healthScore: 45, demographicImpact: 'Trafik Yoğunluğu', insuranceRef: 'IRC-102', regionName: 'İstanbul', partCost: 3000, laborCost: 800, estimatedTime: 90 },
+            { id: 'RA3', partName: 'Amortisörler', riskLevel: 'LOW', healthScore: 85, demographicImpact: '-', insuranceRef: 'IRC-001', regionName: 'Genel', partCost: 0, laborCost: 0, estimatedTime: 0 },
+        ]);
+    }
+
+    // Real API mode
+    try {
+        console.log('[VEHICLES] endpoint: GET /api/vehicles/' + vehicleId + '/part-risk');
+        const config = createApiConfig();
+        const response = await apiGet<GetPartAnalysisResponse>(
+            `/vehicles/${vehicleId}/part-risk`,
+            config
+        );
+
+        if (!response.success || !response.data) {
+            throw new Error('Invalid API response');
+        }
+
+        return response.data;
+    } catch (error) {
+        const errorInfo = handleApiError(error);
+        console.error(`[getPartAnalysisForVehicle] API Error for ${vehicleId}:`, errorInfo.message);
+
+        // Graceful fallback to mock if real API fails
+        if (errorInfo.isDemoFallback) {
+            console.warn(`[getPartAnalysisForVehicle] Falling back to mock data for ${vehicleId}`);
+            return Promise.resolve([
+                { id: 'RA1', partName: 'Triger Kayışı', riskLevel: 'CRITICAL', healthScore: 15, demographicImpact: 'Yüksek KM', insuranceRef: 'IRC-992', regionName: 'Marmara', partCost: 4500, laborCost: 2000, estimatedTime: 240 },
+                { id: 'RA2', partName: 'Fren Diskleri', riskLevel: 'HIGH', healthScore: 45, demographicImpact: 'Trafik Yoğunluğu', insuranceRef: 'IRC-102', regionName: 'İstanbul', partCost: 3000, laborCost: 800, estimatedTime: 90 },
+                { id: 'RA3', partName: 'Amortisörler', riskLevel: 'LOW', healthScore: 85, demographicImpact: '-', insuranceRef: 'IRC-001', regionName: 'Genel', partCost: 0, laborCost: 0, estimatedTime: 0 },
+            ]);
+        }
+
+        throw error;
+    }
 };
 
 export const getServicePoints = async (cityCode: number): Promise<ServicePoint[]> => {
@@ -1195,3 +1339,233 @@ export const createPurchaseRequest = (
         }, 150);
     });
 };
+
+/**
+ * PART MASTER FUNCTIONS (NEW - Enterprise SKU Registry)
+ * Single source of truth for parts across ERP/Excel/Manual/B2B
+ */
+
+export const getPartMaster = async (tenantId: string): Promise<any[]> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[PART_MASTER] mode:', useRealApi ? 'REAL' : 'MOCK', '| tenantId:', tenantId);
+    
+    if (!useRealApi) {
+        // Mock mode: return hardcoded part master
+        return Promise.resolve([
+            {
+                partId: `${tenantId}-P001`,
+                sku: 'P001',
+                name: 'Fren Balatası Ön',
+                brand: 'Brembo',
+                category: 'body',
+                pricing: { buy: 850, sell: 1200, currency: 'TRY' },
+                inventory: { onHand: 15, reserved: 2, leadDays: 3 },
+                demandSignals: { turnover30d: 120, coverageDays: 3 },
+                source: 'MOCK',
+            },
+            {
+                partId: `${tenantId}-P002`,
+                sku: 'P002',
+                name: 'Yağ Filtresi',
+                brand: 'Mann',
+                category: 'powertrain',
+                pricing: { buy: 350, sell: 480, currency: 'TRY' },
+                inventory: { onHand: 45, reserved: 5, leadDays: 2 },
+                demandSignals: { turnover30d: 90, coverageDays: 15 },
+                source: 'MOCK',
+            },
+        ]);
+    }
+    
+    // Real API mode
+    try {
+        console.log('[PART_MASTER] endpoint: GET /api/part-master');
+        const config = createApiConfig();
+        const response = await apiGet<any>(`/part-master?tenantId=${tenantId}`, config);
+        
+        if (!response.success || !response.data) {
+            throw new Error('Invalid API response');
+        }
+        
+        return response.data;
+    } catch (error) {
+        const errorInfo = handleApiError(error);
+        console.error('[getPartMaster] API Error:', errorInfo.message);
+        
+        if (errorInfo.isDemoFallback) {
+            console.warn('[getPartMaster] Falling back to mock data');
+            return Promise.resolve([]);
+        }
+        
+        throw error;
+    }
+};
+
+export const getAftermarketSummary = async (tenantId: string): Promise<any> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[AFTERMARKET_SUMMARY] mode:', useRealApi ? 'REAL' : 'MOCK', '| tenantId:', tenantId);
+    
+    if (!useRealApi) {
+        // Mock mode
+        return Promise.resolve({
+            totalStockValue: 125000,
+            totalOnHand: 245,
+            totalReserved: 35,
+            totalIncoming: 150,
+            avgTurnover30d: 92,
+            deadStockCount: 2,
+            criticalStockCount: 3,
+        });
+    }
+    
+    try {
+        console.log('[AFTERMARKET_SUMMARY] endpoint: GET /api/aftermarket/summary');
+        const config = createApiConfig();
+        const response = await apiGet<any>(`/aftermarket/summary?tenantId=${tenantId}`, config);
+        return response.data;
+    } catch (error) {
+        console.error('[getAftermarketSummary] API Error:', error);
+        return Promise.resolve({
+            totalStockValue: 0,
+            totalOnHand: 0,
+            totalReserved: 0,
+            totalIncoming: 0,
+            avgTurnover30d: 0,
+            deadStockCount: 0,
+            criticalStockCount: 0,
+        });
+    }
+};
+
+export const getAftermarketCritical = async (tenantId: string): Promise<any[]> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[AFTERMARKET_CRITICAL] mode:', useRealApi ? 'REAL' : 'MOCK');
+    
+    if (!useRealApi) {
+        return Promise.resolve([]);
+    }
+    
+    try {
+        console.log('[AFTERMARKET_CRITICAL] endpoint: GET /api/aftermarket/critical');
+        const config = createApiConfig();
+        const response = await apiGet<any>(`/aftermarket/critical?tenantId=${tenantId}`, config);
+        return response.data || [];
+    } catch (error) {
+        console.error('[getAftermarketCritical] API Error:', error);
+        return Promise.resolve([]);
+    }
+};
+
+export const getAftermarketTopTurnover = async (tenantId: string, limit: number = 10): Promise<any[]> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[AFTERMARKET_TOP_TURNOVER] mode:', useRealApi ? 'REAL' : 'MOCK', '| limit:', limit);
+    
+    if (!useRealApi) {
+        return Promise.resolve([]);
+    }
+    
+    try {
+        console.log('[AFTERMARKET_TOP_TURNOVER] endpoint: GET /api/aftermarket/top-turnover');
+        const config = createApiConfig();
+        const response = await apiGet<any>(`/aftermarket/top-turnover?tenantId=${tenantId}&limit=${limit}`, config);
+        return response.data || [];
+    } catch (error) {
+        console.error('[getAftermarketTopTurnover] API Error:', error);
+        return Promise.resolve([]);
+    }
+};
+
+export const getAftermarketTopMargin = async (tenantId: string, limit: number = 10): Promise<any[]> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[AFTERMARKET_TOP_MARGIN] mode:', useRealApi ? 'REAL' : 'MOCK', '| limit:', limit);
+    
+    if (!useRealApi) {
+        return Promise.resolve([]);
+    }
+    
+    try {
+        console.log('[AFTERMARKET_TOP_MARGIN] endpoint: GET /api/aftermarket/top-margin');
+        const config = createApiConfig();
+        const response = await apiGet<any>(`/aftermarket/top-margin?tenantId=${tenantId}&limit=${limit}`, config);
+        return response.data || [];
+    } catch (error) {
+        console.error('[getAftermarketTopMargin] API Error:', error);
+        return Promise.resolve([]);
+    }
+};
+
+export const getAftermarketRecommendations = async (tenantId: string, vehicleId?: string): Promise<any[]> => {
+    const useRealApi = isRealApiEnabled();
+    console.log('[AFTERMARKET_RECOMMENDATIONS] mode:', useRealApi ? 'REAL' : 'MOCK', '| vehicleId:', vehicleId);
+    
+    if (!useRealApi) {
+        return Promise.resolve([]);
+    }
+    
+    try {
+        console.log('[AFTERMARKET_RECOMMENDATIONS] endpoint: GET /api/aftermarket/recommendations');
+        const config = createApiConfig();
+        const url = vehicleId
+            ? `/aftermarket/recommendations?tenantId=${tenantId}&vehicleId=${vehicleId}`
+            : `/aftermarket/recommendations?tenantId=${tenantId}`;
+        const response = await apiGet<any>(url, config);
+        return response.data || [];
+    } catch (error) {
+        console.error('[getAftermarketRecommendations] API Error:', error);
+        return Promise.resolve([]);
+    }
+}
+
+// ==================== PART MASTER (Single Source of Truth) ====================
+
+/**
+ * Get PartMasterSnapshot - Canonical single source of truth for parts ecosystem
+ * Used by: Aftermarket, B2B Network, Stock Signals, Risk Analysis, Data Engine
+ * 
+ * Feature: Flag pattern (VITE_USE_REAL_API) with graceful fallback to mock
+ * Tenant: Filters/scopes data by tenantId (x-tenant-id header, default: LENT-CORP-DEMO)
+ * 
+ * @param tenantId - Tenant identifier (default: LENT-CORP-DEMO)
+ * @returns PartMasterSnapshot with parts, suppliers, inventory, sales signals, etc.
+ */
+export async function getPartMasterSnapshot(tenantId: string = 'LENT-CORP-DEMO'): Promise<PartMasterSnapshot> {
+    const useRealApi = isRealApiEnabled();
+    console.log(`[PM] mode: ${useRealApi ? 'REAL' : 'MOCK'} | tenantId: ${tenantId}`);
+    
+    if (!useRealApi) {
+        // Return mock snapshot for demo mode
+        const { PART_MASTER_MOCK } = await import('../types/partMaster');
+        const mock = {
+            ...PART_MASTER_MOCK,
+            tenantId,
+            generatedAt: new Date().toISOString(),
+        };
+        console.log(`[PM] loaded: parts=${mock.parts.length}, suppliers=${mock.suppliers.length}, inventory=${mock.inventory.length}`);
+        return mock;
+    }
+    
+    try {
+        console.log('[PM] endpoint: GET /api/part-master');
+        const config = createApiConfig();
+        // apiGet returns the raw response {success, data, timestamp}
+        const response = await apiGet(`/part-master?tenantId=${tenantId}`, config) as any;
+        
+        if (response?.data && typeof response.data === 'object') {
+            const snapshot = response.data as PartMasterSnapshot;
+            console.log(`[PM] loaded: parts=${snapshot.parts?.length}, suppliers=${snapshot.suppliers?.length}, inventory=${snapshot.inventory?.length}`);
+            return snapshot;
+        }
+        
+        throw new Error('Invalid response structure');
+    } catch (error) {
+        console.error('[PM] API Error, falling back to mock:', error);
+        const { PART_MASTER_MOCK } = await import('../types/partMaster');
+        const mock = {
+            ...PART_MASTER_MOCK,
+            tenantId,
+            generatedAt: new Date().toISOString(),
+        };
+        console.log(`[PM] fallback: parts=${mock.parts.length}, suppliers=${mock.suppliers.length}, inventory=${mock.inventory.length}`);
+        return mock;
+    }
+}

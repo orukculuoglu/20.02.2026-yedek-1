@@ -17,9 +17,10 @@ import {
   getFleetCompanies, getExpertiseCenters, getInsuranceData, 
   getIndividualUsers, getDealers, getProductIntelligenceData,
   getServiceWorkOrders, getTopPartBrandsFromWorkOrders, getTopVehiclesByConsumptionFromWorkOrders,
-  getAftermarketHistory30d, getNationalBehaviorSummary, NationalBehaviorSummary
+  getNationalBehaviorSummary, NationalBehaviorSummary, getPartMasterSnapshot
 } from '../services/dataService';
-import { ViewState, ServiceWorkOrder, AftermarketHistory30d } from '../types';
+import { ViewState, ServiceWorkOrder } from '../types';
+import { PartMasterSnapshot } from '../types/partMaster';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, AreaChart, Area } from 'recharts';
 import { computeOperationalMetrics } from '../utils/operationalMetrics';
 import { computeRepairRevenueIntel } from '../utils/repairRevenueIntel';
@@ -50,8 +51,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [productIntel, setProductIntel] = useState<any>(null);
   const [topPartBrands, setTopPartBrands] = useState<any[]>([]);
   const [topVehicleConsumption, setTopVehicleConsumption] = useState<any[]>([]);
-  const [aftermarketHistory30d, setAftermarketHistory30d] = useState<AftermarketHistory30d | null>(null);
-  const [loadingAftermarket, setLoadingAftermarket] = useState(false);
+  const [pmSnapshot, setPmSnapshot] = useState<PartMasterSnapshot | null>(null);
+  const [loadingPmSnapshot, setLoadingPmSnapshot] = useState(false);
   const [nationalBehavior, setNationalBehavior] = useState<NationalBehaviorSummary | null>(null);
   const [loadingNationalBehavior, setLoadingNationalBehavior] = useState(false);
   const [nationalBehaviorDays, setNationalBehaviorDays] = useState(30);
@@ -102,13 +103,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
     return () => window.removeEventListener('REPAIR_DASH_FEED_UPDATED', handleFeedUpdate);
   }, [currentUser.institutionId]);
 
-  // Fetch Aftermarket 30-day history when tab is active
+  // Fetch Aftermarket 30-day history when tab is active (using shared PartMaster source)
   useEffect(() => {
     if (activeTab === 'AFTERMARKET') {
-      setLoadingAftermarket(true);
-      getAftermarketHistory30d().then(data => {
-        setAftermarketHistory30d(data);
-        setLoadingAftermarket(false);
+      setLoadingPmSnapshot(true);
+      getPartMasterSnapshot(currentUser.institutionId).then(pmSnapshot => {
+        console.log('[AFTERMARKET] shared source loaded:', {
+          parts: pmSnapshot.parts?.length || 0,
+          suppliers: pmSnapshot.suppliers?.length || 0,
+          inventory: pmSnapshot.inventory?.length || 0,
+          source: pmSnapshot.source,
+        });
+        setPmSnapshot(pmSnapshot);
+        setLoadingPmSnapshot(false);
       });
 
       // Fetch national behavior data
@@ -118,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
         setLoadingNationalBehavior(false);
       });
     }
-  }, [activeTab, nationalBehaviorDays, nationalBehaviorCity]);
+  }, [activeTab, nationalBehaviorDays, nationalBehaviorCity, currentUser.institutionId]);
 
   const opMetrics = computeOperationalMetrics(serviceWorkOrders);
   const repairIntel = computeRepairRevenueIntel(repairSourceData);
@@ -138,7 +145,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
   );
 
   const AftermarketSummarySection = () => {
-    if (loadingAftermarket || !aftermarketHistory30d) {
+    if (loadingPmSnapshot || !pmSnapshot) {
       return (
         <div className="flex items-center justify-center h-96 text-slate-400">
           <Loader2Icon size={32} className="animate-spin" />
@@ -146,11 +153,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
       );
     }
 
+    // Calculate KPIs from PartMasterSnapshot
+    const revenue30d = pmSnapshot.parts.reduce((sum, part) => {
+      const inv = pmSnapshot.inventory?.find(i => i.partId === part.partId);
+      const edge = pmSnapshot.edges?.find(e => e.partId === part.partId);
+      return sum + ((inv?.onHand || 0) * (edge?.unitPrice || 0));
+    }, 0);
+
+    const orders30d = pmSnapshot.salesSignals?.reduce((sum, sig) => sum + (sig.soldQty || 0), 0) || 0;
+
+    const turnoverIndex = pmSnapshot.salesSignals && pmSnapshot.salesSignals.length > 0
+      ? pmSnapshot.salesSignals.reduce((sum, s) => sum + (s.dailyAverage || 0), 0) / pmSnapshot.salesSignals.length * 30
+      : 0;
+
+    const returnRate = 2.3; // Mock return rate
+
+    // Top Brands from parts data
+    const brandMap: Record<string, number> = {};
+    pmSnapshot.parts.forEach(part => {
+      const inv = pmSnapshot.inventory?.find(i => i.partId === part.partId);
+      const edge = pmSnapshot.edges?.find(e => e.partId === part.partId);
+      const value = ((inv?.onHand || 0) * (edge?.unitPrice || 0));
+      if (part.brand) {
+        brandMap[part.brand] = (brandMap[part.brand] || 0) + value;
+      }
+    });
+    const topBrands = Object.entries(brandMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    // Top Categories from parts data
+    const categoryMap: Record<string, number> = {};
+    pmSnapshot.parts.forEach(part => {
+      const inv = pmSnapshot.inventory?.find(i => i.partId === part.partId);
+      const edge = pmSnapshot.edges?.find(e => e.partId === part.partId);
+      const value = ((inv?.onHand || 0) * (edge?.unitPrice || 0));
+      if (part.category) {
+        categoryMap[part.category] = (categoryMap[part.category] || 0) + value;
+      }
+    });
+    const topCategories = Object.entries(categoryMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    // Mock vehicle consumption data
+    const topVehicleConsumption = [
+      { vehicle: 'Toyota Corolla', topCategory: 'Frenler', index: 342, region: 'İstanbul' },
+      { vehicle: 'Fiat Egea', topCategory: 'Yağlama', index: 285, region: 'Ankara' },
+      { vehicle: 'Renault Clio', topCategory: 'Filtreler', index: 267, region: 'İzmir' },
+      { vehicle: 'Honda Civic', topCategory: 'Elektrik', index: 198, region: 'Bursa' },
+      { vehicle: 'VW Golf', topCategory: 'Frenler', index: 156, region: 'Gaziantep' }
+    ];
+
     const kpis = [
-      { label: '30 Gün Ciro', value: `₺${(aftermarketHistory30d.kpis.revenue30d / 1000).toFixed(0)}K`, icon: ShoppingBagIcon, color: 'blue' },
-      { label: '30 Gün Sipariş', value: aftermarketHistory30d.kpis.orders30d, icon: ClipboardCheckIcon, color: 'orange' },
-      { label: 'Stok Devir Endeksi', value: aftermarketHistory30d.kpis.turnoverIndex.toFixed(1), icon: TrendingUpIcon, color: 'emerald' },
-      { label: 'İade Oranı (%)', value: aftermarketHistory30d.kpis.returnRate.toFixed(1), icon: AlertTriangleIcon, color: 'rose' }
+      { label: '30 Gün Ciro', value: `₺${(revenue30d / 1000).toFixed(0)}K`, icon: ShoppingBagIcon, color: 'blue' },
+      { label: '30 Gün Sipariş', value: orders30d, icon: ClipboardCheckIcon, color: 'orange' },
+      { label: 'Stok Devir Endeksi', value: turnoverIndex.toFixed(1), icon: TrendingUpIcon, color: 'emerald' },
+      { label: 'İade Oranı (%)', value: returnRate.toFixed(1), icon: AlertTriangleIcon, color: 'rose' }
     ];
 
     const colorMap = {
@@ -196,7 +257,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
               <TagIcon size={14} className="text-orange-500" /> En Çok Satılan Markalar (Top 5)
             </h5>
             <div className="space-y-2">
-              {aftermarketHistory30d.topBrands.map((brand, idx) => (
+              {topBrands.map((brand, idx) => (
                 <div key={idx} className="flex items-center justify-between text-sm">
                   <span className="text-slate-700">{brand.name}</span>
                   <span className="font-bold text-orange-600">₺{(brand.value / 1000).toFixed(0)}K</span>
@@ -211,7 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
               <LayersIcon size={14} className="text-blue-500" /> En Çok Satılan Kategoriler (Top 5)
             </h5>
             <div className="space-y-2">
-              {aftermarketHistory30d.topCategories.map((cat, idx) => (
+              {topCategories.map((cat, idx) => (
                 <div key={idx} className="flex items-center justify-between text-sm">
                   <span className="text-slate-700">{cat.name}</span>
                   <span className="font-bold text-blue-600">₺{(cat.value / 1000).toFixed(0)}K</span>
@@ -237,7 +298,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onChangeView }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {aftermarketHistory30d.topVehicleConsumption.slice(0, 5).map((row, idx) => (
+                {topVehicleConsumption.slice(0, 5).map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
                     <td className="py-2 font-medium text-slate-800">{row.vehicle}</td>
                     <td className="py-2 text-slate-600">{row.topCategory}</td>

@@ -99,6 +99,7 @@ export enum ViewState {
   INSURANCE = 'INSURANCE',
   INDIVIDUAL = 'INDIVIDUAL',
   DEALERS = 'DEALERS',
+  B2B_NETWORK = 'B2B_NETWORK',
   VIN_ENTRY = 'VIN_ENTRY',
   DETAILS = 'DETAILS',
   HISTORY = 'HISTORY',
@@ -711,4 +712,230 @@ export interface RetailerRole {
 export interface UserRetailerRole {
   role: 'DISTRIBUTOR' | 'RETAIL';
   retailerId?: string;
+}
+
+/**
+ * ============================================
+ * API Request/Response Types (Patch B)
+ * ============================================
+ */
+
+/**
+ * Vehicle List API
+ * GET /api/vehicles
+ */
+export interface GetVehiclesRequest {
+  tenantId?: string;
+  skip?: number;
+  limit?: number;
+}
+
+export interface GetVehiclesResponse {
+  success: boolean;
+  data: VehicleProfile[];
+  total: number;
+  timestamp: string;
+}
+
+/**
+ * Vehicle Damage History API
+ * GET /api/vehicles/{vehicleId}/damage-history
+ */
+export interface GetDamageHistoryRequest {
+  vehicleId: string;
+  tenantId?: string;
+}
+
+export interface GetDamageHistoryResponse {
+  success: boolean;
+  data: DamageRecord[];
+  vehicleId: string;
+  timestamp: string;
+}
+
+/**
+ * Part Risk Analysis API
+ * GET /api/vehicles/{vehicleId}/part-analysis
+ */
+export interface GetPartAnalysisRequest {
+  vehicleId: string;
+  tenantId?: string;
+}
+
+export interface GetPartAnalysisResponse {
+  success: boolean;
+  data: PartRiskAnalysis[];
+  vehicleId: string;
+  timestamp: string;
+}
+
+/**
+ * B2B Network API
+ * GET /api/b2b-network
+ */
+export interface GetB2BNetworkRequest {
+  tenantId?: string;
+}
+
+export interface GetB2BNetworkResponse {
+  success: boolean;
+  data: B2BNetworkState;
+  timestamp: string;
+}
+
+/**
+ * PART MASTER - Canonical SKU/Part Registry
+ * Single source of truth for all parts across ERP/Excel/Manual/B2B/Mock
+ */
+
+export type PartDataSource = 'ERP' | 'EXCEL' | 'MANUAL' | 'B2B' | 'MOCK';
+
+export interface PartMasterCategory {
+  powertrain: 'Motor' | 'Şanzıman' | 'Çift Kavrama';
+  transmission: 'Manual' | 'Otomatik' | 'CVT';
+  electronics: 'İçipil' | 'Sensørler' | 'Batarya';
+  body: 'Şasi' | 'Kaporta' | 'Cam';
+  aftermarket: 'Aksesuar' | 'Sarf Malzeme' | 'Filtreler';
+}
+
+export interface PartMasterPricing {
+  buy: number; // Alış fiyatı
+  sell: number; // Satış fiyatı
+  currency: 'USD' | 'EUR' | 'TRY';
+  updatedAt: string;
+}
+
+export interface PartMasterInventory {
+  onHand: number;
+  reserved: number;
+  incoming: number;
+  leadDays: number;
+  warehouseId?: string;
+  updatedAt: string;
+}
+
+export interface PartMasterDemandSignals {
+  dailyAvg30d: number;
+  weeklyTrend: 'UP' | 'DOWN' | 'STABLE';
+  deadStockRisk30d: number; // 0..100%
+  turnover30d: number;
+  coverageDays: number; // stok / dailyAvg gün sayısı
+}
+
+export interface PartMasterItem {
+  // Identity
+  partId: string; // UUID or Stable Key
+  sku: string; // Tenant-scope unique
+  name: string;
+  brand: string;
+  category: keyof PartMasterCategory;
+  
+  // Cross-references
+  oemRefs: string[]; // ['BMW-00001', 'AUDI-00002']
+  crossRefs: string[]; // ['Bosch-REF', 'ZF-REF'] - eşdeğer parçalar
+  tags: string[]; // ['critical', 'motor-essential']
+  
+  // Physical
+  unit: 'adet' | 'litre' | 'set' | 'metre';
+  packSize: number;
+  
+  // Commercial
+  pricing: PartMasterPricing;
+  inventory: PartMasterInventory;
+  demandSignals: PartMasterDemandSignals;
+  
+  // Source & Tenant
+  source: PartDataSource;
+  tenantId: string; // institutionId → multi-tenant
+  
+  // Audit
+  createdAt: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface PartMasterSnapshot {
+  date: string;
+  tenantId: string;
+  dataSource: PartDataSource;
+  items: PartMasterItem[];
+  count: number;
+  totalInventoryValue: number;
+}
+
+// API Contracts
+
+export interface GetPartMasterRequest {
+  tenantId: string;
+  source?: PartDataSource;
+  limit?: number;
+  offset?: number;
+}
+
+export interface GetPartMasterResponse {
+  success: boolean;
+  data: PartMasterItem[];
+  total: number;
+  source: PartDataSource;
+  timestamp: string;
+}
+
+export interface AftermarketSummaryMetrics {
+  totalStockValue: number;
+  totalOnHand: number;
+  totalReserved: number;
+  totalIncoming: number;
+  avgTurnover30d: number;
+  deadStockCount: number;
+  criticalStockCount: number;
+}
+
+export interface GetAftermarketSummaryResponse {
+  success: boolean;
+  data: AftermarketSummaryMetrics;
+  tenantId: string;
+  dataSource: PartDataSource;
+  timestamp: string;
+}
+
+export interface GetAftermarketCriticalResponse {
+  success: boolean;
+  data: PartMasterItem[]; // kritik parçalar
+  count: number;
+  tenantId: string;
+  timestamp: string;
+}
+
+export interface GetAftermarketTopTurnoverResponse {
+  success: boolean;
+  data: Array<PartMasterItem & { turnover: number }>;
+  limit: number;
+  tenantId: string;
+  timestamp: string;
+}
+
+export interface GetAftermarketTopMarginResponse {
+  success: boolean;
+  data: Array<PartMasterItem & { marginPercent: number }>;
+  limit: number;
+  tenantId: string;
+  timestamp: string;
+}
+
+export interface AftermarketRecommendation {
+  partId: string;
+  sku: string;
+  name: string;
+  reason: string; // "Kritik stok", "Dönen ürün", "Yüksek marj"
+  suggestedOrderQty: number;
+  estimatedCost: number;
+}
+
+export interface GetAftermarketRecommendationsResponse {
+  success: boolean;
+  data: AftermarketRecommendation[];
+  vehicleId?: string;
+  category?: string;
+  tenantId: string;
+  timestamp: string;
 }
