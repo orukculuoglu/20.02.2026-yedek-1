@@ -6,6 +6,206 @@
 
 import { PartMasterItem, PartDataSource, PartMasterCategory } from '../types';
 import { B2BNetworkState, B2BPart } from '../types';
+import { PartMasterPart, PartCategory, QualityTier, Brand, OemRef, AftermarketRef, PartMasterCatalog } from '../types/partMaster';
+
+// ========== CANONICAL PART MASTER CATALOG BUILDER ==========
+
+/**
+ * Build canonical Part Master Catalog with 20+ seed parts
+ * Single source of truth for Aftermarket, Bakım Merkezi, Risk Analysis, Data Engine
+ */
+export function buildPartMasterCatalog(tenantId = 'LENT-CORP-DEMO'): PartMasterCatalog {
+  const brands: Brand[] = [
+    { brandId: 'BREMBO', name: 'Brembo', origin: 'Italy', tier: 'OEM', reliability: 98 },
+    { brandId: 'BOSCH', name: 'Bosch', origin: 'Germany', tier: 'OEM', reliability: 97 },
+    { brandId: 'MANN', name: 'Mann', origin: 'Germany', tier: 'OEM', reliability: 96 },
+    { brandId: 'NGK', name: 'NGK', origin: 'Japan', tier: 'OEM', reliability: 95 },
+    { brandId: 'LUK', name: 'LuK', origin: 'Germany', tier: 'OEM', reliability: 94 },
+    { brandId: 'DAYCO', name: 'Dayco', origin: 'USA', tier: 'OEM', reliability: 93 },
+    { brandId: 'SACHS', name: 'Sachs', origin: 'Germany', tier: 'OEM', reliability: 92 },
+    { brandId: 'VALEO', name: 'Valeo', origin: 'France', tier: 'OEM', reliability: 91 },
+    { brandId: 'MAHLE', name: 'Mahle', origin: 'Germany', tier: 'OEM', reliability: 90 },
+    { brandId: 'TRW', name: 'TRW', origin: 'USA', tier: 'AFTERMARKET', reliability: 85 },
+    { brandId: 'CASTROL', name: 'Castrol', origin: 'UK', tier: 'AFTERMARKET', reliability: 88 },
+    { brandId: 'SHELL', name: 'Shell', origin: 'Netherlands', tier: 'AFTERMARKET', reliability: 87 },
+  ];
+
+  const vehiclePlatforms = {
+    'BMW_F30_2012_2019': 'BMW F30 3 Series (2012-2019)',
+    'VAG_PQ35': 'VW Passat B6/Mk5 Golf (2003-2014)',
+    'VAG_MQB': 'VW Golf 7, Passat B8, Audi A3/A4 (2013+)',
+    'FORD_C1': 'Ford Focus, Fiesta C1 Platform (2011-2019)',
+    'TOYOTA_M10A': 'Toyota Corolla M10A (2014-2022)',
+    'HONDA_9TH': 'Honda Civic 9th Gen (2012-2015)',
+  } as Record<string, string>;
+
+  // Seed 24 parts (minimum 20 required)
+  const partSeeds = [
+    {
+      sku: 'BRAKE_PAD_FRONT_001', name: 'Fren Balatası Ön', category: 'BRAKE' as PartCategory, partGroup: 'Brake System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Brembo',
+      oemRefs: [{ refId: 'OEM-FR-001', oemCode: 'BMW-34-11-6-790-866', brand: 'BMW', vehicleFitment: 'BMW_F30_2012_2019', confidence: 100 }],
+      platforms: ['BMW_F30_2012_2019', 'VAG_MQB'],
+    },
+    {
+      sku: 'FILTER_OIL_001', name: 'Yağ Filtresi', category: 'POWERTRAIN' as PartCategory, partGroup: 'Filtration System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Mann',
+      oemRefs: [{ refId: 'OEM-OF-001', oemCode: 'BMW-11-42-8-584-233', brand: 'BMW', vehicleFitment: 'BMW_F30_2012_2019', confidence: 100 }],
+      platforms: ['BMW_F30_2012_2019', 'VAG_MQB'],
+    },
+    {
+      sku: 'FILTER_AIR_001', name: 'Hava Filtresi', category: 'POWERTRAIN' as PartCategory, partGroup: 'Filtration System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Mann',
+      oemRefs: [{ refId: 'OEM-AF-001', oemCode: 'BMW-13-71-7-571-490', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'TIMING_BELT_001', name: 'Triger Seti', category: 'POWERTRAIN' as PartCategory, partGroup: 'Engine Components', qualityTier: 'OEM' as QualityTier, priceBrand: 'Dayco',
+      oemRefs: [{ refId: 'OEM-TB-001', oemCode: 'FORD-1S7Z-6268-CA', brand: 'Ford', vehicleFitment: 'FORD_C1', confidence: 98 }],
+      platforms: ['FORD_C1'],
+    },
+    {
+      sku: 'ABSORBER_001', name: 'Amortisör Ön', category: 'SUSPENSION' as PartCategory, partGroup: 'Suspension System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Sachs',
+      oemRefs: [{ refId: 'OEM-AB-001', oemCode: 'BMW-33-52-6-779-714', brand: 'BMW', vehicleFitment: 'BMW_F30_2012_2019', confidence: 97 }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'CLUTCH_SET_001', name: 'Debriyaj Seti', category: 'TRANSMISSION' as PartCategory, partGroup: 'Transmission Components', qualityTier: 'PREMIUM' as QualityTier, priceBrand: 'LuK',
+      oemRefs: [{ refId: 'OEM-CL-001', oemCode: 'VW-1K0-141-165', brand: 'Volkswagen' }],
+      platforms: ['VAG_PQ35', 'VAG_MQB'],
+    },
+    {
+      sku: 'SPARK_PLUG_001', name: 'Ateşleme Bujisi', category: 'POWERTRAIN' as PartCategory, partGroup: 'Engine Components', qualityTier: 'OEM' as QualityTier, priceBrand: 'NGK',
+      oemRefs: [{ refId: 'OEM-SP-001', oemCode: 'BMW-12-12-1-748-375', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'IGNITION_COIL_001', name: 'İgnisyon Bobini', category: 'ELECTRONIC' as PartCategory, partGroup: 'Ignition System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-IC-001', oemCode: 'BMW-12-13-8-646-718', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'THERMOSTAT_001', name: 'Termostat', category: 'COOLING' as PartCategory, partGroup: 'Cooling System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Mahle',
+      oemRefs: [{ refId: 'OEM-TH-001', oemCode: 'BMW-11-53-7-533-017', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'FAN_RADIATOR_001', name: 'Radyatör Fanı', category: 'COOLING' as PartCategory, partGroup: 'Cooling System', qualityTier: 'EQUIVALENT' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-RF-001', oemCode: 'BMW-17-42-7-596-268', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'OIL_5W30_001', name: 'Motor Yağı 5W30', category: 'AFTERMARKET' as PartCategory, partGroup: 'Maintenance Products', qualityTier: 'EQUIVALENT' as QualityTier, priceBrand: 'Castrol',
+      oemRefs: [{ refId: 'OEM-OL-001', oemCode: 'BMW-11-00-7-722-575', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019', 'VAG_MQB'],
+    },
+    {
+      sku: 'CABIN_FILTER_001', name: 'Kabin Hava Filtresi', category: 'AFTERMARKET' as PartCategory, partGroup: 'Filtration System', qualityTier: 'EQUIVALENT' as QualityTier, priceBrand: 'Mann',
+      oemRefs: [{ refId: 'OEM-CF-001', oemCode: 'BMW-64-31-9-163-509', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'TEMP_SENSOR_001', name: 'Çalişma Isı Sensörü', category: 'ELECTRONIC' as PartCategory, partGroup: 'Sensor System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-TS-001', oemCode: 'BMW-13-62-7-618-989', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'O2_SENSOR_001', name: 'Oksijen Sensörü', category: 'ELECTRONIC' as PartCategory, partGroup: 'Emission System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-O2-001', oemCode: 'BMW-11-78-7-557-016', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'BRAKE_OIL_001', name: 'Fren Sıvısı DOT4', category: 'BRAKE' as PartCategory, partGroup: 'Brake System', qualityTier: 'EQUIVALENT' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-BO-001', oemCode: 'BMW-81-22-9-407-765', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'TIRE_195_65_15', name: 'Lastik 195/65/R15', category: 'AFTERMARKET' as PartCategory, partGroup: 'Tire System', qualityTier: 'ECONOMY' as QualityTier, priceBrand: 'TRW',
+      oemRefs: [],
+      platforms: ['FORD_C1'],
+    },
+    {
+      sku: 'HARNESS_ENG_001', name: 'Motor Kabloyması', category: 'ELECTRONIC' as PartCategory, partGroup: 'Wiring System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-HN-001', oemCode: 'BMW-12-51-8-605-006', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'BRAKE_PAD_REAR_001', name: 'Fren Balatası Arka', category: 'BRAKE' as PartCategory, partGroup: 'Brake System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Brembo',
+      oemRefs: [{ refId: 'OEM-BR-001', oemCode: 'BMW-34-21-6-857-148', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'DOOR_LOCK_001', name: 'Kapı Kilit Motorü', category: 'BODY' as PartCategory, partGroup: 'Door Lock System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-DL-001', oemCode: 'BMW-51-25-7-202-455', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'WASHER_FLUID_001', name: 'Silecek Sıvı -20C', category: 'AFTERMARKET' as PartCategory, partGroup: 'Maintenance Products', qualityTier: 'ECONOMY' as QualityTier, priceBrand: 'Shell',
+      oemRefs: [],
+      platforms: ['BMW_F30_2012_2019', 'VAG_MQB'],
+    },
+    {
+      sku: 'COMPRESSOR_BELT_001', name: 'Kompresör Kayışı', category: 'COOLING' as PartCategory, partGroup: 'AC System', qualityTier: 'PREMIUM' as QualityTier, priceBrand: 'Dayco',
+      oemRefs: [{ refId: 'OEM-CB-001', oemCode: 'BMW-11-28-7-576-220', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'AIRBAG_MODULE_001', name: 'Ön Hava Yastığı Kontrol Modülü', category: 'BODY' as PartCategory, partGroup: 'Safety System', qualityTier: 'OEM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-AB-001', oemCode: 'BMW-65-77-9-268-433', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'ABS_PUMP_001', name: 'ABS Pompa Modülü', category: 'BRAKE' as PartCategory, partGroup: 'Brake System', qualityTier: 'PREMIUM' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-AP-001', oemCode: 'BMW-34-51-6-859-403', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+    {
+      sku: 'LINK_ROD_Z_001', name: 'Sürüş Kolu Z-Rod', category: 'SUSPENSION' as PartCategory, partGroup: 'Suspension System', qualityTier: 'EQUIVALENT' as QualityTier, priceBrand: 'Bosch',
+      oemRefs: [{ refId: 'OEM-LZ-001', oemCode: 'BMW-31-35-6-765-145', brand: 'BMW' }],
+      platforms: ['BMW_F30_2012_2019'],
+    },
+  ];
+
+  const parts: PartMasterPart[] = partSeeds.map((seed, idx) => {
+    const brand = brands.find(b => b.name === seed.priceBrand) || { brandId: 'GENERIC', name: seed.priceBrand };
+    
+    return {
+      partMasterId: `PM-${String(idx + 1).padStart(4, '0')}`,
+      tenantId,
+      sku: seed.sku,
+      name: seed.name,
+      description: `${seed.partGroup} - ${seed.qualityTier} quality`,
+      category: seed.category,
+      partGroup: seed.partGroup,
+      qualityTier: seed.qualityTier,
+      brand: brand as Brand,
+      oemRefs: seed.oemRefs as OemRef[],
+      aftermarketRefs: [],
+      fitments: seed.platforms.map((platform, pidx) => ({
+        fitmentId: `FIT-${seed.sku}-${pidx}`,
+        vehiclePlatform: platform,
+        yearRange: platform === 'BMW_F30_2012_2019' ? { from: 2012, to: 2019 } : 
+                   platform === 'VAG_MQB' ? { from: 2013, to: 2024 } :
+                   platform === 'FORD_C1' ? { from: 2011, to: 2019 } :
+                   platform === 'TOYOTA_M10A' ? { from: 2014, to: 2022 } :
+                   platform === 'HONDA_9TH' ? { from: 2012, to: 2015 } :
+                   { from: 2012, to: 2024 },
+      })),
+      unit: 'adet',
+      packSize: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dataQuality: 90 + Math.random() * 10,
+    };
+  });
+
+  console.log(`[PartMaster] catalog size: ${parts.length} parts`);
+
+  return {
+    tenantId,
+    generatedAt: new Date().toISOString(),
+    parts,
+    brands,
+    platformFitments: vehiclePlatforms,
+  };
+}
 
 const generatePartId = (sku: string, tenantId: string): string => {
   return `${tenantId}-${sku}`.replace(/[^a-zA-Z0-9-]/g, '');

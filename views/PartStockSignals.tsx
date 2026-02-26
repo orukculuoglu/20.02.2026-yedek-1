@@ -1,20 +1,27 @@
 import React from 'react';
 import { Search, Zap, CheckCircle, Package, Info } from 'lucide-react';
-import { getPartMasterSnapshot } from '../services/dataService';
-import { PartMasterSnapshot, Part, InventoryItem, SalesSignal } from '../types/partMaster';
+import { getPartMasterCatalog, getSupplierOffers, getPartIndices } from '../services/dataService';
+import { PartMasterCatalog, SupplierOffer } from '../types/partMaster';
+import { DataEngineIndices } from '../services/dataEngineIndices';
+import { BestOfferWidget } from '../components/BestOfferWidget';
 
-interface ProcessedStockItem extends Part {
-    inventory?: InventoryItem;
-    salesSignal?: SalesSignal;
-    dailyAvg: number;
-    daysToZero: number;
+interface ProcessedStockItem {
+    partMasterId: string;
+    sku: string;
+    name: string;
+    category: string;
+    partGroup?: string;
+    stock: number;
+    leadDays: number;
+    trustScore: number;
     riskScore: number;
     orderSuggestion: number;
 }
 
 export const PartStockSignals: React.FC = () => {
     const [stockData, setStockData] = React.useState<ProcessedStockItem[]>([]);
-    const [snapshot, setSnapshot] = React.useState<PartMasterSnapshot | null>(null);
+    const [catalog, setCatalog] = React.useState<PartMasterCatalog | null>(null);
+    const [indices, setIndices] = React.useState<DataEngineIndices | null>(null);
     const [loading, setLoading] = React.useState(true);
     
     const tenantId = 'LENT-CORP-DEMO'; // From env or auth context
@@ -22,44 +29,54 @@ export const PartStockSignals: React.FC = () => {
     React.useEffect(() => {
         const loadData = async () => {
             setLoading(true);
-            console.log('[PartStockSignals] Loading PartMasterSnapshot...');
+            console.log('[PartStockSignals] Loading Part Master Catalog + Offers + Indices...');
             
             try {
-                // Load complete PM snapshot (single source of truth)
-                const pmSnapshot = await getPartMasterSnapshot(tenantId);
-                console.log('[PartStockSignals] Snapshot loaded:', {
-                    parts: pmSnapshot.parts?.length,
-                    inventory: pmSnapshot.inventory?.length,
-                    salesSignals: pmSnapshot.salesSignals?.length,
-                    source: pmSnapshot.source,
-                });
-                setSnapshot(pmSnapshot);
+                // 1. Get canonical Part Master catalog
+                const pmCatalog = await getPartMasterCatalog(tenantId);
+                setCatalog(pmCatalog);
                 
-                // Process data for display
-                const processed = pmSnapshot.parts.map(part => {
-                    // Find inventory for this part
-                    const inv = pmSnapshot.inventory.find(i => i.partId === part.partId);
-                    const sales = pmSnapshot.salesSignals.find(s => s.partId === part.partId);
+                console.log('[PartStockSignals] Catalog loaded:', {
+                    parts: pmCatalog.parts.length,
+                    brands: pmCatalog.brands.length,
+                });
+                
+                // 2. Get supplier offers (B2B bridge)
+                const offers = await getSupplierOffers(pmCatalog, tenantId);
+                console.log('[PartStockSignals] Offers loaded:', offers.length);
+                
+                // 3. Get computed indices
+                const computedIndices = await getPartIndices(pmCatalog, offers);
+                setIndices(computedIndices);
+                
+                console.log('[PartStockSignals] Indices computed:', {
+                    parts: computedIndices.partCount,
+                    avgSupplyStress: computedIndices.averages.supplyStress,
+                });
+                
+                // 4. Process display data
+                const processed: ProcessedStockItem[] = pmCatalog.parts.map(part => {
+                    // Find indices for this part
+                    const topSupply = computedIndices.topSupplyStress.find(i => i.partMasterId === part.partMasterId);
+                    const relevantOffers = offers.filter(o => o.partMasterId === part.partMasterId);
+                    const totalStock = relevantOffers.reduce((s, o) => s + o.stock, 0);
+                    const avgLeadDays = relevantOffers.length > 0
+                        ? Math.round(relevantOffers.reduce((s, o) => s + o.leadDays, 0) / relevantOffers.length)
+                        : 7;
                     
-                    const dailyAvg = sales?.dailyAverage || 0.1;
-                    const onHand = inv?.onHand || 0;
-                    const daysToZero = Math.round(onHand / dailyAvg);
-                    
-                    let riskScore = 10;
-                    if (daysToZero < 7) riskScore = 90;
-                    else if (daysToZero < 15) riskScore = 60;
-                    else if (daysToZero < 30) riskScore = 30;
-                    
-                    const targetStock = dailyAvg * 30;
-                    const orderSuggestion = Math.max(0, Math.round(targetStock - onHand));
+                    // Order suggestion: if supply < 10 days, suggest reorder
+                    const orderSuggestion = (totalStock <= 5 || avgLeadDays > 5) ? 10 : 0;
                     
                     return {
-                        ...part,
-                        inventory: inv,
-                        salesSignal: sales,
-                        dailyAvg,
-                        daysToZero,
-                        riskScore,
+                        partMasterId: part.partMasterId,
+                        sku: part.sku,
+                        name: part.name,
+                        category: part.category,
+                        partGroup: part.partGroup,
+                        stock: totalStock,
+                        leadDays: avgLeadDays,
+                        trustScore: part.dataQuality || 85,
+                        riskScore: topSupply?.supplyStress || 45,
                         orderSuggestion,
                     };
                 });
@@ -67,7 +84,7 @@ export const PartStockSignals: React.FC = () => {
                 setStockData(processed);
                 setLoading(false);
             } catch (error) {
-                console.error('[PartStockSignals] Error loading PM snapshot:', error);
+                console.error('[PartStockSignals] Error loading catalog:', error);
                 setLoading(false);
             }
         };
@@ -75,10 +92,10 @@ export const PartStockSignals: React.FC = () => {
         loadData();
     }, [tenantId]);
     
-    // Predictive Inventory Engine Logic - Component Local
     const processedData = stockData;
-    const dataSource = snapshot?.source || 'UNKNOWN';
-    const summary = snapshot?.summary;
+    const source = catalog?.generatedAt ? 'CANONICAL' : 'UNKNOWN';
+    const totalStockValue = stockData.reduce((s, item) => s + (item.stock * 1000), 0); // Estimate
+    const highRiskCount = stockData.filter(item => item.riskScore > 60).length;
 
     return (
         <div className="p-8 animate-in fade-in duration-500 space-y-8 h-full flex flex-col bg-slate-50/50">
@@ -87,12 +104,12 @@ export const PartStockSignals: React.FC = () => {
                     <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                         <Package size={28} className="text-indigo-600" /> Parça & Stok Sinyalleri
                     </h2>
-                    <p className="text-slate-500 text-sm mt-1 italic font-medium">Veri Kaynağı: <span className="font-bold text-slate-700">{dataSource}</span> | TenantId: <span className="font-bold text-slate-700">{tenantId}</span></p>
+                    <p className="text-slate-500 text-sm mt-1 italic font-medium">Veri Kaynağı: <span className="font-bold text-slate-700">{source}</span> | TenantId: <span className="font-bold text-slate-700">{tenantId}</span></p>
                 </div>
                 <div className="flex gap-3">
                     <div className="bg-cyan-50 border border-cyan-100 px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm">
                         <span className="text-[9px] font-black text-cyan-400 uppercase tracking-widest">Veri Kaynağı</span>
-                        <span className="text-xs font-bold text-cyan-700 uppercase px-2 py-1 bg-cyan-100 rounded">{dataSource}</span>
+                        <span className="text-xs font-bold text-cyan-700 uppercase px-2 py-1 bg-cyan-100 rounded">{source}</span>
                     </div>
                     <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
                         <Zap size={18} className="text-indigo-600 fill-indigo-600 animate-pulse" />
@@ -104,27 +121,27 @@ export const PartStockSignals: React.FC = () => {
                 </div>
             </div>
 
-            {summary && (
+            {indices && (
                 <div className="grid grid-cols-5 gap-4">
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">Toplam Stok Değeri</p>
-                        <p className="text-2xl font-black text-slate-800">₺{(summary.totalStockValue / 1000).toFixed(1)}K</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Toplam Parça</p>
+                        <p className="text-2xl font-black text-slate-800">{indices.partCount}</p>
                     </div>
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">Elden Mevcut</p>
-                        <p className="text-2xl font-black text-slate-800">{summary.totalOnHand}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Toplam Teklif</p>
+                        <p className="text-2xl font-black text-slate-800">{indices.offerCount}</p>
                     </div>
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">Orta Devir 30d</p>
-                        <p className="text-2xl font-black text-slate-800">{summary.avgTurnover30d}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Ort. Fiyat Volatilite</p>
+                        <p className="text-2xl font-black text-slate-800">{indices.averages.priceVolatility}%</p>
                     </div>
                     <div className="bg-white border border-red-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-[10px] font-bold text-red-600 uppercase">Kritik Stok</p>
-                        <p className="text-2xl font-black text-red-700">{summary.criticalStockCount}</p>
+                        <p className="text-[10px] font-bold text-red-600 uppercase">Yüksek Risk Parça</p>
+                        <p className="text-2xl font-black text-red-700">{highRiskCount}</p>
                     </div>
-                    <div className="bg-white border border-orange-200 rounded-xl p-4 shadow-sm">
-                        <p className="text-[10px] font-bold text-orange-600 uppercase">Ölü Stok Riski</p>
-                        <p className="text-2xl font-black text-orange-700">{summary.deadStockCount}</p>
+                    <div className="bg-white border border-blue-200 rounded-xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-blue-600 uppercase">Ort. Güven Skoru</p>
+                        <p className="text-2xl font-black text-blue-700">{indices.averages.trustScore}</p>
                     </div>
                 </div>
             )}
@@ -158,6 +175,7 @@ export const PartStockSignals: React.FC = () => {
                                 <th className="px-6 py-4 text-center">Tahmini Tükenme</th>
                                 <th className="px-6 py-4 text-center">Risk Skoru</th>
                                 <th className="px-6 py-4 text-center">Sipariş Önerisi</th>
+                                <th className="px-6 py-4">Önerilen Tedarikçi</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -213,6 +231,18 @@ export const PartStockSignals: React.FC = () => {
                                             <span className="text-xs font-bold text-emerald-600 flex items-center justify-center gap-1">
                                                 <CheckCircle size={14}/> Yeterli
                                             </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {item.partMasterId ? (
+                                            <BestOfferWidget
+                                              partMasterId={item.partMasterId}
+                                              institutionId="INST-001"
+                                              tenantId="LENT-CORP-DEMO"
+                                              compact={true}
+                                            />
+                                        ) : (
+                                            <span className="text-xs text-slate-400">—</span>
                                         )}
                                     </td>
                                 </tr>

@@ -9,11 +9,95 @@ import {
     GetVehiclesResponse, GetDamageHistoryResponse, GetPartAnalysisResponse, GetB2BNetworkResponse,
     PartMasterItem, AftermarketSummaryMetrics, GetAftermarketCriticalResponse, GetAftermarketTopTurnoverResponse, GetAftermarketTopMarginResponse, GetAftermarketRecommendationsResponse
 } from '../types';
-import { PartMasterSnapshot, GetPartMasterSnapshotResponse } from '../types/partMaster';
+import { PartMasterSnapshot, GetPartMasterSnapshotResponse, PartMasterCatalog, SupplierOffer, EffectiveOffer, OfferRecommendation, InstitutionPriceRule, Supplier } from '../types/partMaster';
 import * as b2bNetworkService from './b2bNetworkService';
+import * as partMasterBuilder from './partMasterBuilder';
+import * as dataEngineIndices from './dataEngineIndices';
+import * as effectiveOfferEngine from './effectiveOfferEngine';
 import { dataEngine } from './dataEngine/dataEngine';
 import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
-import { createApiConfig, apiGet, handleApiError, isRealApiEnabled } from './apiClient';
+import { createApiConfig, apiGet, handleApiError, isRealApiEnabled, getSupplierOffers as apiGetSupplierOffers, getEffectiveOffers as apiGetEffectiveOffers, getSuppliers as apiGetSuppliers } from './apiClient';
+import { initializeFeed, getActiveFeedsForPart } from './supplierFeedEngine';
+
+// ========== CANONICAL PART MASTER API WRAPPERS ==========
+
+/**
+ * Get Part Master Catalog (Canonical single source of truth for parts)
+ * Real API: GET /part-master/catalog
+ * Mock: buildPartMasterCatalog()
+ */
+export async function getPartMasterCatalog(tenantId = 'LENT-CORP-DEMO'): Promise<PartMasterCatalog> {
+  const config = createApiConfig();
+  
+  if (isRealApiEnabled()) {
+    try {
+      console.log('[PartMaster] Fetching from real API...');
+      const response = await apiGet<PartMasterCatalog>('/part-master/catalog', config);
+      return response;
+    } catch (error) {
+      console.error('[PartMaster] Real API failed, falling back to mock', error);
+      return partMasterBuilder.buildPartMasterCatalog(tenantId);
+    }
+  }
+  
+  // Mock
+  return partMasterBuilder.buildPartMasterCatalog(tenantId);
+}
+
+/**
+ * Get Supplier Offers mapped from B2B Network
+ * Real API: GET /supplier-offers
+ * Mock: mapB2BToSupplierOffers()
+ */
+export async function getSupplierOffers(
+  catalog: PartMasterCatalog,
+  tenantId = 'LENT-CORP-DEMO'
+): Promise<SupplierOffer[]> {
+  const config = createApiConfig();
+  
+  if (isRealApiEnabled()) {
+    try {
+      console.log('[SupplierOffers] Fetching from real API...');
+      const response = await apiGet<SupplierOffer[]>('/supplier-offers', config);
+      return response;
+    } catch (error) {
+      console.error('[SupplierOffers] Real API failed, falling back to B2B bridge', error);
+      // Fallback: load B2B and bridge it
+      const b2bNetwork = await b2bNetworkService.getB2BNetwork();
+      return b2bNetworkService.mapB2BToSupplierOffers(b2bNetwork, catalog);
+    }
+  }
+  
+  // Mock: Get from B2B and bridge
+  const b2bNetwork = await b2bNetworkService.getB2BNetwork();
+  return b2bNetworkService.mapB2BToSupplierOffers(b2bNetwork, catalog);
+}
+
+/**
+ * Get Data Engine Indices (computed from catalog + offers)
+ * Real API: GET /data-engine/part-indices
+ * Mock: buildPartIndices()
+ */
+export async function getPartIndices(
+  catalog: PartMasterCatalog,
+  offers: SupplierOffer[]
+): Promise<dataEngineIndices.DataEngineIndices> {
+  const config = createApiConfig();
+  
+  if (isRealApiEnabled()) {
+    try {
+      console.log('[Indices] Fetching from real API...');
+      const response = await apiGet<dataEngineIndices.DataEngineIndices>('/data-engine/part-indices', config);
+      return response;
+    } catch (error) {
+      console.error('[Indices] Real API failed, falling back to local computation', error);
+      return dataEngineIndices.buildPartIndices(catalog, offers);
+    }
+  }
+  
+  // Mock: Compute locally
+  return dataEngineIndices.buildPartIndices(catalog, offers);
+}
 
 // --- PERSISTENCE KEYS ---
 export const REPAIR_DASH_FEED_KEY = "LENT_REPAIR_DASH_FEED_V1";
@@ -475,9 +559,9 @@ export const getVehicleOEMParts = async (vehicleId: string): Promise<OEMPart[]> 
     const vehicle = MOCK_VEHICLES.find(v => v.vehicle_id === vehicleId);
     
     const parts: OEMPart[] = [
-        { id: 'P1', name: 'Fren Balatası Ön', oemCode: '34116850885', brand: 'Brembo', category: 'Fren Sistemi', price: 2450, stock: true, matchScore: 100 },
-        { id: 'P2', name: 'Yağ Filtresi', oemCode: '11427566327', brand: 'Mann-Filter', category: 'Filtreler', price: 450, stock: true, matchScore: 100 },
-        { id: 'P3', name: 'Debriyaj Seti', oemCode: '21207628091', brand: 'LuK', category: 'Şanzıman', price: 12500, stock: false, matchScore: 98 },
+        { id: 'P1', name: 'Fren Balatası Ön', oemCode: 'PM-0001', brand: 'Brembo', category: 'Fren Sistemi', price: 2450, stock: true, matchScore: 100 },
+        { id: 'P2', name: 'Yağ Filtresi', oemCode: 'PM-0002', brand: 'Mann-Filter', category: 'Filtreler', price: 450, stock: true, matchScore: 100 },
+        { id: 'P3', name: 'Debriyaj Seti', oemCode: 'PM-0003', brand: 'LuK', category: 'Şanzıman', price: 12500, stock: false, matchScore: 98 },
     ];
 
     // ========== Veri Motoru: Parça Arama Intent Kaydı ==========
@@ -1568,4 +1652,217 @@ export async function getPartMasterSnapshot(tenantId: string = 'LENT-CORP-DEMO')
         console.log(`[PM] fallback: parts=${mock.parts.length}, suppliers=${mock.suppliers.length}, inventory=${mock.inventory.length}`);
         return mock;
     }
+}
+
+// ========== SUPPLIER OFFERS & EFFECTIVE OFFERS WRAPPERS ==========
+
+/**
+ * Get best offer + alternatives for a specific part
+ * Multi-step:
+ * 1. Fetch all offers for part
+ * 2. Fetch institution pricing rules
+ * 3. Fetch suppliers
+ * 4. Compute effective offers with scoring
+ */
+export async function getEffectiveOffersForPart(
+  partMasterId: string,
+  institutionId: string = 'INST-001',
+  tenantId: string = 'LENT-CORP-DEMO'
+): Promise<OfferRecommendation> {
+  try {
+    console.log(`[EffectiveOffers] Fetching recommendation for part=${partMasterId}, institution=${institutionId}`);
+
+    // ✅ STEP 1: TRY SERVER COMPUTATION FIRST
+    const serverRecommendation = await apiGetEffectiveOffers(partMasterId, institutionId);
+    
+    if (serverRecommendation !== null) {
+      console.log(`[EffectiveOffers] ✓ SERVER COMPUTATION USED: best=${serverRecommendation.best?.offer_id || 'none'}, alternatives=${serverRecommendation.alternatives.length}`);
+      return serverRecommendation;  // ← Use server result directly
+    }
+
+    // ✅ STEP 2: LOCAL FALLBACK (only if server unavailable)
+    console.log(`[EffectiveOffers] ✓ LOCAL FALLBACK COMPUTATION TRIGGERED`);
+
+    // Step 2.0: Initialize feed engine (lazy load seed data on first call)
+    await initializeFeed();
+
+    // Step 2.1: Fetch active feeds for this part (replaces MOCK_OFFERS)
+    const feeds = await getActiveFeedsForPart(partMasterId);
+    
+    if (feeds.length === 0) {
+      console.log(`[EffectiveOffers] No active feeds found for part=${partMasterId}`);
+      return {
+        part_master_id: partMasterId,
+        institution_id: institutionId,
+        best: null,
+        alternatives: [],
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // Step 2.1b: Map SupplierPriceFeed to SupplierOffer format
+    const offers: SupplierOffer[] = feeds.map((feed) => ({
+      offerId: feed.id,
+      supplierId: feed.supplier_id,
+      supplierName: feed.supplier_name,
+      partMasterId: feed.part_master_id,
+      price: feed.effective_price || feed.list_price,  // Use calculated effective_price
+      currency: feed.currency as 'USD' | 'EUR' | 'TRY',
+      minOrderQty: 1,
+      stock: feed.stock_on_hand,
+      leadDays: feed.lead_time_days,
+      lastUpdated: feed.last_sync_at,
+      isVerified: true,  // Feeds are verified by source
+      trustScore: feed.quality_grade === 'OEM' ? 100 : 
+                   feed.quality_grade === 'OES' ? 90 : 
+                   feed.quality_grade === 'AFTERMARKET_A' ? 75 : 60,
+    }));
+
+    // Step 2.2: Load institution pricing rules from seed
+    const { MOCK_PRICE_RULES } = await import('../src/mocks/priceRules.seed');
+    const rules = MOCK_PRICE_RULES.filter(r => r.institution_id === institutionId);
+
+    // Step 2.3: Fetch suppliers
+    const suppliersResponse = await apiGetSuppliers();
+    const suppliersList: Supplier[] = Array.isArray(suppliersResponse)
+      ? suppliersResponse
+      : suppliersResponse?.suppliers || [];
+
+    // Fallback: use mock suppliers
+    if (suppliersList.length === 0) {
+      const { MOCK_SUPPLIERS } = await import('../src/mocks/suppliers.seed');
+      suppliersList.push(...MOCK_SUPPLIERS);
+    }
+
+    const suppliersMap = new Map(suppliersList.map(s => [s.supplierId, s]));
+
+    // Step 2.4: Compute effective offers locally
+    const recommendation = effectiveOfferEngine.computeOfferRecommendation(
+      offers,
+      rules,
+      suppliersMap,
+      partMasterId,
+      institutionId
+    );
+
+    console.log(`[EffectiveOffers] ✓ LOCAL COMPUTED: best=${recommendation.best?.offer_id || 'none'}, alternatives=${recommendation.alternatives.length}`);
+
+    return recommendation;
+  } catch (error) {
+    console.error(`[EffectiveOffers] Error computing offers`, error);
+    return {
+      part_master_id: partMasterId,
+      institution_id: institutionId,
+      best: null,
+      alternatives: [],
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * Get all suppliers
+ */
+export async function getAllSuppliers(): Promise<Supplier[]> {
+  try {
+    const response = await apiGetSuppliers();
+    return Array.isArray(response) ? response : response?.suppliers || [];
+  } catch (error) {
+    console.error('[Suppliers] Error fetching suppliers, using mock', error);
+    const { MOCK_SUPPLIERS } = await import('../src/mocks/suppliers.seed');
+    return MOCK_SUPPLIERS;
+  }
+}
+
+/**
+ * Get all offers (optionally filtered)
+ */
+export async function getAllOffers(
+  filters?: {
+    partMasterId?: string;
+    supplierId?: string;
+    qualityGrade?: string;
+  }
+): Promise<SupplierOffer[]> {
+  try {
+    const response = await apiGetSupplierOffers(
+      filters?.partMasterId || '',
+      'LENT-CORP-DEMO'
+    );
+    let all = Array.isArray(response) ? response : [];
+
+    // Apply filters
+    if (filters?.supplierId) {
+      all = all.filter(o => o.supplierId === filters.supplierId);
+    }
+    if (filters?.qualityGrade) {
+      all = all.filter(o => o.qualityGrade === filters.qualityGrade);
+    }
+
+    return all;
+  } catch (error) {
+    console.error('[Offers] Error fetching offers, using mock', error);
+    const { MOCK_OFFERS } = await import('../src/mocks/offers.seed');
+    let all = MOCK_OFFERS;
+
+    // Apply filters
+    if (filters?.partMasterId) {
+      all = all.filter(o => o.partMasterId === filters.partMasterId);
+    }
+    if (filters?.supplierId) {
+      all = all.filter(o => o.supplier_id === filters.supplierId);
+    }
+    if (filters?.qualityGrade) {
+      all = all.filter(o => o.quality_grade === filters.qualityGrade);
+    }
+
+    return all;
+  }
+}
+
+// ========== OEM ↔ AFTERMARKET MAPPING ==========
+
+/**
+ * Get OEM alternatives for a specific OEM part number
+ * Used by: SpareParts modal, Parts comparison
+ * 
+ * Returns alternatives sorted by:
+ * 1. Quality Grade (OEM > OES > AFTERMARKET_A > AFTERMARKET_B)
+ * 2. Compatibility Score (DESC)
+ * 3. Date (newest first)
+ */
+export async function getOemAlternativesForPart(
+  oemPartNumber: string,
+  brand: string
+): Promise<any> {
+  try {
+    console.log(`[DataService] Fetching OEM alternatives: ${brand} ${oemPartNumber}`);
+    
+    // Use apiClient wrapper (handles real API vs demo mode)
+    const { getOemAlternatives } = await import('./apiClient');
+    const result = await getOemAlternatives(oemPartNumber, brand);
+    
+    if (result?.success === true) {
+      console.log(`[DataService] ✓ Found ${result.count} alternatives`);
+      return result;
+    }
+    
+    console.warn(`[DataService] No alternatives found for ${brand} ${oemPartNumber}`);
+    return {
+      success: false,
+      oem: oemPartNumber,
+      brand: brand,
+      alternatives: [],
+      count: 0,
+    };
+  } catch (error) {
+    console.error(`[DataService] Error fetching OEM alternatives`, error);
+    return {
+      success: false,
+      oem: oemPartNumber,
+      brand: brand,
+      alternatives: [],
+      count: 0,
+    };
+  }
 }

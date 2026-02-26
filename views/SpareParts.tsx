@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Wrench, AlertTriangle, CheckCircle, Package, DollarSign, RefreshCw, ChevronRight, Server, Globe, Car, ArrowRight, MoreVertical, Eye, ShoppingCart, CalendarPlus, X, Box, Truck, Loader2, Check, Barcode, ClipboardList, Layers, Info, Cpu, Activity } from 'lucide-react';
-import { getVehicleList, getVehicleOEMParts, addToMaintenancePlan, createERPOrder } from '../services/dataService';
+import { getVehicleList, getVehicleOEMParts, addToMaintenancePlan, createERPOrder, getOemAlternativesForPart } from '../services/dataService';
 import { VehicleProfile, OEMPart } from '../types';
+import { BestOfferWidget } from '../components/BestOfferWidget';
 
 interface SparePartsProps {
     preSelectedVehicleId?: string | null;
@@ -19,6 +20,11 @@ export const SpareParts: React.FC<SparePartsProps> = ({ preSelectedVehicleId }) 
   const [selectedPartDetail, setSelectedPartDetail] = useState<OEMPart | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  
+  // OEM Alternatives Tab State
+  const [oemAlternatives, setOemAlternatives] = useState<any[]>([]);
+  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+  const [activeDetailsTab, setActiveDetailsTab] = useState<'details' | 'alternatives'>('details');
 
   useEffect(() => {
     getVehicleList().then(list => {
@@ -42,6 +48,32 @@ export const SpareParts: React.FC<SparePartsProps> = ({ preSelectedVehicleId }) 
     }
   }, [selectedVehicle]);
 
+  // Fetch OEM alternatives when part detail modal opens
+  useEffect(() => {
+    if (detailModalOpen && selectedPartDetail && selectedVehicle) {
+        setLoadingAlternatives(true);
+        setActiveDetailsTab('details'); // Reset to details tab
+        
+        getOemAlternativesForPart(selectedPartDetail.oemCode, selectedVehicle.brand)
+            .then((result: any) => {
+                if (result?.success && result?.alternatives) {
+                    setOemAlternatives(result.alternatives);
+                    console.log('[SpareParts] Loaded OEM alternatives:', result.alternatives.length);
+                } else {
+                    setOemAlternatives([]);
+                    console.warn('[SpareParts] No OEM alternatives found');
+                }
+            })
+            .catch((error: any) => {
+                console.error('[SpareParts] Error loading OEM alternatives:', error);
+                setOemAlternatives([]);
+            })
+            .finally(() => {
+                setLoadingAlternatives(false);
+            });
+    }
+  }, [detailModalOpen, selectedPartDetail, selectedVehicle]);
+
   const handleOpenDetail = (part: OEMPart) => {
       setSelectedPartDetail(part);
       setDetailModalOpen(true);
@@ -64,14 +96,46 @@ export const SpareParts: React.FC<SparePartsProps> = ({ preSelectedVehicleId }) 
       if (!detailModalOpen || !selectedPartDetail || !selectedVehicle) return null;
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
                     <h3 className="font-bold flex items-center gap-2">
                         <Package size={20} className="text-emerald-400" /> RepXpert Teknik Kartı
                     </h3>
                     <button onClick={() => setDetailModalOpen(false)} className="hover:bg-slate-700 p-1.5 rounded transition-colors"><X size={20} /></button>
                 </div>
-                <div className="p-6">
+                
+                {/* Tab Navigation */}
+                <div className="bg-slate-50 border-b border-slate-200 px-6 flex gap-4">
+                    <button
+                        onClick={() => setActiveDetailsTab('details')}
+                        className={`py-3 px-4 font-bold text-sm border-b-2 transition-colors ${
+                            activeDetailsTab === 'details'
+                                ? 'border-emerald-500 text-emerald-700'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                        }`}
+                    >
+                        Detaylar
+                    </button>
+                    <button
+                        onClick={() => setActiveDetailsTab('alternatives')}
+                        className={`py-3 px-4 font-bold text-sm border-b-2 transition-colors relative ${
+                            activeDetailsTab === 'alternatives'
+                                ? 'border-emerald-500 text-emerald-700'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                        }`}
+                    >
+                        Eşdeğer Parçalar
+                        {oemAlternatives.length > 0 && (
+                            <span className="absolute -top-1 right-0 bg-emerald-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                {oemAlternatives.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6">
+                    {activeDetailsTab === 'details' ? (
+                        <div className="space-y-6">
                     <div className="flex items-start justify-between mb-6">
                         <div className="flex items-center gap-4">
                             <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 border border-slate-200">
@@ -104,17 +168,86 @@ export const SpareParts: React.FC<SparePartsProps> = ({ preSelectedVehicleId }) 
                                 <div className="flex justify-between"><span>Motor Kodu</span><span className="font-bold text-emerald-600">{selectedVehicle.engine_code}</span></div>
                             </div>
                         </div>
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                             <div className="p-3 rounded border bg-amber-50 border-amber-100 flex items-center gap-3">
-                                 <div className="p-2 bg-white rounded-full text-amber-600 shadow-sm"><Info size={16} /></div>
-                                 <p className="text-[10px] text-amber-800 font-bold leading-tight uppercase">
-                                     Vites Tipi Kontrolü: Bu araç {selectedVehicle.transmission} olarak tanımlanmıştır. Doğru parça seçildiğinden emin olun.
-                                 </p>
-                             </div>
+                        <div className="space-y-4">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                                 <div className="p-3 rounded border bg-amber-50 border-amber-100 flex items-center gap-3">
+                                     <div className="p-2 bg-white rounded-full text-amber-600 shadow-sm"><Info size={16} /></div>
+                                     <p className="text-[10px] text-amber-800 font-bold leading-tight uppercase">
+                                         Vites Tipi Kontrolü: Bu araç {selectedVehicle.transmission} olarak tanımlanmıştır. Doğru parça seçildiğinden emin olun.
+                                     </p>
+                                 </div>
+                            </div>
+                            <BestOfferWidget
+                              partMasterId={selectedPartDetail.oemCode || ''}
+                              institutionId="INST-001"
+                              tenantId="LENT-CORP-DEMO"
+                              compact={false}
+                            />
                         </div>
                     </div>
+                        </div>
+                    ) : (
+                        // Alternatives Tab
+                        <div className="space-y-4">
+                            {loadingAlternatives ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                                    <Loader2 size={32} className="animate-spin text-emerald-600 mb-3" />
+                                    <p className="font-medium">Eşdeğer Parçalar Yükleniyor...</p>
+                                </div>
+                            ) : oemAlternatives.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                                    <Package size={32} className="mb-3 text-slate-300" />
+                                    <p className="font-medium">Bu parça için eşdeğer bulunamadı</p>
+                                </div>
+                            ) : (
+                                oemAlternatives.map((alt, idx) => {
+                                    const gradeColors: any = {
+                                        'OEM': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+                                        'OES': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+                                        'AFTERMARKET_A': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+                                        'AFTERMARKET_B': { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' },
+                                    };
+                                    const colors = gradeColors[alt.quality_grade] || gradeColors['AFTERMARKET_B'];
+                                    
+                                    return (
+                                        <div key={alt.id} className="p-4 border border-slate-200 rounded-xl hover:border-emerald-400 hover:shadow-md transition-all">
+                                            <div className="flex items-start justify-between mb-3">
+                                                <div className="flex-1">
+                                                    <h5 className="font-bold text-slate-800 text-sm">{alt.aftermarket_brand}</h5>
+                                                    <p className="text-xs text-slate-500 mt-0.5 font-mono">{alt.aftermarket_part_number}</p>
+                                                </div>
+                                                <span className={`px-2.5 py-1 rounded text-xs font-bold border whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border}`}>
+                                                    {alt.quality_grade.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-4 justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <p className="text-xs text-slate-500 mb-1">Uyumluluk Skoru</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className="h-full bg-emerald-500 rounded-full transition-all"
+                                                                    style={{ width: `${alt.compatibility_score}%` }}
+                                                                ></div>
+                                                            </div>
+                                                            <span className="text-sm font-bold text-slate-800">{alt.compatibility_score}%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold hover:bg-emerald-100 transition-colors whitespace-nowrap">
+                                                    Seç
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
+                </div>
 
-                    <div className="border-t border-slate-100 pt-4">
+                    <div className="border-t border-slate-100 px-6 py-4">
                         {actionSuccess ? (
                              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-lg flex items-center gap-3 animate-in slide-in-from-top-2">
                                  <CheckCircle size={20} className="text-emerald-600 shrink-0" />
@@ -133,7 +266,6 @@ export const SpareParts: React.FC<SparePartsProps> = ({ preSelectedVehicleId }) 
                             </div>
                         )}
                     </div>
-                </div>
             </div>
         </div>
       );

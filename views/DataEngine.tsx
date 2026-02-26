@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
-import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package } from 'lucide-react';
 import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
 import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
 import { buildFleetRiskSummary } from '../src/engine/fleetRisk/fleetRiskAggregator';
+import { getPartMasterCatalog, getSupplierOffers, getPartIndices } from '../services/dataService';
+import { DataEngineIndices } from '../services/dataEngineIndices';
+import { PartIndex } from '../services/dataEngineIndices';
 import { AftermarketProductCard, VehicleProfile } from '../types';
+import { PartMasterPart, PartMasterCatalog } from '../types/partMaster';
+import { OffersPanel } from '../components/OffersPanel';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -16,6 +21,40 @@ export const DataEngine: React.FC = () => {
     city: 'All',
     model: 'All',
   });
+
+  // Part Master indices state
+  const [partIndices, setPartIndices] = React.useState<DataEngineIndices | null>(null);
+  const [indicesLoading, setIndicesLoading] = React.useState(true);
+  
+  // Part Master catalog state (for Teklifler tab)
+  const [catalog, setCatalog] = React.useState<PartMasterCatalog | null>(null);
+  const [selectedPart, setSelectedPart] = React.useState<PartMasterPart | null>(null);
+  const [searchPartTerm, setSearchPartTerm] = React.useState('');
+
+  // Load Part Master indices
+  React.useEffect(() => {
+    const loadIndices = async () => {
+      try {
+        const pmCatalog = await getPartMasterCatalog('LENT-CORP-DEMO');
+        setCatalog(pmCatalog);
+        
+        const offers = await getSupplierOffers(pmCatalog, 'LENT-CORP-DEMO');
+        const indices = await getPartIndices(pmCatalog, offers);
+        setPartIndices(indices);
+        
+        // Select first part by default
+        if (pmCatalog.parts.length > 0) {
+          setSelectedPart(pmCatalog.parts[0]);
+        }
+        
+        setIndicesLoading(false);
+      } catch (error) {
+        console.error('[DataEngine] Error loading indices:', error);
+        setIndicesLoading(false);
+      }
+    };
+    loadIndices();
+  }, []);
 
   // Mock veriyi yükle
   const mockData = mockDataEngineV1;
@@ -790,6 +829,226 @@ export const DataEngine: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Part Master Indices Panel */}
+      {partIndices && (
+        <div className="mt-8 space-y-8">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <TrendingUp size={20} className="text-emerald-600" />
+              Parça Endeksleri (Part Indices)
+            </h3>
+
+            {/* Top Categories */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              {partIndices.categoryMetrics.slice(0, 4).map((cat) => (
+                <div key={cat.category} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                  <p className="text-xs font-bold text-slate-500 uppercase">{cat.category}</p>
+                  <p className="text-2xl font-black text-slate-800">{cat.partCount}</p>
+                  <p className="text-xs text-slate-500 mt-1">parça</p>
+                  <p className="text-[10px] text-red-600 mt-2 font-bold">{cat.highRiskCount} yüksek risk</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Top Supply Stress */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <AlertTriangle size={18} className="text-red-600" />
+                  Tedarik Baskısı (Top 10)
+                </h4>
+                <div className="space-y-3">
+                  {partIndices.topSupplyStress.slice(0, 5).map((item) => (
+                    <div key={item.partMasterId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="text-sm">
+                        <p className="font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">{item.sku}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800">{item.supplyStress}%</p>
+                        <p className="text-xs text-slate-400">risk score</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price Volatility */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <TrendingUp size={18} className="text-orange-600" />
+                  Fiyat Volatilitesi (Top 10)
+                </h4>
+                <div className="space-y-3">
+                  {partIndices.topPriceVolatility.slice(0, 5).map((item) => (
+                    <div key={item.partMasterId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="text-sm">
+                        <p className="font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">{item.sku}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800">{item.priceVolatility}%</p>
+                        <p className="text-xs text-slate-400">volatility</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Trust Score & Demand Pressure */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <AlertTriangle size={18} className="text-red-600" />
+                  Düşük Güven Skoru (Top 10)
+                </h4>
+                <div className="space-y-3">
+                  {partIndices.lowTrustScore.slice(0, 5).map((item) => (
+                    <div key={item.partMasterId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="text-sm">
+                        <p className="font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">{item.category}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800">{item.trustScore}</p>
+                        <p className="text-xs text-slate-400">güven skoru</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Demand Pressure */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Database size={18} className="text-cyan-600" />
+                  Talep Baskısı (Top 10)
+                </h4>
+                <div className="space-y-3">
+                  {partIndices.topDemandPressure.slice(0, 5).map((item) => (
+                    <div key={item.partMasterId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="text-sm">
+                        <p className="font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-500">{item.partGroup || 'N/A'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-slate-800">{item.demandPressure}%</p>
+                        <p className="text-xs text-slate-400">pressure</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Index Summary */}
+            <div className="bg-gradient-to-r from-emerald-50 to-cyan-50 rounded-xl border border-slate-200 shadow-sm p-6">
+              <h4 className="font-bold text-slate-800 mb-4">Ortalama Endeksler (Averages)</h4>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase">Fiyat Volatilitesi</p>
+                  <p className="text-2xl font-black text-slate-800">{partIndices.averages.priceVolatility}%</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase">Tedarik Baskısı</p>
+                  <p className="text-2xl font-black text-slate-800">{partIndices.averages.supplyStress}%</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase">Talep Baskısı</p>
+                  <p className="text-2xl font-black text-slate-800">{partIndices.averages.demandPressure}%</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase">Güven Skoru</p>
+                  <p className="text-2xl font-black text-slate-800">{partIndices.averages.trustScore}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teklifler (Supplier Offers) Panel */}
+      {catalog && (
+        <div className="mt-8 space-y-6">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Package size={20} className="text-amber-600" />
+              Teklifler (Supplier Offers)
+            </h3>
+
+            {/* Part List + Offers Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* LEFT: Part Selection List */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-slate-100 bg-slate-50">
+                  <input
+                    type="text"
+                    placeholder="Parça adı veya SKU ara..."
+                    value={searchPartTerm}
+                    onChange={(e) => setSearchPartTerm(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+
+                <div className="overflow-y-auto flex-1 max-h-[600px]">
+                  {catalog.parts
+                    .filter(
+                      (part) =>
+                        part.name.toLowerCase().includes(searchPartTerm.toLowerCase()) ||
+                        part.sku.toLowerCase().includes(searchPartTerm.toLowerCase())
+                    )
+                    .map((part) => (
+                      <button
+                        key={part.partMasterId}
+                        onClick={() => setSelectedPart(part)}
+                        className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors hover:bg-amber-50 ${
+                          selectedPart?.partMasterId === part.partMasterId
+                            ? 'bg-amber-50 border-l-4 border-l-amber-600'
+                            : ''
+                        }`}
+                      >
+                        <div className="font-semibold text-slate-800 text-sm">{part.name}</div>
+                        <div className="text-xs text-slate-500 font-mono mt-0.5">{part.sku}</div>
+                        <div className="text-[10px] text-slate-400 mt-1">{part.category}</div>
+                      </button>
+                    ))}
+                </div>
+
+                <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
+                  <p className="text-xs text-slate-500 font-bold">Toplam {catalog.parts.length} parça</p>
+                </div>
+              </div>
+
+              {/* RIGHT: Offers Display */}
+              <div className="lg:col-span-2">
+                {selectedPart ? (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <div className="mb-6 pb-6 border-b border-slate-200">
+                      <h4 className="text-lg font-bold text-slate-800">{selectedPart.name}</h4>
+                      <p className="text-sm text-slate-500 mt-1">SKU: <span className="font-mono font-bold">{selectedPart.sku}</span></p>
+                      <p className="text-sm text-slate-500">Kategori: <span className="font-bold">{selectedPart.category}</span></p>
+                    </div>
+
+                    {/* OffersPanel Component */}
+                    <OffersPanel
+                      selectedPart={selectedPart}
+                      institutionId="INST-001"
+                      tenantId="LENT-CORP-DEMO"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                    <Package size={32} className="mx-auto mb-4 text-slate-300" />
+                    <p className="text-slate-500">Bir parça seçin</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

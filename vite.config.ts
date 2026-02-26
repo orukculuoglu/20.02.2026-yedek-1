@@ -2,6 +2,7 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { PART_MASTER_MOCK } from './types/partMaster';
+import { startMockServer } from './src/mocks/server';
 
 // Mock API data
 const MOCK_VEHICLES = [
@@ -119,6 +120,15 @@ function apiMiddlewarePlugin() {
   return {
     name: 'api-middleware',
     configureServer(server: any) {
+      // Start mock server (handles /api/effective-offers, /api/supplier-offers, etc)
+      startMockServer().catch((err: any) => {
+        if (err?.code === 'EADDRINUSE') {
+          console.log('[MockServer] Already running on port 3001');
+        } else {
+          console.error('[MockServer Error]', err?.message);
+        }
+      });
+
       server.middlewares.use((req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/')) {
           next();
@@ -369,10 +379,10 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       server: {
-        port: 3000,
+        port: 3003,
         host: '0.0.0.0',
       },
-      plugins: [apiMiddlewarePlugin(), react()],
+      plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

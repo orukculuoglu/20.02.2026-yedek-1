@@ -1,5 +1,6 @@
 
 import { B2BNetworkState, Supplier, B2BPart, B2BEdge } from '../types';
+import { SupplierOffer, PartMasterCatalog } from '../types/partMaster';
 
 export interface AlternativeSignal {
     id: string;
@@ -10,6 +11,54 @@ export interface AlternativeSignal {
     priceMax: number;
     leadTimeLabel: string;
     compatSignal: 'COMPATIBLE' | 'UNCERTAIN';
+}
+
+/**
+ * Bridge: Map B2B Network data to Part Master Supplier Offers
+ * This allows Aftermarket and Bakım Merkezi to use B2B network data
+ * seamlessly alongside other suppliers.
+ */
+export function mapB2BToSupplierOffers(
+  b2bState: B2BNetworkState,
+  catalog: PartMasterCatalog
+): SupplierOffer[] {
+  const offers: SupplierOffer[] = [];
+
+  for (const edge of b2bState.edges || []) {
+    const supplier = b2bState.suppliers?.find(s => s.id === edge.supplierId);
+    const b2bPart = b2bState.parts?.find(p => p.id === edge.partId);
+
+    if (!supplier || !b2bPart) continue;
+
+    // Find matching part in catalog by SKU or name fuzzy match
+    const catalogPart = catalog.parts.find(p =>
+      p.sku.toLowerCase().includes(b2bPart.sku?.toLowerCase() || '') ||
+      p.name.toLowerCase().includes(b2bPart.name?.toLowerCase() || '')
+    );
+
+    if (!catalogPart) continue;
+
+    // Create SupplierOffer
+    const offer: SupplierOffer = {
+      offerId: `SUP-${supplier.id}-${b2bPart.id}-${Date.now()}`,
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      partMasterId: catalogPart.partMasterId,
+      price: b2bPart.price,
+      currency: 'TRY',
+      minOrderQty: 1,
+      stock: b2bPart.stock,
+      leadDays: edge.leadDays || 3,
+      lastUpdated: new Date().toISOString(),
+      isVerified: supplier.score ? supplier.score > 85 : false,
+      trustScore: supplier.score || 80,
+    };
+
+    offers.push(offer);
+  }
+
+  console.log(`[B2B Bridge] Mapped ${offers.length} offers from B2B network`);
+  return offers;
 }
 
 /**
