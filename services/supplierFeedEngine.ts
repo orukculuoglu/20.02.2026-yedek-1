@@ -155,13 +155,23 @@ export async function getActiveFeedsForPart(
 ): Promise<SupplierPriceFeed[]> {
   const now = new Date();
   
+  console.log(`[FeedEngine] getActiveFeedsForPart: part=${partMasterId}, total_feeds=${SUPPLIER_FEEDS.length}, today=${now.toISOString().split('T')[0]}`);
+  
   const activeFeeds = SUPPLIER_FEEDS.filter(f => {
     if (f.part_master_id !== partMasterId) return false;
     if (f.is_active === false) return false;
     
     const validUntil = new Date(f.valid_until);
-    return validUntil >= now; // Not expired
+    const isValid = validUntil >= now;
+    
+    if (!isValid) {
+      console.log(`[FeedEngine] Feed ${f.id} expired: ${f.valid_until} < ${now.toISOString()}`);
+    }
+    
+    return isValid; // Not expired
   });
+  
+  console.log(`[FeedEngine] getActiveFeedsForPart result: found ${activeFeeds.length} feeds for ${partMasterId}`);
   
   // Sort by effective price (best price first)
   return activeFeeds.sort((a, b) => (a.effective_price || 0) - (b.effective_price || 0));

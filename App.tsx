@@ -18,7 +18,7 @@ import { Subscription } from './views/Subscription';
 import { UserManagement } from './views/UserManagement';
 import { RepairShops } from './views/RepairShops';
 import { Retailers } from './views/Retailers';
-import { FleetRental } from './views/FleetRental'; 
+import FleetRental from './views/FleetRental'; 
 import { ExpertiseCenters } from './views/ExpertiseCenters';
 import { InsuranceCenter } from './views/InsuranceCenter';
 import { IndividualUsers } from './views/IndividualUsers';
@@ -146,7 +146,7 @@ export default function App() {
       case ViewState.KVKK: return <Kvkk />;
       case ViewState.REPAIR_SHOPS: return <RepairShops onNavigate={handleViewChange} />;
       case ViewState.RETAILERS: return <Retailers onNavigate={handleViewChange} />;
-      case ViewState.FLEET_RENTAL: return <FleetRental onNavigate={handleViewChange} />;
+      case ViewState.FLEET_RENTAL: return <FleetRental />;
       case ViewState.EXPERTISE: return <ExpertiseCenters onNavigate={handleViewChange} />;
       case ViewState.INSURANCE: return <InsuranceCenter onNavigate={handleViewChange} />;
       case ViewState.INDIVIDUAL: return <IndividualUsers onNavigate={handleViewChange} />;

@@ -1701,22 +1701,24 @@ export async function getEffectiveOffersForPart(
     }
 
     // Step 2.1b: Map SupplierPriceFeed to SupplierOffer format
-    const offers: SupplierOffer[] = feeds.map((feed) => ({
-      offerId: feed.id,
-      supplierId: feed.supplier_id,
-      supplierName: feed.supplier_name,
-      partMasterId: feed.part_master_id,
-      price: feed.effective_price || feed.list_price,  // Use calculated effective_price
-      currency: feed.currency as 'USD' | 'EUR' | 'TRY',
-      minOrderQty: 1,
-      stock: feed.stock_on_hand,
-      leadDays: feed.lead_time_days,
-      lastUpdated: feed.last_sync_at,
-      isVerified: true,  // Feeds are verified by source
-      trustScore: feed.quality_grade === 'OEM' ? 100 : 
-                   feed.quality_grade === 'OES' ? 90 : 
-                   feed.quality_grade === 'AFTERMARKET_A' ? 75 : 60,
+    const offers = feeds.map((feed): any => ({
+      offer_id: feed.id,
+      supplier_id: feed.supplier_id,
+      part_master_id: feed.part_master_id,
+      supplier_sku: feed.supplier_part_number,
+      brand: feed.supplier_name,
+      quality_grade: feed.quality_grade,
+      currency: feed.currency as 'TRY' | 'EUR' | 'USD',
+      list_price: feed.list_price,
+      stock_on_hand: feed.stock_on_hand,  // ← CRITICAL FOR effectiveOfferEngine
+      lead_time_days: feed.lead_time_days,
+      source: feed.source as 'MANUAL' | 'FEED' | 'ERP',
+      updated_at: feed.last_sync_at,
+      valid_until: feed.valid_until,
+      notes: `Quality: ${feed.quality_grade}`,
     }));
+
+    console.log(`[EffectiveOffers] Mapped ${offers.length} feeds to offers: stock_on_hand=${offers[0]?.stock_on_hand}, offer_id=${offers[0]?.offer_id}`);
 
     // Step 2.2: Load institution pricing rules from seed
     const { MOCK_PRICE_RULES } = await import('../src/mocks/priceRules.seed');

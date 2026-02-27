@@ -1,0 +1,426 @@
+/* Fleet Rental - Placeholder Styling */
+  color: #1f2937;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.fleet-info,
+.fleet-contact {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+.fleet-contact {
+  color: #9ca3af;
+}
+
+/* Panel 2: Vehicles/Contracts/Summary */
+.panel-2 {
+  min-width: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-buttons {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+  padding: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover:not(:disabled) {
+  color: #1f2937;
+  background: #f3f4f6;
+}
+
+.tab-btn.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+
+.tab-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #9ca3af;
+}
+
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 40px 20px;
+  font-size: 14px;
+}
+
+/* Vehicles Tab */
+.vehicle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.vehicle-card {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s, border-left 0.2s;
+  border-left: 4px solid transparent;
+}
+
+.vehicle-card:hover {
+  background: #f9f9f9;
+  border-left-color: #10b981;
+}
+
+.vehicle-card.selected {
+  background: #f0fdf4;
+  border-left-color: #10b981;
+}
+
+.vehicle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.vehicle-plate {
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-maintenance {
+  background: #fed7aa;
+  color: #92400e;
+}
+
+.status-offline {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.status-retired {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.status-draft {
+  background: #dbeafe;
+  color: #0c2340;
+}
+
+.status-completed {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.vehicle-info {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 4px 0;
+}
+
+.vehicle-mileage {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 6px;
+}
+
+/* Contracts Tab */
+.contract-card {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  border-left: 4px solid #f59e0b;
+}
+
+.contract-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.customer-name {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.contract-dates,
+.contract-rates,
+.contract-limits {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+/* Summary Tab */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.summary-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 13px;
+}
+
+.summary-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.risk-score {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ef4444;
+  margin: 8px 0;
+}
+
+.risk-factors {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.service-info p {
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.service-info strong {
+  color: #1f2937;
+}
+
+.total-cost {
+  font-size: 20px;
+  font-weight: 700;
+  color: #059669;
+  margin: 8px 0;
+}
+
+.cost-breakdown {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+}
+
+.cost-breakdown li {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+.parts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.part-badge {
+  background: #e0e7ff;
+  color: #4f46e5;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.maintenance-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.maintenance-list li {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+/* Panel 3: KPI */
+.panel-3 {
+  min-width: 300px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.kpi-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 14px;
+  text-align: center;
+}
+
+.kpi-card.accent-active {
+  background: #f0fdf4;
+  border-color: #10b981;
+}
+
+.kpi-card.accent-maintenance {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.kpi-card.accent-success {
+  background: #f0f9ff;
+  border-color: #06b6d4;
+}
+
+.kpi-card.accent-risk {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.kpi-full {
+  grid-column: 1 / -1;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.kpi-full h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.btn-refresh {
+  width: 100%;
+  padding: 10px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-refresh:hover {
+  background: #2563eb;
+}
+
+.btn-retry {
+  padding: 10px 20px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.loading,
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.error {
+  background: #fef2f2;
+  color: #9f1239;
+}
+
+/* Scrollbar styling */
+.fleet-list::-webkit-scrollbar,
+.vehicle-list::-webkit-scrollbar,
+.tab-content::-webkit-scrollbar,
+.summary-grid::-webkit-scrollbar,
+.kpi-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fleet-list::-webkit-scrollbar-track,
+.vehicle-list::-webkit-scrollbar-track,
+.tab-content::-webkit-scrollbar-track,
+.summary-grid::-webkit-scrollbar-track,
+.kpi-grid::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.fleet-list::-webkit-scrollbar-thumb,
+.vehicle-list::-webkit-scrollbar-thumb,
+.tab-content::-webkit-scrollbar-thumb,
+.summary-grid::-webkit-scrollbar-thumb,
+.kpi-grid::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.fleet-list::-webkit-scrollbar-thumb:hover,
+.vehicle-list::-webkit-scrollbar-thumb:hover,
+.tab-content::-webkit-scrollbar-thumb:hover,
+.summary-grid::-webkit-scrollbar-thumb:hover,
+.kpi-grid::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

@@ -1,16 +1,31 @@
 #!/usr/bin/env node
 
 /**
- * Mock Server Starter (ES Module)
+ * Mock Server - Full Stack (ES Module)
+ * Includes: Suppliers + Offers + Fleet Rental V1 + V2.1
  * Run: npm run dev:mock-server
  */
 
 import http from 'http';
 import url from 'url';
+import {
+  MOCK_FLEETS,
+  MOCK_VEHICLES,
+  MOCK_CONTRACTS,
+  MOCK_MAINTENANCE_LOGS,
+  MOCK_COSTS,
+  MOCK_PARTS_RECOMMENDATIONS,
+  MOCK_SERVICE_POINTS,
+  MOCK_FLEET_POLICIES,
+  MOCK_SERVICE_REDIRECTS,
+  MOCK_WORK_ORDERS,
+  MOCK_COST_LEDGER,
+} from './src/mocks/fleetRentalSeed.mjs';
 
 const PORT = 3001;
 
-// Mock data
+// V2.6 - Service Appointments (Maintenance Randevuları) - In-memory
+const MOCK_SERVICE_APPOINTMENTS = [];
 const MOCK_SUPPLIERS = [
     { supplierId: 'SUP-001', supplierName: 'Martaş Otomotiv', country: 'Turkey' },
     { supplierId: 'SUP-002', supplierName: 'Bosch Distribütör', country: 'Turkey' },
@@ -75,8 +90,8 @@ const MOCK_CROSSREF = [
 const server = http.createServer(async (req, res) => {
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tenant-id, x-role');
     res.setHeader('Content-Type', 'application/json');
 
     if (req.method === 'OPTIONS') {
@@ -88,6 +103,45 @@ const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname;
     const query = parsedUrl.query;
+
+    // ===== GLOBAL TENANT MIDDLEWARE - ALL /api ENDPOINTS REQUIRE x-tenant-id =====
+    if (pathname.startsWith('/api')) {
+        const tenantId = req.headers['x-tenant-id'];
+        const role = req.headers['x-role'] || 'guest';
+        
+        if (!tenantId) {
+            res.writeHead(401);
+            res.end(JSON.stringify({
+                error: 'x-tenant-id header is required',
+                code: 'MISSING_TENANT_ID',
+                timestamp: new Date().toISOString(),
+            }));
+            console.log(`[BLOCKED] Tenant: MISSING | Role: ${role} | Path: ${pathname} | Reason: x-tenant-id required`);
+            return;
+        }
+
+        // Request logging
+        console.log(`[REQUEST] Tenant: ${tenantId.substring(0, 20)} | Role: ${role} | Method: ${req.method} | Path: ${pathname}`);
+    }
+
+    // Helper: Validate tenant header for Fleet endpoints
+    const validateTenant = (path) => {
+        return path.startsWith('/api/fleet');
+    };
+
+    const checkTenant = (req, res) => {
+        const tenantId = req.headers['x-tenant-id'];
+        if (!tenantId) {
+            res.writeHead(401);
+            res.end(JSON.stringify({
+                error: 'x-tenant-id header is required',
+                code: 'MISSING_TENANT_ID',
+                timestamp: new Date().toISOString(),
+            }));
+            return false;
+        }
+        return true;
+    };
 
     console.log(`[${new Date().toISOString()}] ${req.method} ${pathname}`);
 
@@ -217,7 +271,1045 @@ const server = http.createServer(async (req, res) => {
                     }));
                 }
             }
-            // 404
+
+            // ===== FLEET RENTAL ENDPOINTS =====
+            
+            // GET /api/fleet - List all fleets
+            else if (req.method === 'GET' && pathname === '/api/fleet') {
+                if (!checkTenant(req, res)) return;
+                
+                res.writeHead(200);
+                res.end(JSON.stringify(MOCK_FLEETS));
+            }
+
+            // GET /api/fleet/:fleetId/vehicles - List vehicles for fleet
+            else if (req.method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/vehicles$/)) {
+                if (!checkTenant(req, res)) return;
+                
+                const fleetId = pathname.split('/')[3];
+                const vehicles = MOCK_VEHICLES.filter(v => v.fleetId === fleetId);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify(vehicles));
+            }
+
+            // GET /api/fleet/:fleetId/contracts - List contracts for fleet
+            else if (req.method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/contracts$/)) {
+                if (!checkTenant(req, res)) return;
+                
+                const fleetId = pathname.split('/')[3];
+                const contracts = MOCK_CONTRACTS.filter(c => c.fleetId === fleetId);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify(contracts));
+            }
+
+            // POST /api/fleet/:fleetId/contracts - Create new contract
+            else if (req.method === 'POST' && pathname.match(/^\/api\/fleet\/[^/]+\/contracts$/)) {
+                if (!checkTenant(req, res)) return;
+                
+                // Role enforcement - viewer cannot write
+                const role = req.headers['x-role'];
+                const tenantId = req.headers['x-tenant-id'];
+                if (role === 'viewer') {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: 'viewer role cannot create contracts',
+                        code: 'FORBIDDEN_ROLE',
+                    }));
+                    console.log(`[BLOCKED-WRITE] Tenant: ${tenantId} | Role: ${role} | Path: /api/fleet/...contracts | Reason: viewer cannot write`);
+                    return;
+                }
+                
+                let body = '';
+                req.on('data', chunk => {
+                    body += chunk.toString();
+                });
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body);
+                        const fleetId = pathname.split('/')[3];
+                        
+                        // Create new contract
+                        const newContract = {
+                            contractId: `CNT-${Date.now()}`,
+                            fleetId,
+                            ...payload,
+                            status: 'DRAFT',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                        };
+                        
+                        MOCK_CONTRACTS.push(newContract);
+                        
+                        res.writeHead(201);
+                        res.end(JSON.stringify(newContract));
+                    } catch (error) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({
+                            success: false,
+                            message: 'Invalid request body',
+                            error: error.message,
+                            timestamp: new Date().toISOString(),
+                        }));
+                    }
+                });
+                return;
+            }
+
+            // GET /api/vehicle/:vehicleId/summary - Get vehicle summary (V2.1)
+            else if (req.method === 'GET' && pathname.match(/^\/api\/vehicle\/[^/]+\/summary$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const vehicleId = pathname.split('/')[3];
+                const vehicle = MOCK_VEHICLES.find(v => v.vehicleId === vehicleId);
+                
+                if (!vehicle) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({
+                        error: 'Vehicle not found',
+                        vehicleId,
+                    }));
+                    return;
+                }
+
+                // Calculate upcoming maintenance
+                const nextKmGap = vehicle.nextMaintenanceKm - vehicle.currentMileage;
+                const nextDateGap = new Date(vehicle.nextMaintenanceDate) - new Date();
+                const upcoming = (nextKmGap <= 3000) || (nextDateGap <= 30 * 24 * 60 * 60 * 1000);
+
+                // Get related data
+                const recentMaintenance = MOCK_MAINTENANCE_LOGS[vehicleId] || [];
+                const partsRecs = MOCK_PARTS_RECOMMENDATIONS[vehicleId] || [];
+                const servicePoints = MOCK_SERVICE_POINTS[vehicleId] || [];
+
+                // Calculate last 30 days
+                const now = new Date();
+                const last30DaysMs = 30 * 24 * 60 * 60 * 1000;
+                const last30Date = new Date(now.getTime() - last30DaysMs);
+
+                // Filter MOCK_COSTS for last 30 days
+                const costBreakdown = (MOCK_COSTS[vehicleId] || [])
+                  .filter(c => new Date(c.date) >= last30Date)
+                  .map(c => ({
+                    date: c.date,
+                    category: c.category,
+                    amount: c.amount,
+                    source: c.source || 'System'
+                  }));
+
+                // Filter MOCK_COST_LEDGER for this vehicle and last 30 days
+                const ledgerCosts = MOCK_COST_LEDGER
+                  .filter(c => c.vehicleId === vehicleId && new Date(c.date) >= last30Date)
+                  .map(lc => ({
+                    date: lc.date,
+                    category: lc.category,
+                    amount: lc.amount,
+                    source: lc.source
+                  }));
+
+                // Combine all costs (MOCK_COSTS + MOCK_COST_LEDGER)
+                const allCosts = [...costBreakdown, ...ledgerCosts];
+
+                // Calculate last 30 days total cost
+                const last30DaysTotal = allCosts.reduce((sum, c) => sum + c.amount, 0);
+
+                // Build risk summary (simplified)
+                const riskFlags = [];
+                if (vehicle.riskScore > 60) riskFlags.push('High Risk Score');
+                if (vehicle.status === 'MAINTENANCE') riskFlags.push('Under Maintenance');
+                if (vehicle.status === 'OUT_OF_SERVICE') riskFlags.push('Out of Service');
+
+                // Build category-wise breakdown
+                const categoryBreakdown = {
+                  maintenance: 0,
+                  insurance: 0,
+                  fuel: 0,
+                  other: 0
+                };
+                
+                allCosts.forEach(cost => {
+                  const cat = cost.category?.toLowerCase() || 'other';
+                  if (cat === 'maintenance') categoryBreakdown.maintenance += cost.amount;
+                  else if (cat === 'insurance') categoryBreakdown.insurance += cost.amount;
+                  else if (cat === 'fuel') categoryBreakdown.fuel += cost.amount;
+                  else categoryBreakdown.other += cost.amount;
+                });
+
+                const summary = {
+                    vehicleId: vehicle.vehicleId,
+                    vin: vehicle.vin,
+                    plateNumber: vehicle.plateNumber,
+                    brand: vehicle.brand,
+                    model: vehicle.model,
+                    year: vehicle.year,
+                    status: vehicle.status,
+                    currentMileage: vehicle.currentMileage,
+                    
+                    risk: {
+                        score: vehicle.riskScore || 0,
+                        flags: riskFlags,
+                    },
+                    
+                    maintenance: {
+                        nextMaintenanceKm: vehicle.nextMaintenanceKm,
+                        nextMaintenanceDate: vehicle.nextMaintenanceDate,
+                        upcoming,
+                        recent: recentMaintenance.slice(0, 3),
+                    },
+                    
+                    costs: {
+                        last30DaysTotal,
+                        breakdown: categoryBreakdown,
+                        items: allCosts,
+                    },
+                    
+                    parts: {
+                        recommendedOffersCount: partsRecs.length,
+                        topParts: partsRecs.slice(0, 3),
+                    },
+                    
+                    service: {
+                        recommendedServicePoints: servicePoints.slice(0, 3),
+                    },
+                };
+
+                res.writeHead(200);
+                res.end(JSON.stringify(summary));
+                return;
+            }
+
+            // ===== V2.2 Fleet Policy =====
+            // GET /api/fleet/:fleetId/policy
+            else if (req.method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/policy$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const fleetId = pathname.split('/')[3];
+                const policy = MOCK_FLEET_POLICIES[fleetId] || {
+                    fleetId,
+                    autoSetServicedOnRedirect: false,
+                };
+
+                res.writeHead(200);
+                res.end(JSON.stringify(policy));
+                return;
+            }
+
+            // PATCH /api/fleet/:fleetId/policy
+            else if (req.method === 'PATCH' && pathname.match(/^\/api\/fleet\/[^/]+\/policy$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({
+                        error: 'Forbidden: Viewer role cannot modify fleet policy',
+                    }));
+                    return;
+                }
+
+                const fleetId = pathname.split('/')[3];
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body);
+                        MOCK_FLEET_POLICIES[fleetId] = {
+                            fleetId,
+                            autoSetServicedOnRedirect: payload.autoSetServicedOnRedirect !== undefined ? payload.autoSetServicedOnRedirect : (MOCK_FLEET_POLICIES[fleetId]?.autoSetServicedOnRedirect || false),
+                            costApplyMode: payload.costApplyMode || (MOCK_FLEET_POLICIES[fleetId]?.costApplyMode || 'OnClose'), // V2.4
+                        };
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify(MOCK_FLEET_POLICIES[fleetId]));
+                    } catch (e) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body' }));
+                    }
+                });
+                return;
+            }
+
+            // ===== V2.2 Service Redirects =====
+            // GET /api/vehicle/:vehicleId/service-redirects
+            else if (req.method === 'GET' && pathname.match(/^\/api\/vehicle\/[^/]+\/service-redirects$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const vehicleId = pathname.split('/')[3];
+                const redirects = MOCK_SERVICE_REDIRECTS.filter(sr => sr.vehicleId === vehicleId);
+
+                res.writeHead(200);
+                res.end(JSON.stringify(redirects));
+                return;
+            }
+
+            // POST /api/vehicle/:vehicleId/service-redirects (V2.5 - supports RoutineMaintenance & BreakdownIncident)
+            else if (req.method === 'POST' && pathname.match(/^\/api\/vehicle\/[^/]+\/service-redirects$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({
+                        error: 'Forbidden: Viewer role cannot create service redirects',
+                    }));
+                    return;
+                }
+
+                const vehicleId = pathname.split('/')[3];
+                const vehicle = MOCK_VEHICLES.find(v => v.vehicleId === vehicleId);
+                
+                if (!vehicle) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: `Vehicle not found: ${vehicleId}` }));
+                    return;
+                }
+
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body);
+                        const { servicePointId, redirectType, reason, applyStatusChange, trigger, incident } = payload;
+
+                        // V2.5 Validation
+                        if (!redirectType || !['RoutineMaintenance', 'BreakdownIncident'].includes(redirectType)) {
+                            res.writeHead(400);
+                            res.end(JSON.stringify({ error: 'redirectType must be RoutineMaintenance or BreakdownIncident' }));
+                            return;
+                        }
+
+                        if (redirectType === 'BreakdownIncident') {
+                            if (!incident || !incident.symptom || !incident.severity) {
+                                res.writeHead(400);
+                                res.end(JSON.stringify({ error: 'BreakdownIncident requires incident with symptom and severity' }));
+                                return;
+                            }
+                        }
+
+                        // Find service point
+                        const servicePointsList = MOCK_SERVICE_POINTS[vehicleId] || [];
+                        const servicePoint = servicePointsList.find(sp => sp.servicePointId === servicePointId);
+
+                        if (!servicePoint) {
+                            res.writeHead(404);
+                            res.end(JSON.stringify({ error: 'Service point not found' }));
+                            return;
+                        }
+
+                        // Generate redirect ID
+                        const redirectId = 'SR-' + Math.random().toString(36).substr(2, 9);
+
+                        // Determine if status should change
+                        const fleetPolicy = MOCK_FLEET_POLICIES[vehicle.fleetId] || {
+                            autoSetServicedOnRedirect: false,
+                        };
+                        const shouldChangeStatus = applyStatusChange !== undefined 
+                            ? applyStatusChange 
+                            : fleetPolicy.autoSetServicedOnRedirect;
+
+                        // Create redirect (V2.5 schema)
+                        const redirect = {
+                            redirectId,
+                            vehicleId: vehicle.vehicleId,
+                            fleetId: vehicle.fleetId,
+                            vin: vehicle.vin,
+                            plateNumber: vehicle.plateNumber,
+                            servicePointId: servicePoint.servicePointId,
+                            servicePointName: servicePoint.name,
+                            servicePointType: servicePoint.type || 'Partner',
+                            city: servicePoint.city,
+                            reason,
+                            redirectType, // V2.5: RoutineMaintenance | BreakdownIncident
+                            trigger: trigger || null, // V2.5: For RoutineMaintenance
+                            incident: incident || null, // V2.5: For BreakdownIncident
+                            createdBy: req.headers['x-user'] || 'ops',
+                            createdAt: new Date().toISOString(),
+                            applyStatusChange: shouldChangeStatus,
+                            newStatus: shouldChangeStatus ? 'Serviced' : undefined,
+                        };
+
+                        // Add to redirects list
+                        MOCK_SERVICE_REDIRECTS.push(redirect);
+
+                        // V2.6 - Create ServiceAppointment from redirect
+                        const appointmentId = 'APT-' + Math.random().toString(36).substr(2, 9);
+                        const appointment = {
+                            appointmentId,
+                            tenantFleetId: vehicle.fleetId,
+                            source: 'FleetRental',
+                            sourceRefId: redirectId,
+                            vehicleId: vehicle.vehicleId,
+                            vin: vehicle.vin,
+                            plateNumber: vehicle.plateNumber,
+                            servicePointId: servicePoint.servicePointId,
+                            servicePointName: servicePoint.name,
+                            appointmentType: redirectType === 'RoutineMaintenance' ? 'Routine' : 'Breakdown',
+                            scheduledAt: trigger?.dueDateAtRedirect || null,
+                            arrivalMode: 'Appointment',
+                            status: 'Scheduled',
+                            tags: [],
+                            createdAt: new Date().toISOString(),
+                        };
+
+                        MOCK_SERVICE_APPOINTMENTS.push(appointment);
+
+                        // Update vehicle status if needed
+                        if (shouldChangeStatus) {
+                            vehicle.status = 'Serviced';
+                        }
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify({
+                            redirectId: redirect.redirectId,
+                            appointmentId: appointment.appointmentId, // V2.6 - Return appointment ID
+                            redirect,
+                            appointment, // V2.6 - Return appointment object
+                            updatedVehicle: {
+                              vehicleId: vehicle.vehicleId,
+                              status: vehicle.status,
+                              applyStatusChange: shouldChangeStatus,
+                            },
+                        }));
+                    } catch (e) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body', details: e.message }));
+                    }
+                });
+                return;
+            }
+
+            // ===== V2.3 Work Orders =====
+            // POST /api/service-redirects/:redirectId/create-workorder
+            else if (req.method === 'POST' && pathname.match(/^\/api\/service-redirects\/[^/]+\/create-workorder$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({
+                        error: 'Forbidden: Viewer role cannot create work orders',
+                    }));
+                    return;
+                }
+
+                const redirectId = pathname.split('/')[3];
+                const redirect = MOCK_SERVICE_REDIRECTS.find(r => r.redirectId === redirectId);
+
+                if (!redirect) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: 'Service redirect not found' }));
+                    return;
+                }
+
+                if (redirect.workOrderId) {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'Work order already exists for this redirect' }));
+                    return;
+                }
+
+                // Generate work order ID
+                const workOrderId = 'WO-' + Math.random().toString(36).substr(2, 9);
+
+                // V2.5 - Map redirectType to workOrderType
+                const workOrderType = redirect.redirectType === 'RoutineMaintenance' ? 'Routine' : 'Breakdown';
+
+                // Create work order
+                const workOrder = {
+                    workOrderId,
+                    vehicleId: redirect.vehicleId,
+                    fleetId: redirect.fleetId,
+                    servicePointId: redirect.servicePointId,
+                    source: 'FleetRedirect',
+                    status: 'Open',
+                    createdAt: new Date().toISOString(),
+                    // V2.5
+                    workOrderType,
+                    relatedRedirectId: redirectId,
+                    lineItems: [],
+                    plannedTotal: 0,
+                    extraTotal: 0,
+                    totalAmount: 0,
+                    currency: 'TRY',
+                    costApplied: false,
+                    approval: {
+                        status: 'NotRequested',
+                    },
+                };
+
+                // Link redirect to work order
+                redirect.workOrderId = workOrderId;
+
+                // Add to work orders list
+                MOCK_WORK_ORDERS.push(workOrder);
+
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    workOrderId,
+                    status: 'Open',
+                    workOrderType, // V2.5
+                    approval: workOrder.approval, // V2.5
+                }));
+                return;
+            }
+
+            // GET /api/workorders?fleetId=FLEET-001
+            else if (req.method === 'GET' && pathname === '/api/workorders') {
+                if (!checkTenant(req, res)) return;
+
+                const urlObj = url.parse(req.url, true);
+                const fleetId = urlObj.query.fleetId;
+
+                let orders = MOCK_WORK_ORDERS;
+                if (fleetId) {
+                    orders = orders.filter(wo => wo.fleetId === fleetId);
+                }
+
+                res.writeHead(200);
+                res.end(JSON.stringify(orders));
+                return;
+            }
+
+            // ===== V2.4 Work Order Cost Management =====
+            // GET /api/workorders/:id
+            else if (req.method === 'GET' && pathname.match(/^\/api\/workorders\/[^/]+$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const workOrderId = pathname.split('/')[3];
+                const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                if (!workOrder) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: 'Work order not found' }));
+                    return;
+                }
+
+                res.writeHead(200);
+                res.end(JSON.stringify(workOrder));
+                return;
+            }
+
+            // PATCH /api/workorders/:id (update status, etc.)
+            else if (req.method === 'PATCH' && pathname.match(/^\/api\/workorders\/[^/]+$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot modify work orders' }));
+                    return;
+                }
+
+                let body = '';
+                req.on('data', chunk => { body += chunk; });
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body);
+                        const workOrderId = pathname.split('/')[3];
+                        const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                        if (!workOrder) {
+                            res.writeHead(404);
+                            res.end(JSON.stringify({ error: 'Work order not found' }));
+                            return;
+                        }
+
+                        // Update status if provided
+                        if (payload.status && ['Open', 'InProgress', 'Closed'].includes(payload.status)) {
+                            // V2.5 - Close gate: Check approval requirements
+                            if (payload.status === 'Closed') {
+                                if (workOrder.workOrderType === 'Breakdown') {
+                                    // Breakdown: approval MUST be Approved
+                                    if (!workOrder.approval || workOrder.approval.status !== 'Approved') {
+                                        res.writeHead(409);
+                                        res.end(JSON.stringify({
+                                            error: 'Approval required',
+                                            details: 'Breakdown work orders require approval before closing',
+                                        }));
+                                        return;
+                                    }
+                                } else if (workOrder.workOrderType === 'Routine' && workOrder.extraTotal > 0) {
+                                    // Routine with extras: approval MUST be Approved
+                                    if (!workOrder.approval || workOrder.approval.status !== 'Approved') {
+                                        res.writeHead(409);
+                                        res.end(JSON.stringify({
+                                            error: 'Extra approval required',
+                                            details: 'Routine work orders with extra items require approval before closing',
+                                        }));
+                                        return;
+                                    }
+                                }
+                                // Routine with no extras: no approval required
+                            }
+
+                            workOrder.status = payload.status;
+
+                            // V2.4/V2.5: If closing and policy.costApplyMode === 'OnClose', auto-apply cost
+                            if (payload.status === 'Closed') {
+                                const policy = MOCK_FLEET_POLICIES[workOrder.fleetId];
+                                if (policy && policy.costApplyMode === 'OnClose' && !workOrder.costApplied) {
+                                    // V2.5 - Calculate amount based on approval
+                                    let costAmount = workOrder.plannedTotal || 0;
+                                    if (workOrder.workOrderType === 'Routine' && workOrder.approval?.approvedExtraTotal !== undefined) {
+                                        costAmount += workOrder.approval.approvedExtraTotal;
+                                    } else if (workOrder.workOrderType === 'Breakdown' && workOrder.approval?.approvedExtraTotal !== undefined) {
+                                        costAmount = workOrder.approval.approvedExtraTotal;
+                                    }
+
+                                    // Auto-apply cost
+                                    const costId = 'CL-' + Math.random().toString(36).substr(2, 9);
+                                    MOCK_COST_LEDGER.push({
+                                        costId,
+                                        vehicleId: workOrder.vehicleId,
+                                        fleetId: workOrder.fleetId,
+                                        category: 'Maintenance',
+                                        amount: costAmount,
+                                        currency: workOrder.currency || 'TRY',
+                                        date: new Date().toISOString(),
+                                        source: 'WorkOrder',
+                                        sourceRefId: workOrderId,
+                                        notes: `Cost from Work Order ${workOrderId}`,
+                                        createdAt: new Date().toISOString(),
+                                    });
+                                    workOrder.costApplied = true;
+                                }
+                            }
+                        }
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify(workOrder));
+                    } catch (err) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body' }));
+                    }
+                });
+                return;
+            }
+
+            // POST /api/workorders/:id/line-items (add line items)
+            else if (req.method === 'POST' && pathname.match(/^\/api\/workorders\/[^/]+\/line-items$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot add line items' }));
+                    return;
+                }
+
+                let body = '';
+                req.on('data', chunk => { body += chunk; });
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body);
+                        const workOrderId = pathname.split('/')[3];
+                        const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                        if (!workOrder) {
+                            res.writeHead(404);
+                            res.end(JSON.stringify({ error: 'Work order not found' }));
+                            return;
+                        }
+
+                        // Initialize lineItems if needed
+                        if (!workOrder.lineItems) {
+                            workOrder.lineItems = [];
+                        }
+
+                        // Create new line item (V2.5 - include scope)
+                        const lineItem = {
+                            lineId: 'LI-' + Math.random().toString(36).substr(2, 9),
+                            type: payload.type, // 'Labor' or 'Part'
+                            description: payload.description,
+                            qty: payload.qty || 1,
+                            unitPrice: payload.unitPrice || 0,
+                            currency: payload.currency || 'TRY',
+                            scope: payload.scope || 'Planned', // V2.5 - Default 'Planned'
+                        };
+
+                        workOrder.lineItems.push(lineItem);
+
+                        // V2.5 - Recalculate plannedTotal and extraTotal
+                        workOrder.plannedTotal = workOrder.lineItems
+                            .filter(li => li.scope === 'Planned')
+                            .reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+                        workOrder.extraTotal = workOrder.lineItems
+                            .filter(li => li.scope === 'Extra')
+                            .reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+                        workOrder.totalAmount = workOrder.plannedTotal + workOrder.extraTotal;
+                        workOrder.currency = payload.currency || 'TRY';
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify({
+                            lineId: lineItem.lineId,
+                            totalAmount: workOrder.totalAmount,
+                            plannedTotal: workOrder.plannedTotal, // V2.5
+                            extraTotal: workOrder.extraTotal, // V2.5
+                        }));
+                    } catch (err) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body' }));
+                    }
+                });
+                return;
+            }
+
+            // ===== V2.5 APPROVAL WORKFLOW =====
+
+            // POST /api/workorders/:id/request-approval
+            else if (req.method === 'POST' && pathname.match(/^\/api\/workorders\/[^/]+\/request-approval$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot request approval' }));
+                    return;
+                }
+
+                const workOrderId = pathname.split('/')[3];
+                const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                if (!workOrder) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: 'Work order not found' }));
+                    return;
+                }
+
+                // Update approval status
+                workOrder.approval = workOrder.approval || { status: 'NotRequested' };
+                workOrder.approval.status = 'Requested';
+                workOrder.approval.requestedAt = new Date().toISOString();
+                workOrder.approval.requestedBy = req.headers['x-role']; // simplified, should be user ID
+
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    message: 'Approval requested',
+                    approval: workOrder.approval,
+                }));
+                return;
+            }
+
+            // POST /api/workorders/:id/approve
+            else if (req.method === 'POST' && pathname.match(/^\/api\/workorders\/[^/]+\/approve$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot approve' }));
+                    return;
+                }
+
+                let body = '';
+                req.on('data', chunk => { body += chunk; });
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body || '{}');
+                        const workOrderId = pathname.split('/')[3];
+                        const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                        if (!workOrder) {
+                            res.writeHead(404);
+                            res.end(JSON.stringify({ error: 'Work order not found' }));
+                            return;
+                        }
+
+                        // V2.5 - Approval logic based on workOrderType
+                        if (workOrder.workOrderType === 'Routine') {
+                            // For Routine: if extraTotal > 0, must specify approvedExtraTotal
+                            if (workOrder.extraTotal && workOrder.extraTotal > 0) {
+                                if (payload.approvedExtraTotal === undefined) {
+                                    res.writeHead(400);
+                                    res.end(JSON.stringify({
+                                        error: 'approvedExtraTotal required for Routine with extras',
+                                    }));
+                                    return;
+                                }
+                                if (payload.approvedExtraTotal < 0 || payload.approvedExtraTotal > workOrder.extraTotal) {
+                                    res.writeHead(400);
+                                    res.end(JSON.stringify({
+                                        error: 'approvedExtraTotal must be between 0 and extraTotal',
+                                    }));
+                                    return;
+                                }
+                                workOrder.approval.approvedExtraTotal = payload.approvedExtraTotal;
+                            }
+                        } else if (workOrder.workOrderType === 'Breakdown') {
+                            // For Breakdown: approvedExtraTotal defaults to totalAmount
+                            workOrder.approval.approvedExtraTotal = payload.approvedExtraTotal || workOrder.totalAmount;
+                        }
+
+                        workOrder.approval.status = 'Approved';
+                        workOrder.approval.approvedAt = new Date().toISOString();
+                        workOrder.approval.approvedBy = req.headers['x-role'];
+                        workOrder.approval.note = payload.note;
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify({
+                            message: 'Approved',
+                            approval: workOrder.approval,
+                        }));
+                    } catch (err) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body' }));
+                    }
+                });
+                return;
+            }
+
+            // POST /api/workorders/:id/reject
+            else if (req.method === 'POST' && pathname.match(/^\/api\/workorders\/[^/]+\/reject$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot reject' }));
+                    return;
+                }
+
+                let body = '';
+                req.on('data', chunk => { body += chunk; });
+                req.on('end', () => {
+                    try {
+                        const payload = JSON.parse(body || '{}');
+                        const workOrderId = pathname.split('/')[3];
+                        const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                        if (!workOrder) {
+                            res.writeHead(404);
+                            res.end(JSON.stringify({ error: 'Work order not found' }));
+                            return;
+                        }
+
+                        if (!payload.note) {
+                            res.writeHead(400);
+                            res.end(JSON.stringify({ error: 'Rejection note required' }));
+                            return;
+                        }
+
+                        workOrder.approval.status = 'Rejected';
+                        workOrder.approval.rejectedAt = new Date().toISOString();
+                        workOrder.approval.rejectedBy = req.headers['x-role'];
+                        workOrder.approval.note = payload.note;
+
+                        res.writeHead(200);
+                        res.end(JSON.stringify({
+                            message: 'Rejected',
+                            approval: workOrder.approval,
+                        }));
+                    } catch (err) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: 'Invalid request body' }));
+                    }
+                });
+                return;
+            }
+
+            // POST /api/workorders/:id/apply-cost (apply cost to ledger - V2.5)
+            else if (req.method === 'POST' && pathname.match(/^\/api\/workorders\/[^/]+\/apply-cost$/)) {
+                if (!checkTenant(req, res)) return;
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot apply costs' }));
+                    return;
+                }
+
+                const workOrderId = pathname.split('/')[3];
+                const workOrder = MOCK_WORK_ORDERS.find(wo => wo.workOrderId === workOrderId);
+
+                if (!workOrder) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: 'Work order not found' }));
+                    return;
+                }
+
+                // V2.5 - Check cost already applied
+                if (workOrder.costApplied) {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'Cost already applied for this work order' }));
+                    return;
+                }
+
+                // V2.5 - Check closed status (409 Conflict instead of 400)
+                if (workOrder.status !== 'Closed') {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'WorkOrder must be Closed before applying cost' }));
+                    return;
+                }
+
+                // V2.5 - Check approval requirements
+                if (workOrder.workOrderType === 'Breakdown' && workOrder.approval?.status !== 'Approved') {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'Breakdown requires approval before applying cost' }));
+                    return;
+                }
+
+                if (workOrder.workOrderType === 'Routine' && workOrder.extraTotal > 0 && workOrder.approval?.status !== 'Approved') {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'Routine with extras requires approval before applying cost' }));
+                    return;
+                }
+
+                // Calculate cost amount based on workOrderType and approval
+                let costAmount = 0;
+                if (workOrder.workOrderType === 'Routine') {
+                    costAmount = workOrder.plannedTotal || 0;
+                    if (workOrder.extraTotal > 0 && workOrder.approval?.approvedExtraTotal !== undefined) {
+                        costAmount += workOrder.approval.approvedExtraTotal;
+                    }
+                } else if (workOrder.workOrderType === 'Breakdown') {
+                    // For Breakdown, use approvedExtraTotal if available, else totalAmount
+                    if (workOrder.approval?.approvedExtraTotal !== undefined) {
+                        costAmount = workOrder.approval.approvedExtraTotal;
+                    } else {
+                        costAmount = workOrder.totalAmount || 0;
+                    }
+                }
+
+                // Check if there's actually a cost to apply
+                if (costAmount <= 0) {
+                    res.writeHead(409);
+                    res.end(JSON.stringify({ error: 'No cost to apply (totalAmount is 0 or negative)' }));
+                    return;
+                }
+
+                // Create cost ledger entry
+                const costId = 'CL-' + Math.random().toString(36).substr(2, 9);
+                MOCK_COST_LEDGER.push({
+                    costId,
+                    vehicleId: workOrder.vehicleId,
+                    fleetId: workOrder.fleetId,
+                    category: 'Maintenance',
+                    amount: costAmount,
+                    currency: workOrder.currency || 'TRY',
+                    date: new Date().toISOString(),
+                    source: 'WorkOrder',
+                    sourceRefId: workOrderId,
+                    notes: `Cost from Work Order ${workOrderId}`,
+                    createdAt: new Date().toISOString(),
+                });
+
+                workOrder.costApplied = true;
+
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    costId,
+                    amount: costAmount,
+                    message: 'Cost applied successfully'
+                }));
+                return;
+            }
+
+            // ===== V2.6 MAINTENANCE ENDPOINTS =====
+            // GET /api/maintenance/appointments (list appointments with status filter)
+            else if (req.method === 'GET' && pathname.match(/^\/api\/maintenance\/appointments/)) {
+                if (!checkTenant(req, res)) return;
+
+                // V2.6 - x-module header check for Maintenance module
+                const module = req.headers['x-module'];
+                if (module !== 'Maintenance') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'This endpoint is for Maintenance module only (x-module: Maintenance)' }));
+                    return;
+                }
+
+                // Parse status filter ?status=Scheduled|Arrived|Accepted
+                const parsedUrl = new URL(`http://${req.headers.host}${req.url}`);
+                const statusFilter = parsedUrl.searchParams.get('status');
+                
+                // Default: Scheduled + Arrived
+                const defaultStatuses = ['Scheduled', 'Arrived'];
+                const allowedStatuses = statusFilter 
+                    ? statusFilter.split('|').filter(s => ['Scheduled', 'Arrived', 'Accepted', 'Cancelled'].includes(s))
+                    : defaultStatuses;
+
+                const filtered = MOCK_SERVICE_APPOINTMENTS.filter(apt => 
+                    allowedStatuses.includes(apt.status)
+                );
+
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    appointments: filtered,
+                    count: filtered.length,
+                    filter: { status: allowedStatuses }
+                }));
+                return;
+            }
+
+            // POST /api/maintenance/appointments/:appointmentId/accept (Araç Kabul -> WorkOrder)
+            else if (req.method === 'POST' && pathname.match(/^\/api\/maintenance\/appointments\/[^/]+\/accept$/)) {
+                if (!checkTenant(req, res)) return;
+
+                // V2.6 - x-module header check
+                const module = req.headers['x-module'];
+                if (module !== 'Maintenance') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'This endpoint is for Maintenance module only' }));
+                    return;
+                }
+
+                const role = req.headers['x-role'];
+                if (role === 'viewer') {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: 'Forbidden: Viewer cannot accept appointments' }));
+                    return;
+                }
+
+                const appointmentId = pathname.split('/')[4];
+                const appointment = MOCK_SERVICE_APPOINTMENTS.find(apt => apt.appointmentId === appointmentId);
+
+                if (!appointment) {
+                    res.writeHead(404);
+                    res.end(JSON.stringify({ error: 'Appointment not found' }));
+                    return;
+                }
+
+                // Change appointment status to Accepted
+                appointment.status = 'Accepted';
+
+                // Create WorkOrder from appointment (V2.6 - ServiceAppointment source)
+                const workOrderId = 'WO-' + Math.random().toString(36).substr(2, 9);
+                const workOrder = {
+                    workOrderId,
+                    vehicleId: appointment.vehicleId,
+                    fleetId: appointment.tenantFleetId,
+                    servicePointId: appointment.servicePointId,
+                    source: 'ServiceAppointment', // V2.6 - NEW
+                    sourceAppointmentId: appointmentId, // V2.6 - NEW
+                    status: 'Open',
+                    createdAt: new Date().toISOString(),
+                    lineItems: [],
+                    totalAmount: 0,
+                    costApplied: false,
+                    workOrderType: appointment.appointmentType, // Routine or Breakdown
+                    plannedTotal: 0,
+                    extraTotal: 0,
+                    approval: {
+                        status: 'NotRequested',
+                    },
+                    // V2.6 - Origin information
+                    origin: {
+                        channel: appointment.source, // FleetRental, Individual, Dealer
+                        arrivalMode: appointment.arrivalMode, // Appointment, WalkIn
+                    },
+                };
+
+                MOCK_WORK_ORDERS.push(workOrder);
+
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    message: 'Appointment accepted and work order created',
+                    workOrderId: workOrder.workOrderId,
+                    workOrder,
+                }));
+                return;
+            }
+
+            // ===== 404 =====
             else {
                 res.writeHead(404);
                 res.end(JSON.stringify({
@@ -246,7 +1338,13 @@ server.listen(PORT, () => {
     console.log('   POST /api/oem/ingest');
     console.log('   GET  /api/part-master/catalog');
     console.log('   GET  /api/suppliers');
-    console.log('   GET  /api/oem-mapping?oemPartNumber=...\n');
+    console.log('   GET  /api/oem-mapping?oemPartNumber=...');
+    console.log('   ');
+    console.log('   [Fleet Rental V1]');
+    console.log('   GET  /api/fleet (Header: x-tenant-id)');
+    console.log('   GET  /api/fleet/:fleetId/vehicles (Header: x-tenant-id)');
+    console.log('   GET  /api/fleet/:fleetId/contracts (Header: x-tenant-id)');
+    console.log('   POST /api/fleet/:fleetId/contracts (Header: x-tenant-id)\n');
     console.log('💡 Test: curl http://localhost:3001/api/suppliers\n');
 });
 

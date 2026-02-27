@@ -156,6 +156,48 @@ export async function apiPost<T>(
 }
 
 /**
+ * Make HTTP PATCH request with error handling
+ */
+export async function apiPatch<T>(
+  endpoint: string,
+  data: any,
+  config: ApiClientConfig
+): Promise<T> {
+  const url = `${config.baseURL}${endpoint}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), config.timeout);
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: config.headers,
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: `HTTP ${response.status}: ${response.statusText}`,
+      } as ApiError;
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      throw {
+        status: 0,
+        message: 'Network error - API endpoint unreachable',
+      } as ApiError;
+    }
+    throw error;
+  }
+}
+
+/**
  * Wrapper to check if real API is enabled
  */
 export function isRealApiEnabled(): boolean {
