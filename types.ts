@@ -95,11 +95,13 @@ export enum ViewState {
   REPAIR_SHOPS = 'REPAIR_SHOPS',
   RETAILERS = 'RETAILERS', 
   FLEET_RENTAL = 'FLEET_RENTAL',
+  MAINTENANCE_APPOINTMENTS = 'MAINTENANCE_APPOINTMENTS',
   EXPERTISE = 'EXPERTISE',
   INSURANCE = 'INSURANCE',
   INDIVIDUAL = 'INDIVIDUAL',
   DEALERS = 'DEALERS',
   B2B_NETWORK = 'B2B_NETWORK',
+  AUTO_EXPERT = 'AUTO_EXPERT',
   VIN_ENTRY = 'VIN_ENTRY',
   DETAILS = 'DETAILS',
   HISTORY = 'HISTORY',
@@ -407,6 +409,12 @@ export interface ServiceWorkOrder {
     erpState?: 'PENDING' | 'SYNCED' | 'ERROR' | 'OFFLINE';
     erpLastAttempt?: string;
     erpLastError?: string;
+    // V2.6: Cost Chain
+    plannedTotal?: number;    // Sum of planned cost items
+    extraTotal?: number;      // Sum of extra/emergency costs
+    totalAmount?: number;     // plannedTotal + extraTotal
+    costApplied?: boolean;    // true = cost already recorded to vehicle ledger
+    currency?: 'TRY' | 'USD' | 'EUR';
 }
 
 // --- AUTO ORDER TYPES ---

@@ -2,7 +2,6 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { PART_MASTER_MOCK } from './types/partMaster';
-import { startMockServer } from './src/mocks/server';
 
 // Mock API data
 const MOCK_VEHICLES = [
@@ -120,14 +119,10 @@ function apiMiddlewarePlugin() {
   return {
     name: 'api-middleware',
     configureServer(server: any) {
-      // Start mock server (handles /api/effective-offers, /api/supplier-offers, etc)
-      startMockServer().catch((err: any) => {
-        if (err?.code === 'EADDRINUSE') {
-          console.log('[MockServer] Already running on port 3001');
-        } else {
-          console.error('[MockServer Error]', err?.message);
-        }
-      });
+      // Note: Mock server should be started separately with: npm run dev:mock-server
+      // It runs on port 3001 and handles Fleet Rental + other API endpoints
+      // This allows independent scaling and testing
+      console.log('[Vite] Mock server should be started separately: npm run dev:mock-server');
 
       server.middlewares.use((req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/')) {
@@ -364,12 +359,9 @@ function apiMiddlewarePlugin() {
           return;
         }
 
-        // 404
-        res.writeHead(404);
-        res.end(JSON.stringify({
-          success: false,
-          message: `API not found: ${pathname}`,
-        }));
+        // V2.7 - Pass unhandled /api/* requests to proxy (mock server on port 3001)
+        // This allows /api/workorders, /api/maintenance/*, and other endpoints to reach the mock server
+        next();
       });
     }
   };
@@ -385,6 +377,7 @@ export default defineConfig(({ mode }) => {
           '/api': {
             target: 'http://localhost:3001',
             changeOrigin: true,
+            secure: false,
             rewrite: (path) => path, // Keep the /api prefix
           },
         },

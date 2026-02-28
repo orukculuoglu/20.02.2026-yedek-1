@@ -20,7 +20,7 @@ import {
     getAutoOrderConfigs, updateAutoOrderConfig, getAutoOrderSuggestions,
     approveAutoOrderSuggestion, getProfitabilityMetrics, getErpSyncHistory,
     triggerErpSync, getVehicleList, getServiceIntakePolicy, updateServiceIntakePolicy,
-    REPAIR_DASH_FEED_KEY, DEMO_COST_MAP
+    REPAIR_DASH_FEED_KEY, DEMO_COST_MAP, DEMO_BRAND_MAP
 } from '../services/dataService';
 // Fix: Use consistent lowercase casing for erpOutbox to resolve casing conflict
 import { enqueueEvent, getWorkOrderSyncState, retryWorkOrderNow } from '../services/erp/erpOutbox';
@@ -92,6 +92,9 @@ interface PendingRecommendation {
     timestamp: number;
 }
 
+// V2.6: Defensive helper to safely handle undefined arrays
+const asArray = <T,>(v: T[] | undefined | null): T[] => Array.isArray(v) ? v : [];
+
 export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
     const [activeTab, setActiveTab] = useState<TabId>('REPAIR');
     const [workOrders, setWorkOrders] = useState<ServiceWorkOrder[]>([]);
@@ -128,7 +131,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
             const vinLast4 = wo.operationalDetails?.vinLast4;
             const vehicleName = vinLast4 ? `Araç • ****${vinLast4}` : "Araç (Anonim)";
             const serviceName = wo.operationalDetails?.customerName || wo.customerName || "Mühürlü Servis";
-            const estimatedCost = wo.diagnosisItems.reduce((acc, it) => acc + (it.signalCost || 0), 0);
+            const estimatedCost = asArray(wo.diagnosisItems).reduce((acc, it) => acc + (it?.signalCost || 0), 0);
             
             return {
                 id: wo.id,
@@ -150,6 +153,18 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
     }, [workOrders]);
 
     const applyWorkOrderPatch = (orderId: string, patch: Partial<ServiceWorkOrder>) => {
+        // V2.6: Cost Chain - Apply cost when transitioning to Delivery columns
+        const currentOrder = workOrders.find(o => o.id === orderId);
+        if (currentOrder && patch.status && ['READY_FOR_DELIVERY', 'DELIVERED'].includes(patch.status) && !currentOrder.costApplied) {
+            // Guard: costApplied
+            const total = (currentOrder.plannedTotal || 0) + (currentOrder.extraTotal || 0);
+            if (total > 0) {
+                patch.totalAmount = total;
+                patch.costApplied = true;
+                console.log(`[CostChain] WorkOrder ${orderId} → Status: ${patch.status} | Total: ${total} TRY | costApplied: true`);
+            }
+        }
+
         setWorkOrders(prev => prev.map(o => o.id === orderId ? { 
             ...o, 
             ...patch, 
@@ -181,16 +196,29 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
 
     const fetchOrders = async () => {
         setLoading(true);
-        const data = await getServiceWorkOrders(currentUser.institutionId);
-        setWorkOrders(prev => {
-            if (prev.length === 0) return data;
-            return data.map(fetched => {
-                const local = prev.find(p => p.id === fetched.id);
-                if (local && local.status !== fetched.status) return { ...fetched, ...local };
-                return fetched;
+        try {
+            console.log('[RepairShops.fetchOrders] Starting fetch with institutionId:', currentUser.institutionId);
+            const data = await getServiceWorkOrders(currentUser.institutionId);
+            console.log('[RepairShops.fetchOrders] Received data:', { count: data?.length || 0, items: data?.slice(0, 2) });
+            
+            setWorkOrders(prev => {
+                if (prev.length === 0) {
+                    console.log('[RepairShops.setWorkOrders] Setting initial data:', { newCount: data?.length || 0 });
+                    return data;
+                }
+                const merged = data.map(fetched => {
+                    const local = prev.find(p => p.id === fetched.id);
+                    if (local && local.status !== fetched.status) return { ...fetched, ...local };
+                    return fetched;
+                });
+                console.log('[RepairShops.setWorkOrders] Merged data:', { newCount: merged.length });
+                return merged;
             });
-        });
-        setLoading(false);
+        } catch (err) {
+            console.error('[RepairShops.fetchOrders] Error:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -389,17 +417,17 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
             .map(([plate, count]) => ({ plate, count }));
 
         // Revenue calculations
-        const totalCiro = filteredOrders.reduce((sum, w) => sum + (w.diagnosisItems?.reduce((acc, i) => acc + i.signalCost, 0) || 0), 0);
+        const totalCiro = filteredOrders.reduce((sum, w) => sum + (asArray(w.diagnosisItems).reduce((acc, i) => acc + (i?.signalCost || 0), 0)), 0);
         const averageBasket = totalOrders > 0 ? totalCiro / totalOrders : 0;
 
         // Margin calculation
         let totalProfit = 0;
         filteredOrders.forEach(w => {
-            const sales = w.diagnosisItems?.reduce((acc, i) => acc + i.signalCost, 0) || 0;
-            const cost = w.diagnosisItems?.reduce((acc, i) => {
-                const unitCost = DEMO_COST_MAP[i.item] || (i.signalCost * 0.85);
+            const sales = asArray(w.diagnosisItems).reduce((acc, i) => acc + (i?.signalCost || 0), 0);
+            const cost = asArray(w.diagnosisItems).reduce((acc, i) => {
+                const unitCost = DEMO_COST_MAP[i?.item || ''] || ((i?.signalCost || 0) * 0.85);
                 return acc + unitCost;
-            }, 0) || 0;
+            }, 0);
             totalProfit += (sales - cost);
         });
         const averageMargin = totalCiro > 0 ? (totalProfit / totalCiro) * 100 : 0;
@@ -589,7 +617,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {workOrders.map(so => {
-                                const totalCost = so.diagnosisItems.reduce((acc, i) => acc + i.signalCost, 0);
+                                const totalCost = asArray(so.diagnosisItems).reduce((acc, i) => acc + (i?.signalCost || 0), 0);
                                 const progress = getProgressFromStatus(so.status);
                                 const statusInfo = getStatusLabel(so.status);
                                 const mileage = so.operationalDetails?.mileage;
@@ -657,7 +685,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                                     <h4 className="font-bold text-slate-800 text-sm truncate">{order.operationalHash}</h4>
                                     <p className="text-[10px] text-slate-500 font-medium mt-1 truncate">{order.operationalDetails?.plate || 'Plaka Belirtilmedi'}</p>
                                     <div className="mt-3 flex items-center justify-between text-[9px] text-slate-400 font-medium border-t pt-2 border-slate-50">
-                                        <span>Güncelleme: {order.updatedAt.split(' ')[1] || order.updatedAt}</span>
+                                        <span>Güncelleme: {order.updatedAt ? (order.updatedAt.split(' ')[1] || order.updatedAt) : 'Henüz'}</span>
                                         <ArrowRight size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </div>
@@ -671,7 +699,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
 
     const renderRightPanel = () => {
         if (!selectedOrder) return null;
-        const total = selectedOrder.diagnosisItems.reduce((acc, i) => acc + i.signalCost, 0);
+        const total = asArray(selectedOrder.diagnosisItems).reduce((acc, i) => acc + (i?.signalCost || 0), 0);
         const statusStr = selectedOrder.status.replace('_', ' ').toUpperCase();
 
         return (

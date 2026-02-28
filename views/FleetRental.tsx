@@ -60,18 +60,28 @@ export default function FleetRental() {
     symptom: string;
     severity: 'Low' | 'Medium' | 'High';
     locationCity: string;
+    selectedServicePointId: string | null;
   }>({
     incidentId: 'INC-' + Math.random().toString(36).substr(2, 9),
     title: '',
     symptom: '',
     severity: 'Medium',
     locationCity: '',
+    selectedServicePointId: null,
   });
 
   // Search & filter
   const [searchFleet, setSearchFleet] = useState('');
   const [searchVehicle, setSearchVehicle] = useState('');
   const [searchContract, setSearchContract] = useState('');
+
+  // Debug: Track why buttons are disabled
+  const getButtonDisabledReason = (): string | null => {
+    if (role === 'viewer') return 'Viewer rolü';
+    if (!selectedFleet) return 'Filo seçilmedi';
+    if (!selectedVehicleId) return 'Araç seçilmedi';
+    return null;
+  };
 
   // API status diagnostics
   const [apiStatus, setApiStatus] = useState({
@@ -266,7 +276,13 @@ export default function FleetRental() {
   };
 
   const handleCreateRedirect = async () => {
-    if (!selectedVehicleId || !redirectModal.selectedServicePointId || !selectedFleet) {
+    if (!selectedVehicleId || !selectedFleet) {
+      setError('Lütfen filo ve araç seçiniz');
+      return;
+    }
+
+    if (!redirectModal.selectedServicePointId) {
+      setError('Servis noktası seçiniz');
       return;
     }
 
@@ -276,10 +292,11 @@ export default function FleetRental() {
         servicePointId: redirectModal.selectedServicePointId,
         reason: redirectForm.reason,
         note: redirectForm.note,
+        redirectType: 'RoutineMaintenance',
         applyStatusChange: redirectForm.applyStatusChange,
       });
 
-      // Show toast (V2.6 - Now creates appointment, not work order)
+      // Show toast (V2.6 - Now creates appointment)
       setToast({ show: true, message: 'Randevu oluşturuldu' });
       setTimeout(() => setToast({ show: false, message: '' }), 3000);
 
@@ -287,7 +304,7 @@ export default function FleetRental() {
       const updatedRedirects = await listServiceRedirects(selectedVehicleId);
       setServiceRedirects(updatedRedirects);
 
-      // ALWAYS reload summary to verify status (V2.2.1)
+      // Reload summary
       const updatedSummary = await getVehicleSummary(selectedVehicleId);
       setVehicleSummary(updatedSummary);
 
@@ -295,7 +312,7 @@ export default function FleetRental() {
       setRedirectModal({ open: false, selectedServicePointId: null });
       setRedirectForm({ reason: 'Maintenance', note: '', applyStatusChange: fleetPolicy?.autoSetServicedOnRedirect || false });
     } catch (err) {
-      setError(`Failed to create redirect: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Yönlendirme başarısız: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`);
     } finally {
       setLoading(false);
     }
@@ -429,19 +446,14 @@ export default function FleetRental() {
       setError('Şiddet seçiniz');
       return;
     }
+    if (!breakdownForm.selectedServicePointId) {
+      setError('Servis noktası seçiniz');
+      return;
+    }
 
     try {
-      // Get service points for this vehicle and select first one
-      const servicePointsList = vehicleSummary?.service?.recommendedServicePoints || [];
-      if (servicePointsList.length === 0) {
-        setError('Bu araç için servis noktası bulunamadı');
-        return;
-      }
-
-      const selectedServicePoint = servicePointsList[0]; // Auto-select first available
-
       const redirect = await createServiceRedirect(selectedVehicleId, {
-        servicePointId: selectedServicePoint.servicePointId,
+        servicePointId: breakdownForm.selectedServicePointId,
         redirectType: 'BreakdownIncident',
         reason: 'Breakdown',
         incident: {
@@ -466,13 +478,14 @@ export default function FleetRental() {
         symptom: '',
         severity: 'Medium',
         locationCity: '',
+        selectedServicePointId: null,
       });
 
       // Reload redirects
       const updated = await listServiceRedirects(selectedVehicleId);
       setServiceRedirects(updated);
     } catch (err) {
-      setError(`Arıza bildirimi oluşturulamadı: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`);
+      setError(`Arıza bildirimi başarısız: ${err instanceof Error ? err.message : 'Bilinmeyen hata'}`);
     }
   };
 
@@ -848,30 +861,53 @@ export default function FleetRental() {
                           <h3 className="font-semibold text-gray-900">Yönlendirme İşlemleri (V2.5)</h3>
                         </div>
                         <div className="flex gap-2 mb-4">
-                          <button
-                            onClick={() => setRedirectModal({ open: true, selectedServicePointId: null })}
-                            disabled={role === 'viewer' || !selectedVehicleId}
-                            title={!selectedVehicleId ? 'Önce araç seçiniz' : ''}
-                            className={`flex-1 text-xs px-3 py-2 rounded transition font-semibold ${
-                              role === 'viewer' || !selectedVehicleId
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : 'bg-blue-500 text-white hover:bg-blue-600'
-                            }`}
-                          >
-                            🔧 Bakım İçin Yönlendir
-                          </button>
-                          <button
-                            onClick={() => setShowBreakdownModal(true)}
-                            disabled={role === 'viewer' || !selectedVehicleId}
-                            title={!selectedVehicleId ? 'Önce araç seçiniz' : ''}
-                            className={`flex-1 text-xs px-3 py-2 rounded transition font-semibold ${
-                              role === 'viewer' || !selectedVehicleId
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : 'bg-red-500 text-white hover:bg-red-600'
-                            }`}
-                          >
-                            ⚠️ Arıza Bildir
-                          </button>
+                          {/* Bakım İçin Yönlendir Button */}
+                          <div className="flex-1 relative group">
+                            <button
+                              onClick={() => setRedirectModal({ open: true, selectedServicePointId: null })}
+                              disabled={role === 'viewer' || !selectedFleet || !selectedVehicleId || loading}
+                              title={getButtonDisabledReason() || ''}
+                              className={`w-full text-xs px-3 py-2 rounded transition font-semibold flex items-center justify-center gap-1 ${
+                                role === 'viewer' || !selectedFleet || !selectedVehicleId
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : 'bg-blue-500 text-white hover:bg-blue-600'
+                              }`}
+                            >
+                              🔧 Bakım İçin Yönlendir
+                              {getButtonDisabledReason() && (
+                                <span className="text-lg">ℹ️</span>
+                              )}
+                            </button>
+                            {getButtonDisabledReason() && (
+                              <div className="absolute left-0 top-10 bg-gray-900 text-white text-xs p-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition z-10">
+                                {getButtonDisabledReason()}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Arıza Bildir Button */}
+                          <div className="flex-1 relative group">
+                            <button
+                              onClick={() => setShowBreakdownModal(true)}
+                              disabled={role === 'viewer' || !selectedFleet || !selectedVehicleId || loading}
+                              title={getButtonDisabledReason() || ''}
+                              className={`w-full text-xs px-3 py-2 rounded transition font-semibold flex items-center justify-center gap-1 ${
+                                role === 'viewer' || !selectedFleet || !selectedVehicleId
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : 'bg-red-500 text-white hover:bg-red-600'
+                              }`}
+                            >
+                              ⚠️ Arıza Bildir
+                              {getButtonDisabledReason() && (
+                                <span className="text-lg">ℹ️</span>
+                              )}
+                            </button>
+                            {getButtonDisabledReason() && (
+                              <div className="absolute left-0 top-10 bg-gray-900 text-white text-xs p-2 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition z-10">
+                                {getButtonDisabledReason()}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -959,9 +995,32 @@ export default function FleetRental() {
               {redirectModal.open && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                   <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Servis Yönlendirmesi</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Bakım Yönlendirmesi</h2>
                     
                     <div className="space-y-4">
+                      {/* Service Point Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Servis Noktası *</label>
+                        {vehicleSummary?.service?.recommendedServicePoints && vehicleSummary.service.recommendedServicePoints.length > 0 ? (
+                          <select
+                            value={redirectModal.selectedServicePointId || ''}
+                            onChange={(e) => setRedirectModal({ ...redirectModal, selectedServicePointId: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Servis noktası seçin...</option>
+                            {vehicleSummary.service.recommendedServicePoints.map((sp) => (
+                              <option key={sp.servicePointId} value={sp.servicePointId}>
+                                {sp.name} ({sp.city})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="text-sm text-gray-600 p-2 bg-gray-100 rounded">
+                            Henüz servis noktası tanımlı değil
+                          </div>
+                        )}
+                      </div>
+
                       {/* Reason */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Sebep</label>
@@ -1013,7 +1072,7 @@ export default function FleetRental() {
                       </button>
                       <button
                         onClick={handleCreateRedirect}
-                        disabled={loading}
+                        disabled={loading || !redirectModal.selectedServicePointId}
                         className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 rounded transition"
                       >
                         {loading ? 'Kaydediliyor...' : 'Kaydet'}
@@ -1054,6 +1113,30 @@ export default function FleetRental() {
                         ✕
                       </button>
                     </div>
+
+                    {/* V2.6 - Origin Display */}
+                    {selectedWorkOrder.origin && (
+                      <div className="mb-4 bg-blue-50 p-3 rounded border border-blue-200">
+                        <h3 className="text-xs font-semibold text-blue-900 uppercase tracking-wider mb-2">Kaynak Bilgisi</h3>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-blue-700">Kaynak:</span>
+                            <div className="font-bold text-blue-900">
+                              {selectedWorkOrder.origin.channel === 'FleetRental' && '🚗 Filo Kiralama'}
+                              {selectedWorkOrder.origin.channel === 'Individual' && '👤 Bireysel'}
+                              {selectedWorkOrder.origin.channel === 'Dealer' && '🏪 Galeri'}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Geliş Modu:</span>
+                            <div className="font-bold text-blue-900">
+                              {selectedWorkOrder.origin.arrivalMode === 'Appointment' && '📅 Randevu'}
+                              {selectedWorkOrder.origin.arrivalMode === 'WalkIn' && '🚶 Alışveriş'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Status Dropdown */}
                     <div className="mb-4">
@@ -1196,6 +1279,29 @@ export default function FleetRental() {
                     </div>
 
                     <div className="space-y-3 mb-4">
+                      {/* Service Point Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Servis Noktası *</label>
+                        {vehicleSummary?.service?.recommendedServicePoints && vehicleSummary.service.recommendedServicePoints.length > 0 ? (
+                          <select
+                            value={breakdownForm.selectedServicePointId || ''}
+                            onChange={(e) => setBreakdownForm({ ...breakdownForm, selectedServicePointId: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                          >
+                            <option value="">Servis noktası seçin...</option>
+                            {vehicleSummary.service.recommendedServicePoints.map((sp) => (
+                              <option key={sp.servicePointId} value={sp.servicePointId}>
+                                {sp.name} ({sp.city})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="text-sm text-gray-600 p-2 bg-gray-100 rounded">
+                            Henüz servis noktası tanımlı değil
+                          </div>
+                        )}
+                      </div>
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Arıza Başlığı</label>
                         <input
@@ -1245,7 +1351,8 @@ export default function FleetRental() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleBreakdownIncident}
-                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 transition"
+                        disabled={!breakdownForm.symptom || !breakdownForm.severity || !breakdownForm.selectedServicePointId}
+                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:bg-gray-400 transition"
                       >
                         Arızayı Bildir
                       </button>

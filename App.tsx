@@ -19,7 +19,7 @@ import { UserManagement } from './views/UserManagement';
 import { RepairShops } from './views/RepairShops';
 import { Retailers } from './views/Retailers';
 import FleetRental from './views/FleetRental'; 
-import { ExpertiseCenters } from './views/ExpertiseCenters';
+import MaintenanceAppointments from './views/MaintenanceAppointments';
 import { InsuranceCenter } from './views/InsuranceCenter';
 import { IndividualUsers } from './views/IndividualUsers';
 import { AutoDealers } from './views/AutoDealers';
@@ -30,6 +30,8 @@ import { Plus, ShieldAlert, Lock, EyeOff, ShieldBan, MonitorX } from 'lucide-rea
 import { logSecurityEvent, checkQueryLimit } from './services/securityService';
 // Fix: Use consistent lowercase casing for erpWorker to resolve casing conflict
 import { startERPWorker } from './services/erp/erpWorker';
+// Auto Expert Module
+import { AutoExpertRoutes } from './src/modules/auto-expert/routes';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
@@ -147,7 +149,8 @@ export default function App() {
       case ViewState.REPAIR_SHOPS: return <RepairShops onNavigate={handleViewChange} />;
       case ViewState.RETAILERS: return <Retailers onNavigate={handleViewChange} />;
       case ViewState.FLEET_RENTAL: return <FleetRental />;
-      case ViewState.EXPERTISE: return <ExpertiseCenters onNavigate={handleViewChange} />;
+      case ViewState.MAINTENANCE_APPOINTMENTS: return <MaintenanceAppointments onNavigate={handleViewChange} />;
+      case ViewState.EXPERTISE: return <AutoExpertRoutes />;
       case ViewState.INSURANCE: return <InsuranceCenter onNavigate={handleViewChange} />;
       case ViewState.INDIVIDUAL: return <IndividualUsers onNavigate={handleViewChange} />;
       case ViewState.DEALERS: return <AutoDealers onNavigate={handleViewChange} />;

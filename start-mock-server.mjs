@@ -8,6 +8,9 @@
 
 import http from 'http';
 import url from 'url';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   MOCK_FLEETS,
   MOCK_VEHICLES,
@@ -18,14 +21,48 @@ import {
   MOCK_SERVICE_POINTS,
   MOCK_FLEET_POLICIES,
   MOCK_SERVICE_REDIRECTS,
-  MOCK_WORK_ORDERS,
+  MOCK_WORK_ORDERS as SEED_WORK_ORDERS,
   MOCK_COST_LEDGER,
 } from './src/mocks/fleetRentalSeed.mjs';
 
 const PORT = 3001;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PERSISTENCE_DIR = path.join(__dirname, '.mock-persistence');
 
-// V2.6 - Service Appointments (Maintenance Randevuları) - In-memory
-const MOCK_SERVICE_APPOINTMENTS = [];
+// V2.6 - Persistence Functions
+const ensurePersistenceDir = () => {
+  if (!fs.existsSync(PERSISTENCE_DIR)) {
+    fs.mkdirSync(PERSISTENCE_DIR, { recursive: true });
+  }
+};
+
+const savePersistentState = (key, data) => {
+  ensurePersistenceDir();
+  const filePath = path.join(PERSISTENCE_DIR, `${key}.json`);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error(`Error saving ${key}:`, err.message);
+  }
+};
+
+const loadPersistentState = (key, defaultValue = []) => {
+  ensurePersistenceDir();
+  const filePath = path.join(PERSISTENCE_DIR, `${key}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error(`Error loading ${key}:`, err.message);
+  }
+  return defaultValue;
+};
+
+// V2.6 - Service Appointments (Maintenance Randevuları) - Persistent
+let MOCK_SERVICE_APPOINTMENTS = loadPersistentState('appointments', []);
+let MOCK_WORK_ORDERS = loadPersistentState('workorders', []);
 const MOCK_SUPPLIERS = [
     { supplierId: 'SUP-001', supplierName: 'Martaş Otomotiv', country: 'Turkey' },
     { supplierId: 'SUP-002', supplierName: 'Bosch Distribütör', country: 'Turkey' },
@@ -88,10 +125,16 @@ const MOCK_CROSSREF = [
 
 // Create server
 const server = http.createServer(async (req, res) => {
-    // CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    // CORS - Allow localhost:3003 (dev server)
+    const origin = req.headers.origin;
+    const allowedOrigins = ['http://localhost:3003', 'http://127.0.0.1:3003'];
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tenant-id, x-role');
+    res.setHeader('Access-Control-Request-Method', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Content-Type', 'application/json');
 
     if (req.method === 'OPTIONS') {
@@ -653,6 +696,7 @@ const server = http.createServer(async (req, res) => {
                         };
 
                         MOCK_SERVICE_APPOINTMENTS.push(appointment);
+                        savePersistentState('appointments', MOCK_SERVICE_APPOINTMENTS);  // V2.6 - PERSIST
 
                         // Update vehicle status if needed
                         if (shouldChangeStatus) {
@@ -721,7 +765,7 @@ const server = http.createServer(async (req, res) => {
                     fleetId: redirect.fleetId,
                     servicePointId: redirect.servicePointId,
                     source: 'FleetRedirect',
-                    status: 'Open',
+                    status: 'INTAKE_PENDING',
                     createdAt: new Date().toISOString(),
                     // V2.5
                     workOrderType,
@@ -746,7 +790,7 @@ const server = http.createServer(async (req, res) => {
                 res.writeHead(200);
                 res.end(JSON.stringify({
                     workOrderId,
-                    status: 'Open',
+                    status: 'INTAKE_PENDING',
                     workOrderType, // V2.5
                     approval: workOrder.approval, // V2.5
                 }));
@@ -759,10 +803,72 @@ const server = http.createServer(async (req, res) => {
 
                 const urlObj = url.parse(req.url, true);
                 const fleetId = urlObj.query.fleetId;
+                const tenantId = req.headers['x-tenant-id'];
 
-                let orders = MOCK_WORK_ORDERS;
-                if (fleetId) {
-                    orders = orders.filter(wo => wo.fleetId === fleetId);
+                console.log('[GET /api/workorders] tenantId:', tenantId, '| fleetId:', fleetId, '| MOCK_WORK_ORDERS.length:', MOCK_WORK_ORDERS.length);
+
+                // V2.7 - Filter by tenantId (request header) + optional fleetId
+                let orders = MOCK_WORK_ORDERS.filter(wo => 
+                    wo.tenantId === tenantId && (!fleetId || wo.fleetId === fleetId)
+                );
+
+                // If no workOrders found, derive from accepted appointments (rehydrate)
+                if (orders.length === 0) {
+                    console.log('[GET /api/workorders] Rehydrating from appointments... total appointments:', MOCK_SERVICE_APPOINTMENTS.length);
+                    const acceptedAppointments = MOCK_SERVICE_APPOINTMENTS.filter(apt => 
+                        apt.status === 'Accepted' && apt.workOrderId
+                        // Note: Not filtering by tenantId here - rehydrate all accepted appointments regardless of tenant
+                        // to ensure WorkOrders persist across restarts
+                    );
+                    console.log('[GET /api/workorders] Found', acceptedAppointments.length, 'accepted appointments to rehydrate');
+
+                    orders = acceptedAppointments.map(apt => ({
+                        workOrderId: apt.workOrderId,
+                        id: apt.workOrderId,
+                        tenantId: tenantId, // V2.7 - Use request tenant (e.g., LENT-CORP-DEMO)
+                        customerTenantId: apt.tenantFleetId, // V2.7 - Track original customer fleet
+                        vehicleId: apt.vehicleId,
+                        fleetId: apt.tenantFleetId,
+                        vin: apt.vin,
+                        plateNumber: apt.plateNumber,
+                        servicePointId: apt.servicePointId,
+                        servicePointName: apt.servicePointName,
+                        source: 'ServiceAppointment',
+                        sourceAppointmentId: apt.appointmentId,
+                        status: 'INTAKE_PENDING',
+                        createdAt: apt.acceptedAt || apt.updatedAt || new Date().toISOString(),
+                        updatedAt: apt.acceptedAt || apt.updatedAt || new Date().toISOString(),
+                        operationalHash: apt.appointmentId || 'WO-' + Math.random().toString(36).substr(2, 9),
+                        sourceEventId: apt.appointmentId,
+                        intakeChecklist: [],
+                        diagnosisItems: [],
+                        operationalDetails: {
+                            customerName: 'Müşteri',
+                            customerPhone: '---',
+                            plate: apt.plateNumber || '---',
+                            mileage: 0,
+                        },
+                        lineItems: [],
+                        totalAmount: 0,
+                        costApplied: false,
+                        workOrderType: apt.workOrderType || apt.appointmentType || 'Routine',
+                        plannedTotal: 0,
+                        extraTotal: 0,
+                        approval: { status: 'NotRequested' },
+                        origin: {
+                            channel: apt.source,
+                            arrivalMode: apt.arrivalMode,
+                        },
+                    }));
+
+                    // Apply fleetId filter if specified
+                    if (fleetId) {
+                        orders = orders.filter(o => o.fleetId === fleetId);
+                    }
+
+                    // Cache the rehydrated list
+                    MOCK_WORK_ORDERS = orders;
+                    console.log('[GET /api/workorders] Rehydrated', orders.length, 'workorders');
                 }
 
                 res.writeHead(200);
@@ -815,31 +921,35 @@ const server = http.createServer(async (req, res) => {
                         }
 
                         // Update status if provided
-                        if (payload.status && ['Open', 'InProgress', 'Closed'].includes(payload.status)) {
-                            // V2.5 - Close gate: Check approval requirements
-                            if (payload.status === 'Closed') {
-                                if (workOrder.workOrderType === 'Breakdown') {
-                                    // Breakdown: approval MUST be Approved
-                                    if (!workOrder.approval || workOrder.approval.status !== 'Approved') {
-                                        res.writeHead(409);
-                                        res.end(JSON.stringify({
-                                            error: 'Approval required',
-                                            details: 'Breakdown work orders require approval before closing',
-                                        }));
-                                        return;
-                                    }
-                                } else if (workOrder.workOrderType === 'Routine' && workOrder.extraTotal > 0) {
-                                    // Routine with extras: approval MUST be Approved
-                                    if (!workOrder.approval || workOrder.approval.status !== 'Approved') {
-                                        res.writeHead(409);
-                                        res.end(JSON.stringify({
-                                            error: 'Extra approval required',
-                                            details: 'Routine work orders with extra items require approval before closing',
-                                        }));
-                                        return;
-                                    }
+                        if (payload.status && ['INTAKE_PENDING', 'DIAGNOSIS', 'OFFER_DRAFT', 'WAITING_APPROVAL', 'APPROVED', 'IN_PROGRESS', 'READY_FOR_DELIVERY', 'DELIVERED'].includes(payload.status)) {
+                            const wasApplied = workOrder.costApplied || false;
+                            
+                            // V2.6: Cost Chain - Apply cost when transitioning to Delivery
+                            if (!wasApplied && payload.costApplied === true && ['READY_FOR_DELIVERY', 'DELIVERED'].includes(payload.status)) {
+                                const total = (workOrder.plannedTotal || 0) + (workOrder.extraTotal || 0);
+                                if (total > 0) {
+                                    // Create VehicleCost record
+                                    const costId = 'COST-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                                    MOCK_COST_LEDGER.push({
+                                        costId,
+                                        vehicleId: workOrder.vehicleId,
+                                        fleetId: workOrder.fleetId,
+                                        category: 'Maintenance',
+                                        amount: total,
+                                        currency: workOrder.currency || 'TRY',
+                                        date: new Date().toISOString(),
+                                        source: 'WorkOrder',
+                                        sourceRefId: workOrderId,
+                                        notes: `Maintenance cost from WorkOrder ${workOrderId}`,
+                                        createdAt: new Date().toISOString(),
+                                    });
+                                    workOrder.costApplied = true;
+                                    workOrder.totalAmount = total;
+                                    console.log(`[CostChain] Created cost record: ${costId} | WorkOrder: ${workOrderId} | Amount: ${total} ${workOrder.currency || 'TRY'}`);
+                                    
+                                    // Save cost ledger
+                                    savePersistentState('costLedger', MOCK_COST_LEDGER);
                                 }
-                                // Routine with no extras: no approval required
                             }
 
                             workOrder.status = payload.status;
@@ -875,6 +985,8 @@ const server = http.createServer(async (req, res) => {
                                 }
                             }
                         }
+
+                        savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders after update
 
                         res.writeHead(200);
                         res.end(JSON.stringify(workOrder));
@@ -939,6 +1051,8 @@ const server = http.createServer(async (req, res) => {
                         workOrder.totalAmount = workOrder.plannedTotal + workOrder.extraTotal;
                         workOrder.currency = payload.currency || 'TRY';
 
+                        savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders after adding line item
+
                         res.writeHead(200);
                         res.end(JSON.stringify({
                             lineId: lineItem.lineId,
@@ -981,6 +1095,8 @@ const server = http.createServer(async (req, res) => {
                 workOrder.approval.status = 'Requested';
                 workOrder.approval.requestedAt = new Date().toISOString();
                 workOrder.approval.requestedBy = req.headers['x-role']; // simplified, should be user ID
+
+                savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders after requesting approval
 
                 res.writeHead(200);
                 res.end(JSON.stringify({
@@ -1045,6 +1161,8 @@ const server = http.createServer(async (req, res) => {
                         workOrder.approval.approvedBy = req.headers['x-role'];
                         workOrder.approval.note = payload.note;
 
+                        savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders after approval
+
                         res.writeHead(200);
                         res.end(JSON.stringify({
                             message: 'Approved',
@@ -1093,6 +1211,8 @@ const server = http.createServer(async (req, res) => {
                         workOrder.approval.rejectedAt = new Date().toISOString();
                         workOrder.approval.rejectedBy = req.headers['x-role'];
                         workOrder.approval.note = payload.note;
+
+                        savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders after rejection
 
                         res.writeHead(200);
                         res.end(JSON.stringify({
@@ -1270,17 +1390,24 @@ const server = http.createServer(async (req, res) => {
 
                 // Change appointment status to Accepted
                 appointment.status = 'Accepted';
+                savePersistentState('appointments', MOCK_SERVICE_APPOINTMENTS);  // V2.6 - PERSIST appointments
 
                 // Create WorkOrder from appointment (V2.6 - ServiceAppointment source)
                 const workOrderId = 'WO-' + Math.random().toString(36).substr(2, 9);
+                const requestTenantId = req.headers['x-tenant-id'] || 'LENT-CORP-DEMO';
                 const workOrder = {
                     workOrderId,
+                    tenantId: requestTenantId, // V2.7 - Use request header tenant (LENT-CORP-DEMO for Maintenance)
                     vehicleId: appointment.vehicleId,
-                    fleetId: appointment.tenantFleetId,
+                    fleetId: appointment.tenantFleetId, // Customer tenant (FLEET-001)
+                    customerTenantId: appointment.tenantFleetId, // V2.7 - Track original fleet tenant
+                    vin: appointment.vin,
+                    plateNumber: appointment.plateNumber,
                     servicePointId: appointment.servicePointId,
+                    servicePointName: appointment.servicePointName,
                     source: 'ServiceAppointment', // V2.6 - NEW
                     sourceAppointmentId: appointmentId, // V2.6 - NEW
-                    status: 'Open',
+                    status: 'INTAKE_PENDING',
                     createdAt: new Date().toISOString(),
                     lineItems: [],
                     totalAmount: 0,
@@ -1299,6 +1426,15 @@ const server = http.createServer(async (req, res) => {
                 };
 
                 MOCK_WORK_ORDERS.push(workOrder);
+                savePersistentState('workorders', MOCK_WORK_ORDERS);  // V2.6 - PERSIST workorders
+
+                // Link appointment back to workOrder + persist full appointment data
+                appointment.status = 'Accepted';
+                appointment.workOrderId = workOrderId;
+                appointment.acceptedAt = new Date().toISOString();
+                appointment.workOrderType = appointment.appointmentType; // For rehydration
+                appointment.updatedAt = new Date().toISOString();
+                savePersistentState('appointments', MOCK_SERVICE_APPOINTMENTS);  // V2.6 - PERSIST updated appointment
 
                 res.writeHead(200);
                 res.end(JSON.stringify({

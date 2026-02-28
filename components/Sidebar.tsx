@@ -1,5 +1,5 @@
-import React from 'react';
-import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, PieChart, Cpu, Globe } from 'lucide-react';
+import React, { useState } from 'react';
+import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, PieChart, Cpu, Globe, ChevronDown } from 'lucide-react';
 import { ViewState, SystemPermission } from '../types';
 import { getCurrentUserSecurity } from '../services/securityService';
 
@@ -10,6 +10,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
   const currentUser = getCurrentUserSecurity();
+  const [expandedMenu, setExpandedMenu] = useState<string | null>('maintenance');
   
   const hasPermission = (p: SystemPermission) => currentUser.permissions.includes(p);
 
@@ -17,6 +18,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
     `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer mb-1 ${
       currentView === view 
         ? 'bg-emerald-50 text-emerald-700' 
+        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+    }`;
+
+  const subNavClass = (view: ViewState) =>
+    `flex items-center gap-3 px-6 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer mb-1 ml-2 ${
+      currentView === view 
+        ? 'bg-emerald-50 text-emerald-700 border-l-2 border-emerald-600' 
         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
     }`;
 
@@ -58,9 +66,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
         {hasPermission(SystemPermission.ACCESS_ECOSYSTEM) && (
             <div className="mb-6">
                 <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ekosistem & Paydaşlar</p>
-                <div onClick={() => onChangeView(ViewState.REPAIR_SHOPS)} className={navClass(ViewState.REPAIR_SHOPS)}>
-                    <Wrench size={18} /> Bakım Merkezi
+                
+                {/* BAKIM MERKEZI - Collapsible Menu */}
+                <div>
+                  <div 
+                    onClick={() => {
+                      const isOpen = expandedMenu === 'maintenance';
+                      if (isOpen) {
+                        onChangeView(ViewState.REPAIR_SHOPS);
+                      } else {
+                        setExpandedMenu('maintenance');
+                        onChangeView(ViewState.REPAIR_SHOPS);
+                      }
+                    }}
+                    className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer mb-1 ${
+                      currentView === ViewState.REPAIR_SHOPS || currentView === ViewState.MAINTENANCE_APPOINTMENTS
+                        ? 'bg-emerald-50 text-emerald-700' 
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Wrench size={18} />
+                      <span>Bakım Merkezi</span>
+                    </div>
+                    <ChevronDown 
+                      size={16} 
+                      className={`transition-transform ${expandedMenu === 'maintenance' ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+
+                  {/* Submenu Items */}
+                  {expandedMenu === 'maintenance' && (
+                    <>
+                      <div onClick={() => onChangeView(ViewState.REPAIR_SHOPS)} className={subNavClass(ViewState.REPAIR_SHOPS)}>
+                        📋 İş Emirleri
+                      </div>
+                      <div onClick={() => onChangeView(ViewState.MAINTENANCE_APPOINTMENTS)} className={subNavClass(ViewState.MAINTENANCE_APPOINTMENTS)}>
+                        📅 Randevular
+                      </div>
+                    </>
+                  )}
                 </div>
+
                 <div onClick={() => onChangeView(ViewState.RETAILERS)} className={navClass(ViewState.RETAILERS)}>
                     <ShoppingBag size={18} /> Aftermarket Yönetimi
                 </div>

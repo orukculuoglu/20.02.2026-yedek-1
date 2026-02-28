@@ -1,0 +1,770 @@
+[
+  {
+    "workOrderId": "WO-xiqronehn",
+    "id": "WO-xiqronehn",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-e69vwu1ii",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:41:33.973Z",
+    "updatedAt": "2026-02-28T10:41:33.973Z",
+    "operationalHash": "APT-e69vwu1ii",
+    "sourceEventId": "APT-e69vwu1ii",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-husyxgwlz",
+    "id": "WO-husyxgwlz",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-cunv3iy2a",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:41:37.473Z",
+    "updatedAt": "2026-02-28T10:41:37.473Z",
+    "operationalHash": "APT-cunv3iy2a",
+    "sourceEventId": "APT-cunv3iy2a",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-kiqaythkb",
+    "id": "WO-kiqaythkb",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-cmfkh38o8",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:47:06.002Z",
+    "updatedAt": "2026-02-28T10:47:06.002Z",
+    "operationalHash": "APT-cmfkh38o8",
+    "sourceEventId": "APT-cmfkh38o8",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0002",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-8jfsaip7i",
+    "id": "WO-8jfsaip7i",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-akwqwoigc",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:47:13.174Z",
+    "updatedAt": "2026-02-28T10:47:13.174Z",
+    "operationalHash": "APT-akwqwoigc",
+    "sourceEventId": "APT-akwqwoigc",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0002",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-ndawtukzn",
+    "id": "WO-ndawtukzn",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-003",
+    "fleetId": "FLEET-001",
+    "vin": "WV2ZZZ2JZ2H123456",
+    "plateNumber": "34ABC0003",
+    "servicePointId": "SP-005",
+    "servicePointName": "VW Yetkili",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-ce7ukpsia",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:54:24.964Z",
+    "updatedAt": "2026-02-28T10:54:24.964Z",
+    "operationalHash": "APT-ce7ukpsia",
+    "sourceEventId": "APT-ce7ukpsia",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0003",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-fkwxtaxtv",
+    "id": "WO-fkwxtaxtv",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-003",
+    "fleetId": "FLEET-001",
+    "vin": "WV2ZZZ2JZ2H123456",
+    "plateNumber": "34ABC0003",
+    "servicePointId": "SP-005",
+    "servicePointName": "VW Yetkili",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-yfrcymm4z",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T10:54:27.949Z",
+    "updatedAt": "2026-02-28T10:54:27.949Z",
+    "operationalHash": "APT-yfrcymm4z",
+    "sourceEventId": "APT-yfrcymm4z",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0003",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-aaqlt4ahe",
+    "id": "WO-aaqlt4ahe",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-003",
+    "fleetId": "FLEET-001",
+    "vin": "WV2ZZZ2JZ2H123456",
+    "plateNumber": "34ABC0003",
+    "servicePointId": "SP-005",
+    "servicePointName": "VW Yetkili",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-cnt4s99ij",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T11:09:47.346Z",
+    "updatedAt": "2026-02-28T11:09:47.346Z",
+    "operationalHash": "APT-cnt4s99ij",
+    "sourceEventId": "APT-cnt4s99ij",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0003",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-38v9imqic",
+    "id": "WO-38v9imqic",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-003",
+    "fleetId": "FLEET-001",
+    "vin": "WV2ZZZ2JZ2H123456",
+    "plateNumber": "34ABC0003",
+    "servicePointId": "SP-005",
+    "servicePointName": "VW Yetkili",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-0yql9bhit",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T11:09:44.285Z",
+    "updatedAt": "2026-02-28T11:09:44.285Z",
+    "operationalHash": "APT-0yql9bhit",
+    "sourceEventId": "APT-0yql9bhit",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0003",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-wp4h2f43z",
+    "id": "WO-wp4h2f43z",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-21is1p0gh",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T12:11:41.015Z",
+    "updatedAt": "2026-02-28T12:11:41.015Z",
+    "operationalHash": "APT-21is1p0gh",
+    "sourceEventId": "APT-21is1p0gh",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-jyizisn50",
+    "id": "WO-jyizisn50",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-k5lz69pam",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T12:14:24.784Z",
+    "updatedAt": "2026-02-28T12:14:24.784Z",
+    "operationalHash": "APT-k5lz69pam",
+    "sourceEventId": "APT-k5lz69pam",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0002",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-8ncby3bqu",
+    "id": "WO-8ncby3bqu",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-003",
+    "fleetId": "FLEET-001",
+    "vin": "WV2ZZZ2JZ2H123456",
+    "plateNumber": "34ABC0003",
+    "servicePointId": "SP-005",
+    "servicePointName": "VW Yetkili",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-i7sjgb7wu",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T12:45:50.765Z",
+    "updatedAt": "2026-02-28T12:45:50.765Z",
+    "operationalHash": "APT-i7sjgb7wu",
+    "sourceEventId": "APT-i7sjgb7wu",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0003",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-c1vbxa0bo",
+    "id": "WO-c1vbxa0bo",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-s8af8tgn4",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T12:52:52.338Z",
+    "updatedAt": "2026-02-28T12:52:52.338Z",
+    "operationalHash": "APT-s8af8tgn4",
+    "sourceEventId": "APT-s8af8tgn4",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-2m1uy7f6w",
+    "id": "WO-2m1uy7f6w",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-il59satwp",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T12:54:06.184Z",
+    "updatedAt": "2026-02-28T12:54:06.184Z",
+    "operationalHash": "APT-il59satwp",
+    "sourceEventId": "APT-il59satwp",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0002",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-txyuhlzm4",
+    "id": "WO-txyuhlzm4",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-r9byhyx0m",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T13:42:32.821Z",
+    "updatedAt": "2026-02-28T13:42:32.821Z",
+    "operationalHash": "APT-r9byhyx0m",
+    "sourceEventId": "APT-r9byhyx0m",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-p8tvno2bu",
+    "id": "WO-p8tvno2bu",
+    "tenantId": "LENT-CORP-DEMO",
+    "customerTenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-brczbpjbz",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T13:47:37.338Z",
+    "updatedAt": "2026-02-28T13:47:37.338Z",
+    "operationalHash": "APT-brczbpjbz",
+    "sourceEventId": "APT-brczbpjbz",
+    "intakeChecklist": [],
+    "diagnosisItems": [],
+    "operationalDetails": {
+      "customerName": "Müşteri",
+      "customerPhone": "---",
+      "plate": "34ABC0001",
+      "mileage": 0
+    },
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Breakdown",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-ajzal083q",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-jrqfp674l",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T13:55:22.014Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-2tp1pjlyp",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-dll55akx7",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T13:57:43.090Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-s8qt10xkg",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-xdq1zf8gs",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T14:25:54.511Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-yyuehn7v0",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-nm84brn4m",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T14:57:22.510Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-as0gs4e19",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-001",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WF0LXXWPFA0012345",
+    "plateNumber": "34ABC0001",
+    "servicePointId": "SP-001",
+    "servicePointName": "Ford Beyoğlu",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-yb0ivst6j",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T16:50:48.566Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  },
+  {
+    "workOrderId": "WO-t1jjp5y1c",
+    "tenantId": "FLEET-001",
+    "vehicleId": "VEH-002",
+    "fleetId": "FLEET-001",
+    "customerTenantId": "FLEET-001",
+    "vin": "WDB9040951VM12345",
+    "plateNumber": "34ABC0002",
+    "servicePointId": "SP-003",
+    "servicePointName": "Mercedes Resmi",
+    "source": "ServiceAppointment",
+    "sourceAppointmentId": "APT-rnu8gn0ie",
+    "status": "INTAKE_PENDING",
+    "createdAt": "2026-02-28T20:45:53.197Z",
+    "lineItems": [],
+    "totalAmount": 0,
+    "costApplied": false,
+    "workOrderType": "Routine",
+    "plannedTotal": 0,
+    "extraTotal": 0,
+    "approval": {
+      "status": "NotRequested"
+    },
+    "origin": {
+      "channel": "FleetRental",
+      "arrivalMode": "Appointment"
+    }
+  }
+]

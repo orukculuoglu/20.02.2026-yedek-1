@@ -249,7 +249,7 @@ export interface WorkOrder {
   vehicleId: string;
   fleetId: string;
   servicePointId: string;
-  source: 'FleetRedirect' | 'ServiceAppointment' | 'Manual'; // V2.6 - Now ServiceAppointment
+  source: 'ServiceAppointment' | 'Manual'; // V2.6 - From ServiceAppointment or manual override
   sourceAppointmentId?: string; // V2.6 - Link to ServiceAppointment
   status: 'Open' | 'InProgress' | 'Closed';
   createdAt: string;

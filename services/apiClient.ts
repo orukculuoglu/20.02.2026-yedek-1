@@ -4,6 +4,8 @@
  * Feature flag: VITE_USE_REAL_API (true = real, false = mock)
  */
 
+import { getCurrentUserSecurity } from './securityService';
+
 export interface ApiClientConfig {
   baseURL: string;
   timeout: number;
@@ -39,14 +41,27 @@ export function createApiConfig(): ApiClientConfig {
   // Get auth token if available
   const authToken = localStorage.getItem('authToken');
   
-  // Get base URL from env
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+  // Get base URL from env (uses Vite proxy: /api → http://localhost:3001)
+  const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
   
-  console.log('[API] baseURL:', baseURL, '| tenant:', tenantId);
+  // V2.6: Get user role from security service
+  let userRole = 'ops';
+  try {
+    const user = getCurrentUserSecurity();
+    if (user && user.role) {
+      // Convert role name to lowercase for header (e.g., 'SERVICE_OWNER' -> 'ops')
+      userRole = user.role?.toLowerCase() || 'ops';
+    }
+  } catch (err) {
+    console.warn('[API] Could not load user role, using default "ops"');
+  }
+  
+  console.log('[API] baseURL:', baseURL, '| tenant:', tenantId, '| role:', userRole);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-tenant-id': tenantId,
+    'x-role': userRole,  // V2.6 - NEW: Add user role for backend authorization
   };
 
   // Add authorization header if token exists

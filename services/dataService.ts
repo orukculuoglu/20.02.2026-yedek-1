@@ -503,6 +503,31 @@ export const getProductIntelligenceData = async (): Promise<any> => Promise.reso
 
 // Repair Shops & Operations (TENANT ISOLATED)
 export const getServiceWorkOrders = async (tenantId: string): Promise<ServiceWorkOrder[]> => {
+    try {
+        // V2.6: Fetch from API to get rehydrated data (from appointments)
+        const config = createApiConfig();
+        console.log('[getServiceWorkOrders] Fetching from /workorders with config:', { tenantId: config.headers['x-tenant-id'], baseURL: config.baseURL });
+        const apiOrders = await apiGet<any[]>('/workorders', config);
+        console.log('[getServiceWorkOrders] API response:', { received: apiOrders ? apiOrders.length : 0, first: apiOrders?.[0] });
+        
+        if (apiOrders && Array.isArray(apiOrders)) {
+            // Transform API response to match ServiceWorkOrder structure
+            const transformed = apiOrders.map(o => {
+                const { operationalDetails, workOrderId, ...rest } = o;
+                return {
+                    id: workOrderId || o.id || '', // Map workOrderId to id
+                    ...rest
+                } as ServiceWorkOrder;
+            });
+            console.log('[getServiceWorkOrders] Transformed:', { count: transformed.length, statuses: transformed.map(t => t.status) });
+            return transformed;
+        }
+    } catch (err) {
+        console.warn('[getServiceWorkOrders] API fetch failed, falling back to mock:', err);
+    }
+
+    // Fallback to in-memory mock data if API call fails
+    console.log('[getServiceWorkOrders] Using MOCK_SERVICE_ORDERS fallback:', { count: MOCK_SERVICE_ORDERS.length });
     return MOCK_SERVICE_ORDERS.map(o => {
         const { operationalDetails, ...safeOrder } = o;
         return JSON.parse(JSON.stringify(safeOrder));
@@ -841,7 +866,7 @@ export const getBatchJobs = async (): Promise<BatchJob[]> => Promise.resolve([
 ]);
 export const submitBatchJob = async (name: string, items: any[], priority: PriorityLevel) => Promise.resolve({ jobId: 'JOB-NEW', status: 'QUEUED' });
 // --- DEMO BRAND MAPPING FOR PARTS ---
-const DEMO_BRAND_MAP: Record<string, string> = {
+export const DEMO_BRAND_MAP: Record<string, string> = {
     'Fren Balatası': 'Textar',
     'Triger Seti': 'INA',
     'Yağ Bakımı': 'Castrol',
