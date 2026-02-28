@@ -122,14 +122,14 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
    * Rebuilds aggregate which triggers VIO regeneration via useEffect
    * (useEffect watches aggregate.timestamp which changes on rebuild)
    */
-  const handleRecalculateIntelligence = () => {
+  const handleRecalculateIntelligence = async () => {
     if (!aggregate) return;
 
     try {
       setIsRecalculating(true);
 
       // Rebuild aggregate from scratch (refresh all calculations)
-      const refreshed = rebuildVehicleAggregate(aggregate);
+      const refreshed = await rebuildVehicleAggregate(aggregate);
       
       // Update aggregate state, which triggers useEffect for VIO generation
       // timestamp changes automatically, so useEffect dependency [aggregate?.timestamp] will fire
