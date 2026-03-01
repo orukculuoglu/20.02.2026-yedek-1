@@ -30,7 +30,7 @@ function getTenantHeaders(): Record<string, string> {
  * List all available fleets
  */
 export async function listFleets(): Promise<Fleet[]> {
-  const response = await fetch(`${API_BASE}/fleet`, {
+  const response = await fetch(`${API_BASE}/fleet/list`, {
     method: 'GET',
     headers: {
       ...getTenantHeaders(),
@@ -42,7 +42,9 @@ export async function listFleets(): Promise<Fleet[]> {
     throw new Error(`Failed to fetch fleets: ${response.status}`);
   }
 
-  return response.json();
+  const json = await response.json();
+  // Handle both wrapped and unwrapped responses
+  return Array.isArray(json) ? json : (json?.data || []);
 }
 
 /**
@@ -61,7 +63,9 @@ export async function listVehicles(fleetId: string): Promise<Vehicle[]> {
     throw new Error(`Failed to fetch vehicles for fleet ${fleetId}: ${response.status}`);
   }
 
-  return response.json();
+  const json = await response.json();
+  // Handle both wrapped and unwrapped responses
+  return Array.isArray(json) ? json : (json?.data || []);
 }
 
 /**
@@ -80,7 +84,9 @@ export async function listContracts(fleetId: string): Promise<RentalContract[]> 
     throw new Error(`Failed to fetch contracts for fleet ${fleetId}: ${response.status}`);
   }
 
-  return response.json();
+  const json = await response.json();
+  // Handle both wrapped and unwrapped responses
+  return Array.isArray(json) ? json : (json?.data || []);
 }
 
 /**

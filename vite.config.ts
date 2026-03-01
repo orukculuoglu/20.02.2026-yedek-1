@@ -15,6 +15,55 @@ const MOCK_VEHICLES = [
     },
 ];
 
+// Mock Fleet Rental data
+const MOCK_FLEETS = [
+    {
+        fleetId: 'FLEET-001',
+        name: 'İstanbul Filo 1',
+        city: 'İstanbul',
+        status: 'ACTIVE',
+        totalVehicles: 45,
+        activeContracts: 12,
+        averageUtilization: 78,
+        createdAt: '2024-01-15',
+    },
+    {
+        fleetId: 'FLEET-002',
+        name: 'Ankara Filo 2',
+        city: 'Ankara',
+        status: 'ACTIVE',
+        totalVehicles: 28,
+        activeContracts: 8,
+        averageUtilization: 65,
+        createdAt: '2024-02-20',
+    },
+    {
+        fleetId: 'FLEET-003',
+        name: 'İzmir Filo 3',
+        city: 'İzmir',
+        status: 'ACTIVE',
+        totalVehicles: 15,
+        activeContracts: 5,
+        averageUtilization: 52,
+        createdAt: '2024-03-10',
+    },
+];
+
+const MOCK_VEHICLES_BY_FLEET: Record<string, any[]> = {
+    'FLEET-001': [
+        { vehicleId: 'VEH-001', brand: 'BMW', model: '320i', plateNumber: '34ABC001', status: 'ACTIVE', mileage: 45000 },
+        { vehicleId: 'VEH-002', brand: 'Mercedes', model: 'C200', plateNumber: '34ABC002', status: 'MAINTENANCE', mileage: 62000 },
+        { vehicleId: 'VEH-003', brand: 'Audi', model: 'A4', plateNumber: '34ABC003', status: 'ACTIVE', mileage: 38500 },
+    ],
+    'FLEET-002': [
+        { vehicleId: 'VEH-004', brand: 'BMW', model: '330i', plateNumber: '06ABC004', status: 'ACTIVE', mileage: 51000 },
+        { vehicleId: 'VEH-005', brand: 'Volkswagen', model: 'Passat', plateNumber: '06ABC005', status: 'ACTIVE', mileage: 44200 },
+    ],
+    'FLEET-003': [
+        { vehicleId: 'VEH-006', brand: 'Toyota', model: 'Corolla', plateNumber: '35ABC006', status: 'ACTIVE', mileage: 28400 },
+    ],
+};
+
 // Mock PartMaster data
 const MOCK_PART_MASTER = [
   {
@@ -111,6 +160,38 @@ const MOCK_PART_MASTER = [
     tenantId: 'INST-001',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  },
+];
+
+// Mock WorkOrders data - Always safe, never crashes
+const MOCK_WORK_ORDERS = [
+  {
+    workOrderId: 'WO-001',
+    tenantId: 'INST-001',
+    vehicleId: 'VEH-001',
+    vehicle: { vin: 'WBALZ7C5-2018-001', brand: 'BMW', model: '320i', mileage: 45000 },
+    title: 'Periyodik Bakım',
+    description: ' 50.000 km periyodik bakım',
+    status: 'COMPLETED',
+    createdAt: '2025-02-15T10:30:00Z',
+    scheduledDate: '2025-02-15',
+    completedDate: '2025-02-16',
+    estimatedCost: 2500,
+    actualCost: 2400,
+  },
+  {
+    workOrderId: 'WO-002',
+    tenantId: 'INST-001',
+    vehicleId: 'VEH-002',
+    vehicle: { vin: 'WBAVM135-2019-002', brand: 'Mercedes', model: 'C200', mileage: 62000 },
+    title: 'Fren Balatası Değişimi',
+    description: 'Ön fren balataları tükenmiş, değişimi yapılacak',
+    status: 'PENDING',
+    createdAt: '2025-02-20T14:00:00Z',
+    scheduledDate: '2025-02-25',
+    completedDate: null,
+    estimatedCost: 3200,
+    actualCost: null,
   },
 ];
 
@@ -359,6 +440,164 @@ function apiMiddlewarePlugin() {
           return;
         }
 
+        // ===== WORKORDERS ENDPOINT (V2.8) =====
+        // GET /api/workorders?tenantId=... - List work orders (always returns 200, never 500)
+        if (method === 'GET' && pathname === '/api/workorders') {
+          try {
+            const tenantId = new URL('http://localhost' + req.url).searchParams.get('tenantId') ?? 'DEFAULT';
+            
+            // Safely filter workorders, always return data array (never undefined/null)
+            const workOrders = (MOCK_WORK_ORDERS ?? []).filter(wo => {
+              // Safe property access - check tenantId exists before comparing
+              return (wo?.tenantId ?? '') === tenantId;
+            });
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              data: workOrders ?? [],
+              tenantId,
+              count: (workOrders ?? []).length,
+              timestamp: new Date().toISOString(),
+            }));
+            return;
+          } catch (error) {
+            console.error('[WorkOrders API] Error:', error);
+            // CRITICAL: Always return 200 with safe array, never let it return 500
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: false,
+              data: [],
+              error: 'Failed to fetch workorders',
+              timestamp: new Date().toISOString(),
+            }));
+            return;
+          }
+        }
+
+        // ===== FLEET RENTAL ENDPOINTS (V2.7) =====
+
+        // GET /api/fleet/list - List all available fleets
+        if (method === 'GET' && pathname === '/api/fleet/list') {
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: MOCK_FLEETS,
+            count: MOCK_FLEETS.length,
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/fleet (backward compatibility redirect)
+        if (method === 'GET' && pathname === '/api/fleet') {
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: MOCK_FLEETS,
+            count: MOCK_FLEETS.length,
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/fleet/:fleetId/vehicles - List vehicles for a fleet
+        if (method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/vehicles$/)) {
+          const fleetId = pathname.split('/')[3];
+          const vehicles = MOCK_VEHICLES_BY_FLEET[fleetId] || [];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: vehicles,
+            fleetId,
+            count: vehicles.length,
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/fleet/:fleetId/contracts - List contracts for a fleet
+        if (method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/contracts$/)) {
+          const fleetId = pathname.split('/')[3];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: [],
+            fleetId,
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // POST /api/fleet/:fleetId/contracts - Create contract for a fleet
+        if (method === 'POST' && pathname.match(/^\/api\/fleet\/[^/]+\/contracts$/)) {
+          const fleetId = pathname.split('/')[3];
+          res.writeHead(201);
+          res.end(JSON.stringify({
+            success: true,
+            data: { contractId: 'CNT-' + Date.now(), fleetId, status: 'DRAFT' },
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/fleet/:fleetId/policy - Get fleet policy
+        if (method === 'GET' && pathname.match(/^\/api\/fleet\/[^/]+\/policy$/)) {
+          const fleetId = pathname.split('/')[3];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: { fleetId, autoSetServicedOnRedirect: false, createdAt: new Date().toISOString() },
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // PATCH /api/fleet/:fleetId/policy - Update fleet policy
+        if (method === 'PATCH' && pathname.match(/^\/api\/fleet\/[^/]+\/policy$/)) {
+          const fleetId = pathname.split('/')[3];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: { fleetId, autoSetServicedOnRedirect: true, updatedAt: new Date().toISOString() },
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/vehicle/:vehicleId/summary - Get vehicle summary
+        if (method === 'GET' && pathname.match(/^\/api\/vehicle\/[^/]+\/summary$/)) {
+          const vehicleId = pathname.split('/')[3];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: {
+              vehicleId,
+              riskScore: Math.random() * 100,
+              maintenanceStatus: 'GOOD',
+              lastServiceDate: '2025-02-15',
+              nextServiceDate: '2025-05-15',
+            },
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // GET /api/vehicle/:vehicleId/service-redirects - List service redirects
+        if (method === 'GET' && pathname.match(/^\/api\/vehicle\/[^/]+\/service-redirects$/)) {
+          const vehicleId = pathname.split('/')[3];
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            data: [],
+            vehicleId,
+            timestamp: new Date().toISOString(),
+          }));
+          return;
+        }
+
+        // ===== END FLEET RENTAL ENDPOINTS =====
+
         // V2.7 - Pass unhandled /api/* requests to proxy (mock server on port 3001)
         // This allows /api/workorders, /api/maintenance/*, and other endpoints to reach the mock server
         next();
@@ -382,7 +621,7 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-      plugins: [react()],
+      plugins: [apiMiddlewarePlugin(), react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

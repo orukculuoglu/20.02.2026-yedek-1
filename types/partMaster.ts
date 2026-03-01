@@ -56,6 +56,17 @@ export interface PartMasterPart {
   dataQuality?: number;         // 0-100: how trusted is this record
 }
 
+/**
+ * PartMasterCatalog: Complete catalog with parts, brands, and platform fitments
+ */
+export interface PartMasterCatalog {
+  tenantId: string;
+  generatedAt: string;
+  parts: PartMasterPart[];
+  brands: Brand[];
+  platformFitments: Record<string, string>;
+}
+
 export type QualityTier = 'OEM' | 'PREMIUM' | 'EQUIVALENT' | 'ECONOMY';
 
 export interface Brand {

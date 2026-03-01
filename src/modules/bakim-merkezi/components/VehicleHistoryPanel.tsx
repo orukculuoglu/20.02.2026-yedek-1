@@ -1,0 +1,317 @@
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp, Calendar, Zap } from 'lucide-react';
+import { getVehicleHistoryEvents } from '../../../../services/dataService';
+
+interface VehicleHistoryEntry {
+  id: string;
+  ts: string;
+  source: string;
+  title: string;
+  summary: string;
+  severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  meta?: any;
+}
+
+interface VehicleHistoryPanelProps {
+  onclose?: () => void;
+}
+
+/**
+ * VehicleHistoryPanel - Read-only timeline of vehicle history
+ * 
+ * Usage:
+ * - Add to RepairShops tab: Shows event timeline for selected vehicle
+ * - Supports vehicleId, vin, or plate search
+ * - Silent error handling with red banner
+ * - Console logs: [VehicleHistory] for debugging
+ */
+export const VehicleHistoryPanel: React.FC<VehicleHistoryPanelProps> = ({ onclose }) => {
+  const [vehicleIdInput, setVehicleIdInput] = useState('');
+  const [vinInput, setVinInput] = useState('');
+  const [plateInput, setPlateInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [events, setEvents] = useState<VehicleHistoryEntry[]>([]);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const tenantId = 'LENT-CORP-DEMO';
+
+  /**
+   * Fetch vehicle history
+   */
+  const handleFetchHistory = async () => {
+    // Validation
+    if (!vehicleIdInput && !vinInput && !plateInput) {
+      setError('En az bir arama kriteri girmelisiniz (Vehicle ID, VIN veya Plaka)');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setEvents([]);
+
+    try {
+      console.log('[VehicleHistory] Querying with params:', {
+        vehicleId: vehicleIdInput,
+        vin: vinInput,
+        plate: plateInput,
+        tenantId
+      });
+
+      const result = await getVehicleHistoryEvents({
+        vehicleId: vehicleIdInput || undefined,
+        vin: vinInput || undefined,
+        plate: plateInput || undefined,
+        tenantId,
+        limit: 50
+      });
+
+      console.log('[VehicleHistory] Loaded events=', result.length);
+      setEvents(result);
+
+      if (result.length === 0) {
+        setError('Bu araç için öykü kaydı bulunamadı.');
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      console.error('[VehicleHistory] Error:', errorMsg);
+      setError(`Yükleme hatası: ${errorMsg}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Clear history and inputs
+   */
+  const handleClear = () => {
+    setVehicleIdInput('');
+    setVinInput('');
+    setPlateInput('');
+    setEvents([]);
+    setError(null);
+    setExpandedEventId(null);
+  };
+
+  /**
+   * Get severity color
+   */
+  const getSeverityColor = (severity?: string): string => {
+    switch (severity) {
+      case 'CRITICAL': return 'bg-red-100 text-red-700 border-red-200';
+      case 'HIGH': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'MEDIUM': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'LOW': return 'bg-blue-100 text-blue-700 border-blue-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  /**
+   * Get source badge color
+   */
+  const getSourceBadgeColor = (source: string): string => {
+    switch (source) {
+      case 'EXPERTISE': return '#3b82f6'; // blue
+      case 'FLEET_TELEMETRY': return '#10b981'; // green
+      case 'MANUAL': return '#8b5cf6'; // purple
+      case 'SERVICE': return '#f59e0b'; // amber
+      case 'ERP': return '#ec4899'; // pink
+      default: return '#6b7280'; // gray
+    }
+  };
+
+  /**
+   * Format date/time
+   */
+  const formatDateTime = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleString('tr-TR');
+    } catch {
+      return iso;
+    }
+  };
+
+  return (
+    <div className="w-full border border-gray-200 rounded-lg bg-white">
+      {/* Header */}
+      <div className="border-b border-gray-200 p-4 bg-gray-50">
+        <div className="flex items-center gap-2 mb-1">
+          <Calendar className="w-5 h-5 text-gray-600" />
+          <h2 className="font-bold text-gray-800">Araç Öyküsü (Sadece Okunur)</h2>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 space-y-4">
+        {/* Input Section */}
+        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+          <p className="text-sm text-gray-600 font-medium">Araç Bilgileri Girin (En az biri zorunlu)</p>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">Vehicle ID</label>
+              <input
+                type="text"
+                placeholder="örn: WBALZ7C5-XXXX-1"
+                value={vehicleIdInput}
+                onChange={(e) => setVehicleIdInput(e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">VIN</label>
+              <input
+                type="text"
+                placeholder="örn: WBALZ7C5XXXX7123"
+                value={vinInput}
+                onChange={(e) => setVinInput(e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">Plaka</label>
+              <input
+                type="text"
+                placeholder="örn: 34 VM 228"
+                value={plateInput}
+                onChange={(e) => setPlateInput(e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleFetchHistory}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? 'Yükleniyor...' : 'Getir'}
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={isLoading || !events.length}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Temizle
+            </button>
+          </div>
+        </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Timeline View */}
+        {events.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600 font-medium">
+              Toplam {events.length} Olay Bulundu (Yeniden Eskiye)
+            </p>
+
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {events.map((event) => (
+                <div
+                  key={event.id}
+                  className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition"
+                >
+                  {/* Event Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      {/* Timestamp + Source Badge */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500">
+                          {formatDateTime(event.ts)}
+                        </span>
+                        <span
+                          className="px-2 py-1 text-xs text-white rounded-full"
+                          style={{ backgroundColor: getSourceBadgeColor(event.source) }}
+                        >
+                          {event.source}
+                        </span>
+                        {event.severity && (
+                          <span className={`px-2 py-1 text-xs rounded-full border ${getSeverityColor(event.severity)}`}>
+                            {event.severity}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      <p className="font-medium text-sm text-gray-900">{event.title}</p>
+
+                      {/* Summary */}
+                      <p className="text-sm text-gray-700">{event.summary}</p>
+                    </div>
+
+                    {/* Expand Toggle */}
+                    {event.meta && (
+                      <button
+                        onClick={() =>
+                          setExpandedEventId(
+                            expandedEventId === event.id ? null : event.id
+                          )
+                        }
+                        className="flex-shrink-0 p-1 hover:bg-gray-200 rounded transition"
+                      >
+                        {expandedEventId === event.id ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expanded Meta */}
+                  {expandedEventId === event.id && event.meta && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                      <p className="text-xs text-gray-600 font-medium">Detaylı Bilgiler:</p>
+                      <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto font-mono border border-gray-200">
+                        <pre className="text-gray-700 whitespace-pre-wrap break-words text-[11px]">
+                          {JSON.stringify(
+                            {
+                              indicesCount: event.meta.indicesCount,
+                              confidenceSummary: event.meta.confidenceSummary,
+                              sampleIndices: event.meta.indices
+                                ? event.meta.indices.slice(0, 3)
+                                : []
+                            },
+                            null,
+                            2
+                          )}
+                        </pre>
+                      </div>
+
+                      {/* Note */}
+                      <p className="text-xs text-gray-500 italic">
+                        Tam veri Veri Motoru modülünde görülebilir.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {events.length === 0 && !isLoading && !error && (
+          <div className="text-center py-8 text-gray-500">
+            <Zap className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Araç bilgileri girerek öykü görmek için "Getir" butonuna tıklayın</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default VehicleHistoryPanel;

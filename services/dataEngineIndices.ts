@@ -525,3 +525,68 @@ export async function generateAllIndices(snapshot: PartMasterSnapshot) {
     generatedAt: new Date().toISOString(),
   };
 }
+/**
+ * Get Data Engine Indices - Multi-domain entry point
+ * Primary: VIO for risk domain with full explainability
+ * Fallback: VehicleAggregate for numeric-only risk indices
+ * Existing: Part domain maintains backward compatibility
+ * 
+ * @param params Domain, vehicleId, vin, plate for risk domain (required)
+ * @returns Promise of DataEngineIndex[] with domain="risk" | "part"
+ */
+export async function getDataEngineIndices(params: {
+  domain: 'risk' | 'part';
+  vehicleId?: string;
+  vin?: string;
+  plate?: string;
+}) {
+  const { domain, vehicleId, vin, plate } = params;
+  
+  console.log(`[DataEngineIndices.getIndices] domain="${domain}", vehicleId="${vehicleId}"`);
+
+  if (domain === 'risk') {
+    // Risk domain: require vehicleId + vin + plate
+    if (!vehicleId || !vin || !plate) {
+      const missingFields = [
+        !vehicleId && 'vehicleId',
+        !vin && 'vin',
+        !plate && 'plate',
+      ].filter(Boolean);
+      
+      throw new Error(
+        `[DataEngineIndices] Risk domain requires: ${missingFields.join(', ')}`
+      );
+    }
+
+    // Import VIO store
+    const { getVIO } = await import('../src/modules/auto-expert/intelligence/vioStore');
+    const { getOrBuild } = await import('../src/modules/vehicle-intelligence/vehicleStore');
+    const { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } = await import(
+      '../src/modules/data-engine/indicesDomainEngine'
+    );
+
+    try {
+      // Try primary source: VIO
+      const vio = getVIO(vehicleId);
+      
+      if (vio) {
+        console.log(`[DataEngineIndices] ✓ Using VIO source for ${vehicleId}`);
+        return buildRiskDomainIndicesFromVIO(vio);
+      }
+
+      // Fallback: VehicleAggregate
+      console.log(`[DataEngineIndices] No VIO found, using aggregate fallback for ${vehicleId}`);
+      const aggregate = await getOrBuild(vehicleId, vin, plate);
+      return buildRiskDomainIndices(aggregate);
+    } catch (err) {
+      console.error(`[DataEngineIndices] Error fetching risk indices for ${vehicleId}:`, err);
+      throw err;
+    }
+  } else if (domain === 'part') {
+    // Part domain: keep existing behavior (backward compatible)
+    console.log(`[DataEngineIndices] Part domain not yet implemented in getIndices`);
+    return [];
+  } else {
+    throw new Error(`[DataEngineIndices] Unsupported domain: ${domain}`);
+  }
+}

@@ -11,7 +11,7 @@ import {
     Globe, ShoppingCart, Truck, Shield, Zap, ToggleLeft, ToggleRight, List,
     Cpu, Lock, Info, Server, RefreshCw, Monitor, Maximize2, Minimize2, Grid, Car,
     Bot, MessageSquare, Sparkles, X, Lightbulb, Box, Link2, Timer, RefreshCcw, Save, RotateCcw,
-    ThumbsUp, ThumbsDown, Activity as ActivityIcon, Layers
+    ThumbsUp, ThumbsDown, Activity as ActivityIcon, Layers, History
 } from 'lucide-react';
 import { 
     getServiceWorkOrders, getOperationalDetails, logVaultAccess, 
@@ -37,6 +37,12 @@ import { FinanceProfitability } from './FinanceProfitability';
 import { ERPBridgePanel } from './ERPBridgePanel';
 import { SettingsPanel } from './SettingsPanel';
 import { OperationalReports } from '../components/OperationalReports';
+import { VehicleHistoryPanel } from '../src/modules/bakim-merkezi/components/VehicleHistoryPanel';
+import { WorkOrderVehicleHistorySection } from '../src/modules/bakim-merkezi/components/WorkOrderVehicleHistorySection';
+import { WorkOrderRiskRecommendation } from '../src/modules/bakim-merkezi/components/WorkOrderRiskRecommendation';
+import { buildRiskRecommendation } from '../src/services/recommendationEngine';
+import type { RiskRecommendation } from '../src/types/RiskRecommendation';
+import { getRiskIndexEventsByVehicleId } from '../src/modules/data-engine/eventLogger';
 
 interface RepairShopsProps {
     onNavigate?: (view: ViewState, id?: string) => void;
@@ -49,6 +55,7 @@ export const REPAIR_WORKORDERS_FEED_KEY = "LENT_REPAIR_WORKORDERS_FEED_V1";
 
 const TABS = [
     { id: 'REPAIR', label: 'Bakım Merkezi', icon: Wrench },
+    { id: 'VEHICLE_HISTORY', label: 'Araç Öyküsü', icon: History },
     { id: 'WORK_ORDERS', label: 'İş Emirleri (Kanban)', icon: Layout },
     { id: 'INVENTORY', label: 'Parça & Stok Sinyalleri', icon: Package },
     { id: 'AUTO_ORDER', label: 'Otomatik Sipariş', icon: Zap },
@@ -108,6 +115,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
     const [linksMap, setLinksMap] = useState<Record<string, string>>({});
     const [policy, setPolicy] = useState<ServiceIntakePolicy>(DEFAULT_SERVICE_INTAKE_POLICY);
     const [summaryFilter, setSummaryFilter] = useState<'7days' | '30days' | 'month'>('30days');
+    const [workOrderRecommendation, setWorkOrderRecommendation] = useState<RiskRecommendation | null>(null);
     
     const currentUser = getCurrentUserSecurity();
     const selectedOrder = workOrders.find(o => o.id === selectedOrderId);
@@ -151,6 +159,46 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
 
         window.dispatchEvent(new Event('REPAIR_DASH_FEED_UPDATED'));
     }, [workOrders]);
+
+    // --- WORK ORDER RISK RECOMMENDATION ---
+    useEffect(() => {
+        if (!selectedOrder?.operationalDetails?.vehicleId) {
+            setWorkOrderRecommendation(null);
+            return;
+        }
+
+        const vehicleId = selectedOrder.operationalDetails.vehicleId;
+        
+        // Try to get recent risk event data for this vehicle
+        try {
+            const recentEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
+            const latestEvent = recentEvents[0];
+            
+            if (latestEvent) {
+                // Build recommendation from latest event indices
+                const recommendationInput = {
+                    vehicleId,
+                    trustIndex: latestEvent.indices?.find(i => i.key === 'trustIndex')?.value,
+                    reliabilityIndex: latestEvent.indices?.find(i => i.key === 'reliabilityIndex')?.value,
+                    maintenanceDiscipline: latestEvent.indices?.find(i => i.key === 'maintenanceDiscipline')?.value,
+                    insuranceRisk: latestEvent.indices?.find(i => i.key === 'insuranceRisk')?.value,
+                    reasonCodes: latestEvent.indices?.map(idx => ({ code: idx.key })) || []
+                };
+                
+                const recommendation = buildRiskRecommendation(recommendationInput);
+                setWorkOrderRecommendation(recommendation);
+            } else {
+                // No event data, build default recommendation
+                const recommendation = buildRiskRecommendation({ vehicleId });
+                setWorkOrderRecommendation(recommendation);
+            }
+        } catch (error) {
+            // Silent error handling - don't disrupt UI
+            console.debug('Could not fetch risk recommendation:', error);
+            const recommendation = buildRiskRecommendation({ vehicleId });
+            setWorkOrderRecommendation(recommendation);
+        }
+    }, [selectedOrder?.operationalDetails?.vehicleId]);
 
     const applyWorkOrderPatch = (orderId: string, patch: Partial<ServiceWorkOrder>) => {
         // V2.6: Cost Chain - Apply cost when transitioning to Delivery columns
@@ -790,6 +838,21 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Sistem Risk Önerisi Panel */}
+                        <WorkOrderRiskRecommendation 
+                            recommendation={workOrderRecommendation}
+                            vehicleId={selectedOrder.operationalDetails?.vehicleId}
+                        />
+
+                        {/* Araç Öyküsü Section - WorkOrder Context'inde */}
+                        <WorkOrderVehicleHistorySection
+                            vehicleId={selectedOrder.operationalDetails?.vehicleId}
+                            vin={selectedOrder.operationalDetails?.vin}
+                            plate={selectedOrder.operationalDetails?.plate}
+                            tenantId={'LENT-CORP-DEMO'}
+                        />
+
                         <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-[2rem] flex justify-between items-center mt-6">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-white rounded-xl shadow-sm text-indigo-600">
@@ -831,6 +894,11 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                         {renderActiveWorkOrdersPanel()}
                     </div>
                 )}
+                {activeTab === 'VEHICLE_HISTORY' && (
+                    <div className="p-6">
+                        <VehicleHistoryPanel />
+                    </div>
+                )}
                 {activeTab === 'WORK_ORDERS' && (
                     <div className="flex flex-col h-full">
                         {renderKanbanBoard()}
@@ -850,7 +918,9 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                     />
                 )}
                 
-                {activeTab !== 'WORK_ORDERS' &&
+                {activeTab !== 'REPAIR' &&
+                 activeTab !== 'VEHICLE_HISTORY' &&
+                 activeTab !== 'WORK_ORDERS' &&
                  activeTab !== 'AUTO_ORDER' &&
                  activeTab !== 'NETWORK' &&
                  activeTab !== 'INVENTORY' &&

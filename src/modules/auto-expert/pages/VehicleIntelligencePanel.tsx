@@ -4,13 +4,15 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { RefreshCw, AlertCircle, CheckCircle, Clock, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle, Clock, Copy, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 import { vehicleIntelligenceStore, generateStatusBadge, generateSummaryLine } from '../../vehicle-intelligence';
 import { rebuildVehicleAggregate } from '../../vehicle-intelligence/vehicleAggregator';
 import { vioStore } from '../intelligence/vioStore';
 import { generateAndStoreVIO, getLastGenerationStatus } from '../intelligence/vioOrchestrator';
+import { getDataEngineIndices } from '../../../../services/dataService';
 import type { VehicleAggregate } from '../../vehicle-intelligence/types';
 import type { VehicleIntelligenceOutput } from '../intelligence/vioTypes';
+import type { DataEngineIndex } from '../../data-engine/indicesDomainEngine';
 
 interface VehicleIntelligencePanelProps {
   onBack?: () => void;
@@ -34,6 +36,12 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
     error?: string;
   } | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  
+  // Risk Indices from Data Engine
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskError, setRiskError] = useState<string | null>(null);
+  const [riskIndices, setRiskIndices] = useState<DataEngineIndex[] | null>(null);
+  const [showRiskJson, setShowRiskJson] = useState(false);
   
   // UI polish: Evidence toggle and copy feedback
   const [showEvidence, setShowEvidence] = useState(false);
@@ -67,6 +75,8 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       );
 
       setAggregate(result);
+      // Load risk indices for display
+      await loadRiskIndicesForExpertise(vehicleId.trim(), vin.trim() || `VIN-${vehicleId}`, plate.trim().toUpperCase());
       // VIO generation happens in useEffect when aggregate changes
       console.log('[VehicleIntelligencePanel] ✓ Vehicle aggregate loaded:', result);
     } catch (err) {
@@ -77,6 +87,35 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       setVioGenerationStatus(null);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Load Risk Indices from Data Engine
+   */
+  const loadRiskIndicesForExpertise = async (vehicleId: string, vin: string, plate: string) => {
+    try {
+      console.log('[AUTO-EXPERT][RISK] request', { vehicleId, vin, plate });
+      setRiskLoading(true);
+      setRiskError(null);
+      setRiskIndices(null);
+
+      const indices = await getDataEngineIndices({
+        domain: 'risk',
+        vehicleId,
+        vin,
+        plate
+      });
+
+      setRiskIndices(indices);
+      console.log('[AUTO-EXPERT][RISK] success', indices);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      console.error('[AUTO-EXPERT][RISK] error', message);
+      setRiskError(`Risk verisi alınamadı: ${message}`);
+      setRiskIndices(null);
+    } finally {
+      setRiskLoading(false);
     }
   };
 
@@ -707,6 +746,115 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
                     <p className="text-3xl font-bold text-purple-900">{aggregate.indexes.maintenanceDiscipline}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Data Engine Risk Indices Section */}
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Data Engine Risk Indeksleri</h3>
+                  {riskIndices && (
+                    <button
+                      onClick={() => setShowRiskJson(!showRiskJson)}
+                      className="flex items-center gap-1 px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+                    >
+                      {showRiskJson ? <EyeOff size={14} /> : <Eye size={14} />}
+                      {showRiskJson ? 'JSON Gizle' : 'JSON Göster'}
+                    </button>
+                  )}
+                </div>
+
+                {riskLoading && (
+                  <div className="flex items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded text-blue-700 text-sm">
+                    <RefreshCw size={16} className="animate-spin" />
+                    Risk indeksleri yükleniyor...
+                  </div>
+                )}
+
+                {riskError && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    <AlertCircle size={16} className="inline mr-2" />
+                    Risk verisi alınamadı
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer font-medium">Detaylar</summary>
+                      <pre className="mt-1 text-xs bg-white p-2 rounded border border-red-200 overflow-x-auto">
+                        {riskError}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+
+                {riskIndices && !riskError && (
+                  <div className="space-y-3">
+                    {/* Key Indices Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {riskIndices
+                        .filter(idx => ['trustIndex', 'reliabilityIndex', 'maintenanceDiscipline'].includes(idx.key))
+                        .map(idx => (
+                          <div
+                            key={idx.key}
+                            className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded border border-gray-300"
+                          >
+                            <p className="text-xs text-gray-600 font-medium uppercase mb-1">
+                              {idx.key === 'trustIndex'
+                                ? 'Güven'
+                                : idx.key === 'reliabilityIndex'
+                                ? 'Güvenilirlik'
+                                : 'Bakım Disiplini'}
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">{idx.value}</p>
+                            <p className="text-xs text-gray-600 mt-1">Güven: {idx.confidence}%</p>
+                            {idx.meta?.reasonCodes && idx.meta.reasonCodes.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-gray-300">
+                                <p className="text-xs font-medium text-gray-700 mb-1">Sebepler:</p>
+                                <ul className="text-xs text-gray-600 space-y-0.5">
+                                  {idx.meta.reasonCodes.map((code: string, i: number) => (
+                                    <li key={i}>• {code}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+
+                    {/* Other Risk Indices */}
+                    {riskIndices.some(idx => !['trustIndex', 'reliabilityIndex', 'maintenanceDiscipline'].includes(idx.key)) && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Ek Risk İndeksleri</p>
+                        <div className="space-y-2">
+                          {riskIndices
+                            .filter(idx => !['trustIndex', 'reliabilityIndex', 'maintenanceDiscipline'].includes(idx.key))
+                            .map(idx => (
+                              <div key={idx.key} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {idx.key.replace(/([A-Z])/g, ' $1').trim()}
+                                  </p>
+                                  {idx.meta?.reasonCodes && idx.meta.reasonCodes.length > 0 && (
+                                    <p className="text-xs text-gray-600">{idx.meta.reasonCodes.join(', ')}</p>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-lg font-bold text-gray-900">{idx.value}</span>
+                                  <p className="text-xs text-gray-600">{idx.confidence}% güven</p>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* JSON Debug View */}
+                    {showRiskJson && (
+                      <div className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
+                        <p className="text-xs font-medium text-gray-400 mb-2">JSON Görünümü</p>
+                        <pre className="text-xs leading-relaxed font-mono max-h-96 overflow-y-auto">
+                          {JSON.stringify(riskIndices, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

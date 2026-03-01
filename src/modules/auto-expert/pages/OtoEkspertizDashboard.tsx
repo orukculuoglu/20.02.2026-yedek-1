@@ -9,6 +9,7 @@ import type { ExpertReport } from '../types';
 import { reportStore } from '../store';
 import { auditStore } from '../audit';
 import { vehicleStore } from '../vehicle/vehicleStore';
+import { RiskIndicesPanel } from '../components/RiskIndicesPanel';
 
 interface OtoEkspertizDashboardProps {
   onViewReports: () => void;
@@ -393,61 +394,69 @@ export function OtoEkspertizDashboard({ onViewReports, onViewDetail, onViewVehic
         </div>
 
         {/* ROW 3: Score Distribution + Recent Reports */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Score Distribution */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">
-              Puan Dağılımı (7g Kesinleştirilmiş)
-            </h2>
-
-            {finalized7d === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                Son 7 gün içinde kesinleştirilmiş rapor bulunmamaktadır
-              </div>
-            ) : (
-              <div>
-                <ScoreBar
-                  label="0-60 (Düşük)"
-                  count={scoreDistribution.b0_60}
-                  maxCount={scoreDistribution.maxBucket}
-                />
-                <ScoreBar
-                  label="61-80 (Orta)"
-                  count={scoreDistribution.b61_80}
-                  maxCount={scoreDistribution.maxBucket}
-                />
-                <ScoreBar
-                  label="81-100 (Yüksek)"
-                  count={scoreDistribution.b81_100}
-                  maxCount={scoreDistribution.maxBucket}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Recent Final Reports */}
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Son Kesinleştirilmiş Raporlar (7g)
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Processing Health + Top Risk Reasons */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Score Distribution */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">
+                Puan Dağılımı (7g Kesinleştirilmiş)
               </h2>
-            </div>
 
-            <div>
-              {recentFinalReports.length === 0 ? (
-                <div className="p-6 text-center text-gray-500">
+              {finalized7d === 0 ? (
+                <div className="text-center py-8 text-gray-500">
                   Son 7 gün içinde kesinleştirilmiş rapor bulunmamaktadır
                 </div>
               ) : (
-                recentFinalReports.map(report => (
-                  <RecentReportRow
-                    key={report.id}
-                    report={report}
-                    onNavigate={onViewDetail}
+                <div>
+                  <ScoreBar
+                    label="0-60 (Düşük)"
+                    count={scoreDistribution.b0_60}
+                    maxCount={scoreDistribution.maxBucket}
                   />
-                ))
+                  <ScoreBar
+                    label="61-80 (Orta)"
+                    count={scoreDistribution.b61_80}
+                    maxCount={scoreDistribution.maxBucket}
+                  />
+                  <ScoreBar
+                    label="81-100 (Yüksek)"
+                    count={scoreDistribution.b81_100}
+                    maxCount={scoreDistribution.maxBucket}
+                  />
+                </div>
               )}
             </div>
+
+            {/* Recent Final Reports */}
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Son Kesinleştirilmiş Raporlar (7g)
+                </h2>
+              </div>
+
+              <div>
+                {recentFinalReports.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">
+                    Son 7 gün içinde kesinleştirilmiş rapor bulunmamaktadır
+                  </div>
+                ) : (
+                  recentFinalReports.map(report => (
+                    <RecentReportRow
+                      key={report.id}
+                      report={report}
+                      onNavigate={onViewDetail}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Indices Panel */}
+          <div>
+            <RiskIndicesPanel />
           </div>
         </div>
       </div>

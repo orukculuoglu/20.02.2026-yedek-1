@@ -10,6 +10,12 @@ import { PartIndex } from '../services/dataEngineIndices';
 import { AftermarketProductCard, VehicleProfile } from '../types';
 import { PartMasterPart, PartMasterCatalog } from '../types/partMaster';
 import { OffersPanel } from '../components/OffersPanel';
+import { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } from '../src/modules/data-engine/eventLogger';
+import type { RiskIndexEvent } from '../src/modules/data-engine/eventLogger';
+import { RiskSegmentDashboard } from '../src/modules/data-engine/components/RiskSegmentDashboard';
+import TenantAnalyticsDashboard from '../src/modules/data-engine/components/TenantAnalyticsDashboard';
+import OperationalRiskList from '../src/modules/data-engine/components/OperationalRiskList';
+import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConfidence';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -30,6 +36,15 @@ export const DataEngine: React.FC = () => {
   const [catalog, setCatalog] = React.useState<PartMasterCatalog | null>(null);
   const [selectedPart, setSelectedPart] = React.useState<PartMasterPart | null>(null);
   const [searchPartTerm, setSearchPartTerm] = React.useState('');
+
+  // Risk Index Events state
+  const [riskIndexEvents, setRiskIndexEvents] = React.useState<RiskIndexEvent[]>([]);
+  const [filterVehicleId, setFilterVehicleId] = React.useState('');
+  const [maxEventsForDashboard, setMaxEventsForDashboard] = React.useState(100);
+  const [selectedEventForDrawer, setSelectedEventForDrawer] = React.useState<RiskIndexEvent | null>(null);
+  const [tenantAnalyticsPeriod, setTenantAnalyticsPeriod] = React.useState<'week' | 'month' | 'all'>('month');
+  const [operationalRiskSegmentFilter, setOperationalRiskSegmentFilter] = React.useState<'all' | 'medium' | 'high'>('all');
+  const tenantId = 'LENT-CORP-DEMO';
 
   // Load Part Master indices
   React.useEffect(() => {
@@ -54,6 +69,12 @@ export const DataEngine: React.FC = () => {
       }
     };
     loadIndices();
+  }, []);
+
+  // Load Risk Index Events
+  React.useEffect(() => {
+    const events = getLastRiskIndexEvents(tenantId, 20);
+    setRiskIndexEvents(events);
   }, []);
 
   // Mock veriyi yükle
@@ -201,6 +222,113 @@ export const DataEngine: React.FC = () => {
   const uniqueSources = ['All', ...new Set(mockData.signals.map((s) => s.source))];
   const uniqueCities = ['All', ...new Set(mockData.signals.map((s) => s.city))];
   const uniqueModels = ['All', ...new Set(mockData.signals.map((s) => s.model))];
+
+  // Tenant-level analytics calculation
+  const tenantMetrics = React.useMemo(() => {
+    const allEvents = getLastRiskIndexEvents(tenantId, 1000);
+    
+    // Apply date range filter
+    let filteredEvents = allEvents;
+    if (tenantAnalyticsPeriod !== 'all') {
+      const now = new Date();
+      const cutoff = tenantAnalyticsPeriod === 'week'
+        ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      filteredEvents = allEvents.filter(e => new Date(e.generatedAt) >= cutoff);
+    }
+
+    if (filteredEvents.length === 0) {
+      return null;
+    }
+
+    // Calculate average TrustIndex
+    const trustValues = filteredEvents.map(e => {
+      if (e.confidenceSummary?.average !== undefined) {
+        const val = e.confidenceSummary.average;
+        return val <= 1 ? val * 100 : val;
+      }
+      return 50;
+    });
+    const avgTrust = trustValues.reduce((a, b) => a + b, 0) / trustValues.length;
+
+    // Calculate average ReliabilityIndex
+    const reliabilityValues = filteredEvents.map(e => {
+      if (e.indices?.length) {
+        const reliabilityIdx = e.indices.find(idx => idx.key === 'reliabilityIndex');
+        if (reliabilityIdx && typeof reliabilityIdx.value === 'number') {
+          const val = reliabilityIdx.value;
+          return val <= 1 ? val * 100 : val > 100 ? Math.min(100, val / 100) : val;
+        }
+      }
+      return 50;
+    });
+    const avgReliability = reliabilityValues.length > 0 
+      ? reliabilityValues.reduce((a, b) => a + b, 0) / reliabilityValues.length
+      : 0;
+
+    // Risk segments
+    let lowCount = 0, mediumCount = 0, highCount = 0;
+    trustValues.forEach(trust => {
+      if (trust >= 75) lowCount++;
+      else if (trust >= 50) mediumCount++;
+      else highCount++;
+    });
+
+    // Insurance mismatch rate
+    let mismatchCount = 0;
+    filteredEvents.forEach(event => {
+      if (event.indices) {
+        event.indices.forEach(idx => {
+          const key = (idx.key || '').toUpperCase();
+          if (key.includes('INSURANCE_DAMAGE_INCONSISTENCY') || key.includes('CLAIM_WITHOUT_DAMAGE_RECORD')) {
+            mismatchCount++;
+          }
+        });
+      }
+    });
+
+    // Top 5 reasonCodes
+    const reasonCodeMap = new Map<string, number>();
+    filteredEvents.forEach(event => {
+      if (event.indices) {
+        event.indices.forEach(idx => {
+          const key = idx.key || '';
+          if (key && !key.includes('Index')) { // Skip index names
+            const count = reasonCodeMap.get(key) || 0;
+            reasonCodeMap.set(key, count + 1);
+          }
+        });
+      }
+    });
+
+    const topReasonCodes = Array.from(reasonCodeMap.entries())
+      .map(([code, count]) => ({ code, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Source breakdown
+    const sourceMap = new Map<string, number>();
+    filteredEvents.forEach(event => {
+      const source = event.source || 'UNKNOWN';
+      const count = sourceMap.get(source) || 0;
+      sourceMap.set(source, count + 1);
+    });
+
+    return {
+      avgTrust: Math.min(100, Math.max(0, avgTrust)),
+      avgReliability: Math.min(100, Math.max(0, avgReliability)),
+      lowRiskPercent: filteredEvents.length > 0 ? Math.round((lowCount / filteredEvents.length) * 100) : 0,
+      mediumRiskPercent: filteredEvents.length > 0 ? Math.round((mediumCount / filteredEvents.length) * 100) : 0,
+      highRiskPercent: filteredEvents.length > 0 ? Math.round((highCount / filteredEvents.length) * 100) : 0,
+      mismatchPercent: filteredEvents.length > 0 ? Math.round((mismatchCount / filteredEvents.length) * 100) : 0,
+      topReasonCodes,
+      sourceBreakdown: Array.from(sourceMap.entries())
+        .map(([source, count]) => ({ source, count }))
+        .sort((a, b) => b.count - a.count),
+      totalEvents: filteredEvents.length
+    };
+  }, [tenantAnalyticsPeriod]);
 
   return (
     <div className="p-8">
@@ -1049,6 +1177,272 @@ export const DataEngine: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Tenant-Level Analytics Dashboard */}
+      <div className="mt-8">
+        <TenantAnalyticsDashboard 
+          metrics={tenantMetrics}
+          period={tenantAnalyticsPeriod}
+          onPeriodChange={setTenantAnalyticsPeriod}
+        />
+      </div>
+
+      {/* Operational Risk List - Aksiyon Katmanı */}
+      <div className="mt-8">
+        <OperationalRiskList 
+          events={getLastRiskIndexEvents(tenantId, 500)}
+          period={tenantAnalyticsPeriod}
+          onPeriodChange={setTenantAnalyticsPeriod}
+          segmentFilter={operationalRiskSegmentFilter}
+          onSegmentFilterChange={setOperationalRiskSegmentFilter}
+          onSelectVehicle={(vehicleId, event) => setSelectedEventForDrawer(event)}
+        />
+      </div>
+
+      {/* Risk Segment Dashboard - Toplu Analitik */}
+      <div className="mt-8">
+        <RiskSegmentDashboard 
+          events={getLastRiskIndexEvents(tenantId, 500)} 
+          maxEvents={maxEventsForDashboard}
+          onMaxEventsChange={setMaxEventsForDashboard}
+        />
+      </div>
+
+      {/* Risk Index Events */}
+      <div className="mt-8 space-y-6">
+        <div>
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Database size={20} className="text-blue-600" />
+            Risk Index Events (Son 20)
+          </h3>
+
+          {/* Filter */}
+          <div className="mb-4 flex gap-2">
+            <input
+              type="text"
+              placeholder="Vehicle ID filtrele..."
+              value={filterVehicleId}
+              onChange={(e) => setFilterVehicleId(e.target.value)}
+              className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            {filterVehicleId && (
+              <button
+                onClick={() => {
+                  setFilterVehicleId('');
+                  setRiskIndexEvents(getLastRiskIndexEvents(tenantId, 20));
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition"
+              >
+                Temizle
+              </button>
+            )}
+            {filterVehicleId && (
+              <button
+                onClick={() => {
+                  const filtered = getRiskIndexEventsByVehicleId(tenantId, filterVehicleId, 20);
+                  setRiskIndexEvents(filtered);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+              >
+                Filtrele
+              </button>
+            )}
+          </div>
+
+          {/* Events Table */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+            {riskIndexEvents.length === 0 ? (
+              <div className="p-12 text-center text-slate-500">
+                <Database size={32} className="mx-auto mb-4 text-slate-300" />
+                <p>Henüz risk index event bulunmamaktadır</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Zaman</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Vehicle ID</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Trust</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Reliability</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Maintenance</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Güven Ort.</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-700">Kaynak</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {riskIndexEvents.map((event, idx) => {
+                    const trustIdx = event.indices.find(i => i.key === 'trustIndex');
+                    const reliabilityIdx = event.indices.find(i => i.key === 'reliabilityIndex');
+                    const maintenanceIdx = event.indices.find(i => i.key === 'maintenanceDiscipline');
+
+                    return (
+                      <tr
+                        key={event.id}
+                        onClick={() => setSelectedEventForDrawer(event)}
+                        className="border-b border-slate-100 hover:bg-blue-50 transition cursor-pointer"
+                      >
+                        <td className="px-4 py-3 text-slate-700 text-xs">
+                          {new Date(event.generatedAt).toLocaleString('tr-TR')}
+                        </td>
+                        <td className="px-4 py-3 text-slate-900 font-semibold">{event.vehicleId}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {trustIdx ? (Math.round(trustIdx.value * 100) / 100).toFixed(1) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {reliabilityIdx ? (Math.round(reliabilityIdx.value * 100) / 100).toFixed(1) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {maintenanceIdx ? (Math.round(maintenanceIdx.value * 100) / 100).toFixed(1) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold">
+                          {event.confidenceSummary
+                            ? (() => {
+                                let conf = event.confidenceSummary.average;
+                                // Normalize: if 0-1, convert to 0-100
+                                if (conf <= 1) conf *= 100;
+                                // Bound to 0-100
+                                conf = Math.min(100, Math.max(0, conf));
+                                return conf.toFixed(1) + '%';
+                              })()
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                            {event.source}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Drilldown Drawer - Araç Öyküsü */}
+      {selectedEventForDrawer && (
+        <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setSelectedEventForDrawer(null)} />
+      )}
+      <div
+        className={`fixed right-0 top-0 h-full w-96 bg-white shadow-2xl transform transition-transform z-50 overflow-y-auto ${
+          selectedEventForDrawer ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {selectedEventForDrawer && selectedEventForDrawer.vehicleId && (
+          <div className="space-y-4 p-6">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <h3 className="font-bold text-lg text-slate-900">📌 Araç Öyküsü (Drilldown)</h3>
+              <button
+                onClick={() => setSelectedEventForDrawer(null)}
+                className="text-slate-500 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Vehicle Header - VehicleID and Event Time only (No PII) */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm font-semibold text-slate-700">Vehicle ID</span>
+                <span className="font-bold text-lg text-blue-900">{selectedEventForDrawer.vehicleId}</span>
+              </div>
+              <div className="flex justify-between text-xs border-t border-blue-200 pt-2">
+                <span className="text-slate-600">Event Zamanı</span>
+                <span className="text-slate-700">
+                  {new Date(selectedEventForDrawer.generatedAt).toLocaleString('tr-TR')}
+                </span>
+              </div>
+            </div>
+
+            {/* Event Details Section */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-slate-500 uppercase">Event Detayları</h4>
+
+              {/* Risk Indices */}
+              {selectedEventForDrawer.indices && selectedEventForDrawer.indices.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">Endeksler</p>
+                  <div className="space-y-1 text-xs">
+                    {selectedEventForDrawer.indices.map((idx, i) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-slate-600">{idx.key}</span>
+                        <span className="font-semibold text-slate-800">
+                          {typeof idx.value === 'number' ? idx.value.toFixed(2) : idx.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Confidence Summary */}
+              {selectedEventForDrawer.confidenceSummary && (
+                <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">Güven Özeti</p>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Ortalama</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatConfidence(selectedEventForDrawer.confidenceSummary.average)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Min</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatConfidence(selectedEventForDrawer.confidenceSummary.min)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Max</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatConfidence(selectedEventForDrawer.confidenceSummary.max)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Source */}
+              <div className="bg-slate-50 border border-slate-200 rounded p-3">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Veri Kaynağı</p>
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium inline-block">
+                  {selectedEventForDrawer.source}
+                </span>
+              </div>
+              {/* Raw Meta JSON - DEV MODE ONLY */}
+              {import.meta.env.DEV && selectedEventForDrawer.indices && selectedEventForDrawer.indices.some(idx => idx.meta) && (
+                <details className="bg-slate-50 border border-slate-200 rounded p-3 text-xs">
+                  <summary className="font-semibold text-slate-700 cursor-pointer hover:text-slate-900">
+                    Raw Meta JSON (Genişlet) - DEV ONLY
+                  </summary>
+                  <div className="mt-2 overflow-auto max-h-40 bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono whitespace-pre-wrap break-words">
+                    {JSON.stringify(
+                      selectedEventForDrawer.indices
+                        .filter(idx => idx.meta)
+                        .map(idx => ({ key: idx.key, meta: idx.meta })),
+                      null,
+                      2
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-200 pt-4">
+              <button
+                onClick={() => setSelectedEventForDrawer(null)}
+                className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded text-sm font-medium text-slate-700 transition"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

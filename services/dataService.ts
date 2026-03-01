@@ -1753,7 +1753,7 @@ export async function getEffectiveOffersForPart(
     const suppliersResponse = await apiGetSuppliers();
     const suppliersList: Supplier[] = Array.isArray(suppliersResponse)
       ? suppliersResponse
-      : suppliersResponse?.suppliers || [];
+      : (suppliersResponse as any)?.suppliers || [];
 
     // Fallback: use mock suppliers
     if (suppliersList.length === 0) {
@@ -1793,7 +1793,7 @@ export async function getEffectiveOffersForPart(
 export async function getAllSuppliers(): Promise<Supplier[]> {
   try {
     const response = await apiGetSuppliers();
-    return Array.isArray(response) ? response : response?.suppliers || [];
+    return Array.isArray(response) ? response : (response as any)?.suppliers || [];
   } catch (error) {
     console.error('[Suppliers] Error fetching suppliers, using mock', error);
     const { MOCK_SUPPLIERS } = await import('../src/mocks/suppliers.seed');
@@ -1869,8 +1869,8 @@ export async function getOemAlternativesForPart(
     const { getOemAlternatives } = await import('./apiClient');
     const result = await getOemAlternatives(oemPartNumber, brand);
     
-    if (result?.success === true) {
-      console.log(`[DataService] ✓ Found ${result.count} alternatives`);
+    if ((result as any)?.success === true) {
+      console.log(`[DataService] ✓ Found ${(result as any).count} alternatives`);
       return result;
     }
     
@@ -1892,4 +1892,103 @@ export async function getOemAlternativesForPart(
       count: 0,
     };
   }
+}
+
+// ========== DATA ENGINE INDICES ==========
+
+/**
+ * Get Data Engine Indices - Multi-domain entry point
+ * Primary: VIO for risk domain with full explainability
+ * Fallback: VehicleAggregate for numeric-only risk indices
+ * 
+ * @param params Domain ("risk" | "part"), vehicleId, vin, plate
+ * @returns Promise of DataEngineIndex[] with domain-specific indices
+ */
+export const getDataEngineIndices = dataEngineIndices.getDataEngineIndices;
+
+/**
+ * Get Vehicle History Events (Araç Öyküsü)
+ * Read-only timeline of vehicle-related events from Data Engine event store
+ * 
+ * @param params Search criteria (vehicleId, vin, or plate required)
+ * @returns Normalized vehicle history timeline
+ */
+export async function getVehicleHistoryEvents(params: {
+  vehicleId?: string;
+  vin?: string;
+  plate?: string;
+  tenantId?: string;
+  limit?: number;
+}): Promise<Array<{
+  id: string;
+  ts: string; // ISO timestamp
+  source: string; // EXPERTISE, FLEET_TELEMETRY, MANUAL, etc.
+  title: string;
+  summary: string;
+  severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  meta?: any;
+}>> {
+  const tenantId = params.tenantId || 'LENT-CORP-DEMO';
+  const limit = params.limit || 50;
+
+  try {
+    // Import eventLogger to read from event store
+    const { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } = await import('../src/modules/data-engine/eventLogger');
+
+    // Fetch events based on vehicleId (primary filter)
+    let events = [];
+    if (params.vehicleId) {
+      events = getRiskIndexEventsByVehicleId(tenantId, params.vehicleId, limit * 2); // Fetch extra to ensure coverage
+    } else {
+      // If only vin/plate provided, fetch all and filter by metadata
+      events = getLastRiskIndexEvents(tenantId, limit * 2);
+    }
+
+    // Normalize events to history format
+    const history = events
+      .map(event => ({
+        id: event.id,
+        ts: event.generatedAt,
+        source: event.source,
+        title: `Risk Index Calculation - ${event.vehicleId}`,
+        summary: `${event.indices.length} indices calculated${event.confidenceSummary ? ` (avg confidence: ${(event.confidenceSummary.average * 100).toFixed(0)}%)` : ''}`,
+        severity: computeSeverity(event.indices),
+        meta: {
+          indicesCount: event.indices.length,
+          confidenceSummary: event.confidenceSummary,
+          indices: event.indices.slice(0, 5), // First 5 for preview
+          fullIndices: event.indices
+        }
+      }))
+      .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()) // Newest first
+      .slice(0, limit);
+
+    console.log('[VehicleHistory] Loaded', {
+      vehicleId: params.vehicleId,
+      count: history.length,
+      tenantId
+    });
+
+    return history;
+  } catch (err) {
+    console.warn('[VehicleHistory] Failed to load history events', err);
+    return [];
+  }
+}
+
+/**
+ * Helper: Compute severity from data engine indices
+ */
+function computeSeverity(indices: any[]): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO' {
+  if (!indices || indices.length === 0) return 'INFO';
+
+  // Check for risk signals
+  const hasRisks = indices.some(idx => idx.key?.includes('risk') && idx.value > 70);
+  if (hasRisks) return 'CRITICAL';
+
+  const hasHighValues = indices.some(idx => idx.confidence > 0.8);
+  if (hasHighValues) return 'HIGH';
+
+  const hasAnyValue = indices.some(idx => idx.value > 50);
+  return hasAnyValue ? 'MEDIUM' : 'LOW';
 }

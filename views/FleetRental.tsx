@@ -7,7 +7,7 @@ export default function FleetRental() {
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [contracts, setContracts] = useState<RentalContract[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Role-based access control
@@ -124,8 +124,10 @@ export default function FleetRental() {
           setSelectedFleet(data[0]);
         }
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[FleetRental] Failed to load fleets:', errorMsg);
         setApiStatus(s => ({ ...s, fleet: 'error' }));
-        setError(`Failed to load fleets: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(`Failed to load fleets: ${errorMsg}`);
       } finally {
         setLoading(false);
       }
@@ -155,8 +157,10 @@ export default function FleetRental() {
           setSelectedVehicleId(vehiclesData[0].vehicleId);
         }
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[FleetRental] Failed to load fleet data:', errorMsg);
         setApiStatus(s => ({ ...s, vehicles: 'error', contracts: 'error' }));
-        setError(`Failed to load fleet data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(`Failed to load fleet data: ${errorMsg}`);
       } finally {
         setLoading(false);
       }
@@ -175,7 +179,9 @@ export default function FleetRental() {
         const summary = await getVehicleSummary(selectedVehicleId);
         setVehicleSummary(summary);
       } catch (err) {
-        setError(`Failed to load vehicle summary: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[FleetRental] Failed to load vehicle summary:', errorMsg);
+        setError(`Failed to load vehicle summary: ${errorMsg}`);
       } finally {
         setSummaryLoading(false);
       }
@@ -199,26 +205,32 @@ export default function FleetRental() {
         // Update form default based on policy
         setRedirectForm(f => ({ ...f, applyStatusChange: policy.autoSetServicedOnRedirect }));
       } catch (err) {
-        console.error('Failed to load V2.2 data:', err);
+        console.error('[FleetRental] Failed to load V2.2 data:', err);
       }
     };
 
     loadV2Data();
   }, [selectedVehicleId, selectedFleet]);
 
-  // Filter functions
-  const filteredFleets = fleets.filter((f) =>
+  // Safe arrays for null safety (must be BEFORE filter functions)
+  const safeFleets = fleets ?? [];
+  const safeVehicles = vehicles ?? [];
+  const safeContracts = contracts ?? [];
+  const safeWorkOrders: WorkOrder[] = [];
+
+  // Filter functions - using safe arrays
+  const filteredFleets = safeFleets.filter((f) =>
     f.name.toLowerCase().includes(searchFleet.toLowerCase())
   );
 
-  const filteredVehicles = vehicles.filter(
+  const filteredVehicles = safeVehicles.filter(
     (v) =>
       v.brand.toLowerCase().includes(searchVehicle.toLowerCase()) ||
       v.model.toLowerCase().includes(searchVehicle.toLowerCase()) ||
       v.plateNumber.includes(searchVehicle)
   );
 
-  const filteredContracts = contracts.filter(
+  const filteredContracts = safeContracts.filter(
     (c) =>
       c.customerName.toLowerCase().includes(searchContract.toLowerCase()) ||
       c.contractId.includes(searchContract)
@@ -264,7 +276,9 @@ export default function FleetRental() {
         depositAmount: 50000,
       });
     } catch (err) {
-      setError(`Failed to create contract: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[FleetRental] Failed to create contract:', errorMsg);
+      setError(`Failed to create contract: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -533,19 +547,19 @@ export default function FleetRental() {
 
   // KPI calculations
   const kpis = {
-    totalFleets: fleets.length,
-    selectedFleetVehicles: vehicles.length,
-    activeVehicles: vehicles.filter((v) => v.status === 'ACTIVE').length,
-    maintenanceVehicles: vehicles.filter((v) => v.status === 'MAINTENANCE').length,
-    activeContracts: contracts.filter((c) => c.status === 'ACTIVE').length,
-    draftContracts: contracts.filter((c) => c.status === 'DRAFT').length,
-    monthlyRevenue: contracts
+    totalFleets: safeFleets.length,
+    selectedFleetVehicles: safeVehicles.length,
+    activeVehicles: safeVehicles.filter((v) => v.status === 'ACTIVE').length,
+    maintenanceVehicles: safeVehicles.filter((v) => v.status === 'MAINTENANCE').length,
+    activeContracts: safeContracts.filter((c) => c.status === 'ACTIVE').length,
+    draftContracts: safeContracts.filter((c) => c.status === 'DRAFT').length,
+    monthlyRevenue: safeContracts
       .filter((c) => c.status === 'ACTIVE')
       .reduce((sum, c) => sum + c.monthlyRate, 0),
     avgRiskScore:
-      vehicles.length > 0
+      safeVehicles.length > 0
         ? Math.round(
-            vehicles.reduce((sum, v) => sum + (Math.random() * 100), 0) / vehicles.length
+            safeVehicles.reduce((sum, v) => sum + (Math.random() * 100), 0) / safeVehicles.length
           )
         : 0,
   };
@@ -729,7 +743,7 @@ export default function FleetRental() {
                           </div>
                           <div className="text-xs text-gray-600 space-y-1">
                             <div>Plaka: {vehicle.plateNumber}</div>
-                            <div>Km: {vehicle.currentMileage.toLocaleString('tr-TR')}</div>
+                            <div>Km: {Number(vehicle.currentMileage ?? 0).toLocaleString('tr-TR')}</div>
                             <div>Sonraki Bakım: {vehicle.nextMaintenanceDate}</div>
                           </div>
                         </button>
@@ -760,83 +774,101 @@ export default function FleetRental() {
                           <div><span className="text-gray-600">Model:</span> {vehicleSummary.model}</div>
                           <div><span className="text-gray-600">Yıl:</span> {vehicleSummary.year}</div>
                           <div><span className="text-gray-600">Durum:</span> <span className={getStatusClass(vehicleSummary.status)}>{vehicleSummary.status}</span></div>
-                          <div className="col-span-2"><span className="text-gray-600">Mileage:</span> {vehicleSummary.currentMileage.toLocaleString('tr-TR')} km</div>
+                          <div className="col-span-2"><span className="text-gray-600">Mileage:</span> {Number(vehicleSummary.currentMileage ?? 0).toLocaleString('tr-TR')} km</div>
                         </div>
                       </div>
 
                       {/* B) Risk Özeti */}
+                      {(() => {
+                        const safeRisk = vehicleSummary?.risk ?? { score: 0, flags: [], level: 'Unknown' };
+                        return (
                       <div className="bg-gray-50 p-4 rounded border border-gray-200">
                         <h3 className="font-semibold text-gray-900 mb-3">Risk Özeti</h3>
                         <div className="mb-2">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm text-gray-600">Risk Skoru:</span>
-                            <span className="text-lg font-bold text-orange-600">{vehicleSummary.risk.score}</span>
+                            <span className="text-lg font-bold text-orange-600">{Number(safeRisk.score ?? 0)}</span>
                             <span className="text-xs text-gray-600">/ 100</span>
                           </div>
                           <div className="w-full bg-gray-300 rounded-full h-2">
-                            <div className="bg-orange-600 h-2 rounded-full" style={{ width: `${Math.min(vehicleSummary.risk.score, 100)}%` }}></div>
+                            <div className="bg-orange-600 h-2 rounded-full" style={{ width: `${Math.min(Number(safeRisk.score ?? 0), 100)}%` }}></div>
                           </div>
                         </div>
-                        {vehicleSummary.risk.flags.length > 0 && (
+                        {(safeRisk.flags ?? []).length > 0 && (
                           <div className="text-xs space-y-1">
-                            {vehicleSummary.risk.flags.map((flag, idx) => (
+                            {(safeRisk.flags ?? []).map((flag: string, idx: number) => (
                               <div key={idx} className="text-red-700 bg-red-50 px-2 py-1 rounded">⚠ {flag}</div>
                             ))}
                           </div>
                         )}
                       </div>
+                        );
+                      })()} 
 
                       {/* C) Bakım Durumu */}
+                      {(() => {
+                        const safeMaintenance = vehicleSummary?.maintenance ?? { nextMaintenanceKm: 0, nextMaintenanceDate: '', upcoming: false, recent: [] };
+                        return (
                       <div className="bg-gray-50 p-4 rounded border border-gray-200">
                         <h3 className="font-semibold text-gray-900 mb-3">Bakım Durumu</h3>
                         <div className="text-sm space-y-2 mb-3">
-                          <div><span className="text-gray-600">Sonraki Bakım (Km):</span> {vehicleSummary.maintenance.nextMaintenanceKm.toLocaleString('tr-TR')}</div>
-                          <div><span className="text-gray-600">Sonraki Bakım (Tarih):</span> {vehicleSummary.maintenance.nextMaintenanceDate}</div>
-                          {vehicleSummary.maintenance.upcoming && (
+                          <div><span className="text-gray-600">Sonraki Bakım (Km):</span> {Number(safeMaintenance.nextMaintenanceKm ?? 0).toLocaleString('tr-TR')}</div>
+                          <div><span className="text-gray-600">Sonraki Bakım (Tarih):</span> {safeMaintenance.nextMaintenanceDate}</div>
+                          {safeMaintenance.upcoming && (
                             <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-2 py-1 rounded text-xs">
                               ⏰ Yakında Bakım Yapılacak
                             </div>
                           )}
                         </div>
-                        {vehicleSummary.maintenance.recent.length > 0 && (
+                        {(safeMaintenance.recent ?? []).length > 0 && (
                           <>
                             <div className="text-xs font-semibold text-gray-700 mb-2">Son 3 Bakım Kaydı:</div>
-                            {vehicleSummary.maintenance.recent.map((mnt, idx) => (
+                            {(safeMaintenance.recent ?? []).map((mnt: any, idx: number) => (
                               <div key={idx} className="bg-white p-2 rounded border border-gray-300 text-xs mb-1">
                                 <div><span className="text-gray-600">Tarih:</span> {mnt.serviceDate}</div>
-                                <div><span className="text-gray-600">Km:</span> {mnt.mileageAtService.toLocaleString('tr-TR')}</div>
+                                <div><span className="text-gray-600">Km:</span> {Number(mnt.mileageAtService ?? 0).toLocaleString('tr-TR')}</div>
                                 <div><span className="text-gray-600">Tür:</span> {mnt.serviceType}</div>
-                                {mnt.incurredCost && <div><span className="text-gray-600">Maliyet:</span> {mnt.incurredCost.toLocaleString('tr-TR')} ₺</div>}
+                                {mnt.incurredCost && <div><span className="text-gray-600">Maliyet:</span> {Number(mnt.incurredCost ?? 0).toLocaleString('tr-TR')} ₺</div>}
                               </div>
                             ))}
                           </>
                         )}
                       </div>
+                        );
+                      })()} 
 
                       {/* D) Maliyet Özeti */}
+                      {(() => {
+                        const safeCosts = vehicleSummary?.costs ?? { last30DaysTotal: 0, breakdown: [] };
+                        return (
                       <div className="bg-gray-50 p-4 rounded border border-gray-200">
                         <h3 className="font-semibold text-gray-900 mb-3">Maliyet Özeti (Son 30 Gün)</h3>
-                        <div className="text-lg font-bold text-blue-600 mb-3">{vehicleSummary.costs.last30DaysTotal.toLocaleString('tr-TR')} ₺</div>
-                        {vehicleSummary.costs.breakdown.length > 0 && (
+                        <div className="text-lg font-bold text-blue-600 mb-3">{Number(safeCosts.last30DaysTotal ?? 0).toLocaleString('tr-TR')} ₺</div>
+                        {(safeCosts.breakdown ?? []).length > 0 && (
                           <div className="space-y-1 text-xs">
-                            {vehicleSummary.costs.breakdown.map((cost, idx) => (
+                            {(safeCosts.breakdown ?? []).map((cost: any, idx: number) => (
                               <div key={idx} className="flex justify-between">
                                 <span className="text-gray-600">{cost.category}:</span>
-                                <span className="font-medium">{cost.amount.toLocaleString('tr-TR')} ₺</span>
+                                <span className="font-medium">{Number(cost.amount ?? 0).toLocaleString('tr-TR')} ₺</span>
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
+                        );
+                      })()} 
 
                       {/* E) Parça Önerileri */}
+                      {(() => {
+                        const safeParts = vehicleSummary?.parts ?? { topParts: [] };
+                        return (
                       <div className="bg-gray-50 p-4 rounded border border-gray-200">
                         <h3 className="font-semibold text-gray-900 mb-3">Parça Önerileri (Top 3)</h3>
-                        {vehicleSummary.parts.topParts.length === 0 ? (
+                        {(safeParts.topParts ?? []).length === 0 ? (
                           <div className="text-gray-500 text-xs">Parça önerisi bulunamadı</div>
                         ) : (
                           <div className="space-y-2">
-                            {vehicleSummary.parts.topParts.map((part, idx) => (
+                            {(safeParts.topParts ?? []).map((part: any, idx: number) => (
                               <div key={idx} className="bg-white p-2 rounded border border-gray-300 text-xs">
                                 <div className="font-medium">{part.partName}</div>
                                 {part.oem && <div><span className="text-gray-600">OEM:</span> {part.oem}</div>}
@@ -845,7 +877,7 @@ export default function FleetRental() {
                                 {part.topOffer && (
                                   <div className="bg-blue-50 mt-1 p-1 rounded">
                                     <div><span className="text-gray-600">Tedarikçi:</span> {part.topOffer.supplierName}</div>
-                                    <div><span className="text-gray-600">Fiyat:</span> {part.topOffer.price.toLocaleString('tr-TR')} {part.topOffer.currency}</div>
+                                    <div><span className="text-gray-600">Fiyat:</span> {Number(part.topOffer.price ?? 0).toLocaleString('tr-TR')} {part.topOffer.currency}</div>
                                     {part.topOffer.etaDays && <div><span className="text-gray-600">Gün:</span> {part.topOffer.etaDays}</div>}
                                   </div>
                                 )}
@@ -854,6 +886,8 @@ export default function FleetRental() {
                           </div>
                         )}
                       </div>
+                        );
+                      })()} 
 
                       {/* F) Servis Noktaları */}
                       <div className="bg-gray-50 p-4 rounded border border-gray-200">
@@ -912,38 +946,43 @@ export default function FleetRental() {
                       </div>
 
                       {/* G) Servis Noktaları */}
-                      <div className="bg-gray-50 p-4 rounded border border-gray-200">
-                        <h3 className="font-semibold text-gray-900 mb-3">Servis Noktaları</h3>
-                        {vehicleSummary.service.recommendedServicePoints.length === 0 ? (
-                          <div className="text-gray-500 text-xs">Servis noktası bulunamadı</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {vehicleSummary.service.recommendedServicePoints.map((sp, idx) => (
-                              <div key={idx} className="bg-white p-2 rounded border border-gray-300 text-xs">
-                                <div className="flex justify-between mb-1">
-                                  <div className="font-medium">{sp.name}</div>
-                                  <span className={`px-1 py-0.5 rounded text-white text-xs ${sp.type === 'Authorized' ? 'bg-green-600' : 'bg-gray-600'}`}>
-                                    {sp.type}
-                                  </span>
-                                </div>
-                                <div><span className="text-gray-600">Şehir:</span> {sp.city}</div>
-                                {sp.phone && <div><span className="text-gray-600">Tel:</span> {sp.phone}</div>}
-                                <button
-                                  onClick={() => handleOpenRedirectModal(sp.servicePointId)}
-                                  disabled={role === 'viewer'}
-                                  className={`mt-1 text-xs px-2 py-1 rounded transition ${
-                                    role === 'viewer'
-                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                      : 'bg-blue-500 text-white hover:bg-blue-600'
-                                  }`}
-                                >
-                                  Yönlendir (V2.2)
-                                </button>
+                      {(() => {
+                        const safeRecommendedServicePoints = (vehicleSummary?.service?.recommendedServicePoints ?? []);
+                        return (
+                          <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                            <h3 className="font-semibold text-gray-900 mb-3">Servis Noktaları</h3>
+                            {safeRecommendedServicePoints.length === 0 ? (
+                              <div className="text-gray-500 text-xs">Önerilen servis noktası bulunamadı</div>
+                            ) : (
+                              <div className="space-y-2">
+                                {safeRecommendedServicePoints.map((sp, idx) => (
+                                  <div key={idx} className="bg-white p-2 rounded border border-gray-300 text-xs">
+                                    <div className="flex justify-between mb-1">
+                                      <div className="font-medium">{sp.name}</div>
+                                      <span className={`px-1 py-0.5 rounded text-white text-xs ${sp.type === 'Authorized' ? 'bg-green-600' : 'bg-gray-600'}`}>
+                                        {sp.type}
+                                      </span>
+                                    </div>
+                                    <div><span className="text-gray-600">Şehir:</span> {sp.city}</div>
+                                    {sp.phone && <div><span className="text-gray-600">Tel:</span> {sp.phone}</div>}
+                                    <button
+                                      onClick={() => handleOpenRedirectModal(sp.servicePointId)}
+                                      disabled={role === 'viewer'}
+                                      className={`mt-1 text-xs px-2 py-1 rounded transition ${
+                                        role === 'viewer'
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                                      }`}
+                                    >
+                                      Yönlendir (V2.2)
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
 
                       {/* G) Son Servis Yönlendirmeleri (V2.2) */}
                       {serviceRedirects.length > 0 && (
@@ -1571,7 +1610,7 @@ export default function FleetRental() {
                               Tarih: {contract.startDate} → {contract.endDate}
                             </div>
                             <div>
-                              Aylık Ücret: {contract.monthlyRate.toLocaleString('tr-TR')} ₺
+                              Aylık Ücret: {Number(contract.monthlyRate ?? 0).toLocaleString('tr-TR')} ₺
                             </div>
                           </div>
                         </div>
@@ -1622,7 +1661,7 @@ export default function FleetRental() {
           <div className="bg-white rounded-lg shadow p-4">
             <div className="text-gray-600 text-sm font-medium mb-1">Aylık Gelir</div>
             <div className="text-3xl font-bold text-green-700">
-              {kpis.monthlyRevenue.toLocaleString('tr-TR')}
+              {Number(kpis.monthlyRevenue ?? 0).toLocaleString('tr-TR')}
             </div>
             <div className="text-xs text-gray-600 mt-2">₺</div>
           </div>
