@@ -97,13 +97,9 @@ export async function buildVehicleAggregate(
       odometerAnomaly,
       serviceGapScore,
       damageRecords.length,
-      insuranceRecords.filter((r) => r.type === 'claim').length
+      insuranceRecords.filter((r) => r.type === 'claim').length,
+      insuranceDamageCorrelation
     );
-
-    // SOFT INFLUENCE: Reduce trust if mismatch exists
-    if (insuranceDamageCorrelation.mismatchType !== 'none') {
-      trustIndex = Math.max(0, trustIndex - 10);
-    }
 
     const reliabilityIndex = calculateReliabilityIndex(
       mechanicalRisk,

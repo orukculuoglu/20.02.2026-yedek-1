@@ -10,6 +10,7 @@ import type {
   DamageRecord,
   ServiceRecord,
 } from './types';
+import type { InsuranceDamageCorrelation } from './correlationIntelligence';
 
 /**
  * Utility: Clamp a value to 0-100 range
@@ -187,7 +188,8 @@ export function calculateTrustIndex(
   odometerAnomaly: boolean,
   serviceGapScore: number,
   damageCount: number,
-  claimCount: number
+  claimCount: number,
+  insuranceDamageCorrelation?: InsuranceDamageCorrelation
 ): number {
   let trustScore = 100;
 
@@ -202,6 +204,59 @@ export function calculateTrustIndex(
 
   // Multiple insurance claims: (-15 per claim, capped at -40)
   trustScore -= Math.min(40, claimCount * 15);
+
+  // PHASE 2.6(B): Insurance-Damage Correlation Penalties
+  if (insuranceDamageCorrelation) {
+    const idc = insuranceDamageCorrelation;
+    let mismatchPenalty = 0;
+
+    // Rule 1: Base mismatch penalties by type
+    if (idc.mismatchType === 'damage_without_claims') {
+      mismatchPenalty += 15;
+    } else if (idc.mismatchType === 'claims_without_damage') {
+      mismatchPenalty += 10;
+    }
+
+    // Rule 1b: Medium correlation score penalty
+    if (idc.correlationScore >= 30 && idc.correlationScore <= 50) {
+      mismatchPenalty += 8;
+    }
+
+    // Rule 1c: Repeated mismatch penalty (if data exists)
+    // Note: We detect repeated mismatches by checking matched events vs total
+    // If matchedEvents < (min(claimCount, damageCount)), there are unmatched pairs
+    const totalEvents = idc.claimCount + idc.damageCount;
+    const unmatchedEvents = totalEvents - idc.matchedEvents * 2;
+    if (unmatchedEvents > 0) {
+      mismatchPenalty += 25;
+    }
+
+    // Rule 2: Confidence scaling (apply 60% of penalty if low confidence scenario)
+    // Since we don't have explicit confidence data, we estimate low confidence
+    // if correlation is borderline (30-50 range) or evidence count is low
+    const hasLowConfidenceIndicator =
+      idc.correlationScore < 50 ||
+      (idc.claimCount + idc.damageCount) < 2;
+
+    if (hasLowConfidenceIndicator) {
+      mismatchPenalty = mismatchPenalty * 0.6; // Apply 60% scaling (40% reduction)
+    }
+
+    trustScore -= mismatchPenalty;
+
+    // Rule 3: Cross-domain suspicion penalty
+    // If both KM anomaly and insurance-damage mismatch exist: add -10
+    if (odometerAnomaly && idc.mismatchType !== 'none') {
+      let crossDomainPenalty = 10;
+
+      // Apply confidence scaling to cross-domain penalty too
+      if (hasLowConfidenceIndicator) {
+        crossDomainPenalty = crossDomainPenalty * 0.6;
+      }
+
+      trustScore -= crossDomainPenalty;
+    }
+  }
 
   return clamp100(trustScore);
 }

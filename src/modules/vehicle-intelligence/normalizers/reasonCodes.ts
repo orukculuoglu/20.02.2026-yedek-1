@@ -393,6 +393,47 @@ export function buildReasonCodes(input: {
         },
       });
     }
+
+    // PHASE 2.6(B): Enhanced trust impact reason codes
+    if (corr.mismatchType !== 'none') {
+      // Penalty severity based on type and correlation
+      const penaltySeverity =
+        corr.mismatchType === 'damage_without_claims'
+          ? 'high'
+          : corr.correlationScore >= 50
+            ? 'high'
+            : 'warn';
+
+      reasons.trustIndex.push({
+        code: 'INSURANCE_DAMAGE_INCONSISTENCY',
+        severity: penaltySeverity,
+        message: 'Sigorta-hasar tutarsızlığı güven puanını düşürmektedir',
+        meta: {
+          mismatchType: corr.mismatchType,
+          correlationScore: corr.correlationScore,
+          claimCount: corr.claimCount,
+          damageCount: corr.damageCount,
+        },
+      });
+    }
+
+    // Cross-domain suspicion will be added separately when km anomaly is also present
+    // (handled in a new combined check)
+  }
+
+  // PHASE 2.6(B): Cross-domain suspicion (KM anomaly + Insurance-Damage mismatch)
+  if (input.odometerAnomaly && input.insuranceDamageCorrelation?.mismatchType !== 'none') {
+    reasons.trustIndex.push({
+      code: 'CROSS_DOMAIN_SUSPICION',
+      severity: 'high',
+      message: 'KM anomaly ve sigorta-hasar uyuşmazlığı birlikte tespit edildi - yüksek risk',
+      meta: {
+        kmAnomaly: true,
+        mismatchType: input.insuranceDamageCorrelation?.mismatchType,
+        rollbackSeverity: input.rollbackSeverity,
+        correlationScore: input.insuranceDamageCorrelation?.correlationScore,
+      },
+    });
   }
 
   return reasons;
