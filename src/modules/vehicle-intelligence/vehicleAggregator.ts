@@ -5,6 +5,10 @@
 
 import type { VehicleAggregate } from './types';
 import { getVehicleDataProvider } from './dataProviders/providerFactory';
+import { buildReasonCodes } from './normalizers/reasonCodes';
+import { analyzeServiceDiscipline } from './serviceDiscipline';
+import { analyzeObdIntelligence } from './obdIntelligence';
+import { analyzeInsuranceDamageCorrelation } from './correlationIntelligence';
 import {
   detectOdometerAnomaly,
   calculateServiceGapScore,
@@ -63,12 +67,22 @@ export async function buildVehicleAggregate(
       usageClass,
     };
     const serviceGapScore = calculateServiceGapScore(serviceRecords);
+    const serviceDiscipline = analyzeServiceDiscipline(serviceRecords, kmHistory);
+    const obdIntelligence = analyzeObdIntelligence(obdRecords);
+    const insuranceDamageCorrelation = analyzeInsuranceDamageCorrelation(
+      insuranceRecords,
+      damageRecords
+    );
     const structuralRisk = calculateStructuralRisk(damageRecords);
-    const mechanicalRisk = calculateMechanicalRisk(obdRecords);
-    const insuranceRisk = calculateInsuranceRisk(insuranceRecords);
+    const mechanicalRisk = Math.max(calculateMechanicalRisk(obdRecords), obdIntelligence.severityScore);
+    let insuranceRisk = calculateInsuranceRisk(insuranceRecords);
+    
+    // SOFT INFLUENCE: Apply correlation score
+    insuranceRisk = Math.max(insuranceRisk, insuranceDamageCorrelation.correlationScore);
+    const adjustedStructuralRisk = Math.max(structuralRisk, insuranceDamageCorrelation.correlationScore * 0.5);
 
     console.log(
-      `[VehicleAggregator]  - Metrics: OdometerAnomaly=${odometerAnomaly}, Rollback=${kmIntelligence.hasRollback}(severity=${kmIntelligence.rollbackSeverity}), Volatility=${volatilityScore}, Usage=${usageClass}, ServiceGap=${serviceGapScore}, Structural=${structuralRisk}, Mechanical=${mechanicalRisk}, Insurance=${insuranceRisk}`
+      `[VehicleAggregator]  - Metrics: OdometerAnomaly=${odometerAnomaly}, Rollback=${kmIntelligence.hasRollback}(severity=${kmIntelligence.rollbackSeverity}), Volatility=${volatilityScore}, Usage=${usageClass}, ServiceGap=${serviceGapScore}, Structural=${adjustedStructuralRisk}, Mechanical=${mechanicalRisk}, Insurance=${insuranceRisk}`
     );
 
     // STEP 3: Calculate intelligence indexes
@@ -79,12 +93,17 @@ export async function buildVehicleAggregate(
       return new Date(r.date) >= twoYearsAgo;
     }).length;
 
-    const trustIndex = calculateTrustIndex(
+    let trustIndex = calculateTrustIndex(
       odometerAnomaly,
       serviceGapScore,
       damageRecords.length,
       insuranceRecords.filter((r) => r.type === 'claim').length
     );
+
+    // SOFT INFLUENCE: Reduce trust if mismatch exists
+    if (insuranceDamageCorrelation.mismatchType !== 'none') {
+      trustIndex = Math.max(0, trustIndex - 10);
+    }
 
     const reliabilityIndex = calculateReliabilityIndex(
       mechanicalRisk,
@@ -96,7 +115,8 @@ export async function buildVehicleAggregate(
     const maintenanceDiscipline = calculateMaintenanceDiscipline(
       serviceRecords,
       serviceGapScore,
-      odometerAnomaly
+      odometerAnomaly,
+      serviceDiscipline
     );
 
     console.log(
@@ -119,10 +139,13 @@ export async function buildVehicleAggregate(
       derived: {
         odometerAnomaly,
         kmIntelligence,
-        serviceGapScore,
-        structuralRisk,
+        serviceGapScore: 100 - serviceDiscipline.timeGapScore, // Inverted for semantics: higher = worse
+        serviceDiscipline,
+        structuralRisk: adjustedStructuralRisk,
         mechanicalRisk,
         insuranceRisk,
+        obdIntelligence,
+        insuranceDamageCorrelation,
       },
       indexes: {
         trustIndex,
@@ -132,14 +155,39 @@ export async function buildVehicleAggregate(
       insightSummary: '', // Will be filled next
     };
 
-    // STEP 5: Generate insights
+    // STEP 5a: Generate reason codes for explainability
+    const reasonCodes = buildReasonCodes({
+      odometerAnomaly,
+      rollbackSeverity: kmIntelligence.rollbackSeverity,
+      volatilityScore,
+      serviceGapScore: 100 - serviceDiscipline.timeGapScore, // Inverted for semantics consistency
+      serviceDiscipline,
+      structuralRisk: adjustedStructuralRisk,
+      mechanicalRisk,
+      insuranceRisk,
+      obdIntelligence,
+      insuranceDamageCorrelation,
+      dataCounts: {
+        km: kmHistory.length,
+        service: serviceRecords.length,
+        obd: obdRecords.length,
+        insurance: insuranceRecords.length,
+        damage: damageRecords.length,
+      },
+    });
+    console.log(`[VehicleAggregator] ✓ Reason codes generated`);
+
+    // STEP 5b: Generate insights
     const insightSummary = generateInsight(partialAggregate);
     console.log(`[VehicleAggregator] ✓ Insight generated (${insightSummary.length} chars)`);
 
-    // STEP 6: Return complete aggregate
+    // STEP 6: Return complete aggregate with explainability
     const aggregate: VehicleAggregate = {
       ...partialAggregate,
       insightSummary,
+      explain: {
+        reasons: reasonCodes,
+      },
     };
 
     console.log(`[VehicleAggregator] ✓ Aggregate complete for ${plate}`);
@@ -171,9 +219,37 @@ export async function buildVehicleAggregate(
           usageClass: 'normal',
         },
         serviceGapScore: 0,
+        serviceDiscipline: {
+          timeGapScore: 0,
+          kmGapScore: 0,
+          regularityScore: 0,
+          disciplineScore: 0,
+        },
         structuralRisk: 0,
         mechanicalRisk: 0,
         insuranceRisk: 0,
+        obdIntelligence: {
+          totalFaultCount: 0,
+          uniqueFaultCodes: 0,
+          categoryBreakdown: {
+            engine: 0,
+            transmission: 0,
+            emission: 0,
+            electrical: 0,
+            brake: 0,
+            other: 0,
+          },
+          highestSeverity: 'low',
+          repeatedFaults: [],
+          severityScore: 0,
+        },
+        insuranceDamageCorrelation: {
+          claimCount: 0,
+          damageCount: 0,
+          matchedEvents: 0,
+          mismatchType: 'none',
+          correlationScore: 0,
+        },
       },
       indexes: {
         trustIndex: 50, // Unknown

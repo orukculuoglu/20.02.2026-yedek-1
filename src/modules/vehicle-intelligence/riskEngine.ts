@@ -239,12 +239,37 @@ export function calculateReliabilityIndex(
 export function calculateMaintenanceDiscipline(
   serviceRecords: ServiceRecord[],
   serviceGapScore: number,
-  odometerRisk: boolean
+  odometerRisk: boolean,
+  serviceDiscipline?: { disciplineScore: number; regularityScore: number; timeGapScore: number }
 ): number {
+  // If serviceDiscipline is provided, use it as the primary source (with adjustments)
+  if (serviceDiscipline) {
+    let disciplineScore = serviceDiscipline.disciplineScore;
+
+    // Bonus for consistent recent services
+    const twoYearsAgo = new Date(
+      new Date().getTime() - 2 * 365 * 24 * 60 * 60 * 1000
+    );
+    const recentServices = serviceRecords.filter((r) => new Date(r.date) >= twoYearsAgo).length;
+    if (recentServices > 0) {
+      disciplineScore += Math.min(10, recentServices * 2);
+    }
+
+    // Penalize odometer anomalies
+    if (odometerRisk) {
+      disciplineScore -= 15;
+    }
+
+    return clamp100(disciplineScore);
+  }
+
+  // Fallback legacy logic if serviceDiscipline not provided
   let disciplineScore = 100;
 
   // Service count within last 2 years (positive indicator)
-  const twoYearsAgo = new Date(new Date().getTime() - 2 * 365 * 24 * 60 * 60 * 1000);
+  const twoYearsAgo = new Date(
+    new Date().getTime() - 2 * 365 * 24 * 60 * 60 * 1000
+  );
   const recentServices = serviceRecords.filter((r) => new Date(r.date) >= twoYearsAgo).length;
 
   // Missing service records = poor discipline

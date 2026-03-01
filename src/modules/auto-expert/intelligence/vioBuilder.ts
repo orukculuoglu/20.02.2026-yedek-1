@@ -132,6 +132,9 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
     damageCount: dataSources.damageRecords.length,
   });
 
+  // Get reasonCodes from aggregate.explain
+  const reasonCodes = aggregate.explain?.reasons;
+
   return [
     {
       key: 'trustIndex',
@@ -148,6 +151,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
           derived.kmIntelligence.rollbackSeverity > 60
             ? `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Trust reduced: Rollback severity ${derived.kmIntelligence.rollbackSeverity}/100`
             : `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Trust relies on KM history`,
+        reasonCodes: reasonCodes?.trustIndex ?? [],
       },
     },
     {
@@ -159,6 +163,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
       evidenceSources,
       meta: {
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Multi-source analysis`,
+        reasonCodes: reasonCodes?.reliabilityIndex ?? [],
       },
     },
     {
@@ -170,6 +175,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
       evidenceSources,
       meta: {
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Service record count: ${dataSources.serviceRecords.length}`,
+        reasonCodes: reasonCodes?.maintenanceDiscipline ?? [],
       },
     },
     {
@@ -181,6 +187,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
       evidenceSources,
       meta: {
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Damage records: ${dataSources.damageRecords.length}`,
+        reasonCodes: reasonCodes?.structuralRisk ?? [],
       },
     },
     {
@@ -192,6 +199,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
       evidenceSources,
       meta: {
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | OBD records: ${dataSources.obdRecords.length}`,
+        reasonCodes: reasonCodes?.mechanicalRisk ?? [],
       },
     },
     {
@@ -203,6 +211,7 @@ function buildIndexes(aggregate: VehicleAggregate): IntelligenceIndex[] {
       evidenceSources,
       meta: {
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}% | Insurance records: ${dataSources.insuranceRecords.length}`,
+        reasonCodes: reasonCodes?.insuranceRisk ?? [],
       },
     },
   ];
@@ -229,6 +238,9 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
     damageCount: dataSources.damageRecords.length,
   });
 
+  // Get reasonCodes from aggregate.explain
+  const reasonCodes = aggregate.explain?.reasons;
+
   // ODOMETER ANOMALY
   if (derived.odometerAnomaly) {
     const confidenceValue = adjustSignalConfidence(95, 'high', dataSources.kmHistory.length);
@@ -241,6 +253,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
       meta: {
         description: 'Km rollback or manipulation detected',
         confidenceReason: `High confidence anomaly detection with ${dataSources.kmHistory.length} KM records`,
+        reasonCodes: reasonCodes?.trustIndex ?? [],
       },
     });
   }
@@ -274,6 +287,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
         volatilityScore: derived.kmIntelligence.volatilityScore,
         usageClass: derived.kmIntelligence.usageClass,
         confidenceReason: `Rollback severity: ${derived.kmIntelligence.rollbackSeverity}/100 at ${derived.kmIntelligence.rollbackEvidenceCount} point(s) | Volatility: ${derived.kmIntelligence.volatilityScore}/100 | Usage: ${derived.kmIntelligence.usageClass}`,
+        reasonCodes: reasonCodes?.trustIndex ?? [],
       },
     });
   }
@@ -291,6 +305,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
         riskValue: derived.structuralRisk,
         damageRecords: dataSources.damageRecords.length,
         confidenceReason: `Coverage: ${coverageScore}%, Evidence: ${dataSources.damageRecords.length} damage records`,
+        reasonCodes: reasonCodes?.structuralRisk ?? [],
       },
     });
   } else if (derived.structuralRisk > VIO_THRESHOLDS.STRUCTURAL_RISK_MODERATE) {
@@ -304,6 +319,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
       meta: {
         riskValue: derived.structuralRisk,
         confidenceReason: `Coverage: ${coverageScore}%, Evidence: ${dataSources.damageRecords.length} damage records`,
+        reasonCodes: reasonCodes?.structuralRisk ?? [],
       },
     });
   }
@@ -321,6 +337,37 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
         riskValue: derived.mechanicalRisk,
         faultCodeCount: dataSources.obdRecords.length,
         confidenceReason: `Coverage: ${coverageScore}%, Evidence: ${dataSources.obdRecords.length} OBD fault codes`,
+        reasonCodes: reasonCodes?.mechanicalRisk ?? [],
+      },
+    });
+  }
+
+  // OBD CRITICAL RISK - New detailed OBD intelligence signal
+  if (derived.obdIntelligence && derived.obdIntelligence.severityScore >= 70) {
+    let obdSeverity: 'medium' | 'high' = 'medium';
+    if (derived.obdIntelligence.severityScore >= 85) obdSeverity = 'high';
+
+    const confidenceValue = adjustSignalConfidence(
+      baseConfidence,
+      obdSeverity,
+      derived.obdIntelligence.totalFaultCount + derived.obdIntelligence.repeatedFaults.length
+    );
+
+    signals.push({
+      code: 'OBD_CRITICAL_RISK',
+      severity: obdSeverity,
+      confidence: confidenceValue,
+      evidenceSources: ['obd_records'],
+      evidenceCount: derived.obdIntelligence.totalFaultCount,
+      meta: {
+        severityScore: derived.obdIntelligence.severityScore,
+        totalFaultCount: derived.obdIntelligence.totalFaultCount,
+        uniqueFaultCodes: derived.obdIntelligence.uniqueFaultCodes,
+        highestSeverity: derived.obdIntelligence.highestSeverity,
+        categoryBreakdown: derived.obdIntelligence.categoryBreakdown,
+        repeatedFaults: derived.obdIntelligence.repeatedFaults,
+        confidenceReason: `OBD severity score: ${derived.obdIntelligence.severityScore}/100 | Repeating faults: ${derived.obdIntelligence.repeatedFaults.length} | Categories: ${Object.values(derived.obdIntelligence.categoryBreakdown).filter((n) => n > 0).length}`,
+        reasonCodes: reasonCodes?.mechanicalRisk ?? [],
       },
     });
   }
@@ -342,6 +389,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
         gapScore: derived.serviceGapScore,
         lastServiceCount: dataSources.serviceRecords.length,
         confidenceReason: `Coverage: ${coverageScore}%, Evidence: ${dataSources.serviceRecords.length} service records + KM history`,
+        reasonCodes: reasonCodes?.maintenanceDiscipline ?? [],
       },
     });
   }
@@ -360,6 +408,7 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
         riskValue: derived.insuranceRisk,
         claimCount,
         confidenceReason: `Coverage: ${coverageScore}%, Evidence: ${claimCount} insurance claims`,
+        reasonCodes: reasonCodes?.insuranceRisk ?? [],
       },
     });
   }
@@ -380,6 +429,79 @@ function buildSignals(aggregate: VehicleAggregate): IntelligenceSignal[] {
       meta: {
         disciplineScore: aggregate.indexes.maintenanceDiscipline,
         confidenceReason: `Coverage: ${coverageScore}%, Consistency: ${consistencyScore}%, Evidence: ${dataSources.serviceRecords.length} service records`,
+        reasonCodes: reasonCodes?.maintenanceDiscipline ?? [],
+      },
+    });
+  }
+
+  // SERVICE DISCIPLINE - NEW detailed signal based on serviceDiscipline model
+  if (derived.serviceDiscipline) {
+    const sd = derived.serviceDiscipline;
+    // Signal if overall discipline score is low (< 50)
+    if (sd.disciplineScore < 50) {
+      let serviceSeverity: 'medium' | 'high' = 'medium';
+      if (sd.disciplineScore < 30) serviceSeverity = 'high';
+
+      const confidenceValue = adjustSignalConfidence(
+        baseConfidence,
+        serviceSeverity,
+        dataSources.serviceRecords.length + dataSources.kmHistory.length
+      );
+
+      signals.push({
+        code: 'SERVICE_DISCIPLINE_LOW',
+        severity: serviceSeverity,
+        confidence: confidenceValue,
+        evidenceSources: ['service_records', 'km_history'],
+        evidenceCount: dataSources.serviceRecords.length,
+        meta: {
+          disciplineScore: sd.disciplineScore,
+          timeGapScore: sd.timeGapScore,
+          kmGapScore: sd.kmGapScore,
+          regularityScore: sd.regularityScore,
+          daysSinceLastService: sd.daysSinceLastService,
+          estimatedKmSinceLastService: sd.estimatedKmSinceLastService,
+          confidenceReason: `Service discipline: ${sd.disciplineScore}/100 | Time gaps: ${sd.timeGapScore}/100, KM gaps: ${sd.kmGapScore}/100, Regularity: ${sd.regularityScore}/100`,
+          reasonCodes: reasonCodes?.maintenanceDiscipline ?? [],
+        },
+      });
+    }
+  }
+
+  // INSURANCE + DAMAGE CORRELATION INCONSISTENCY
+  if (
+    derived.insuranceDamageCorrelation &&
+    derived.insuranceDamageCorrelation.mismatchType !== 'none'
+  ) {
+    const idc = derived.insuranceDamageCorrelation;
+    const signalSeverity =
+      idc.correlationScore >= 50 ? ('high' as const) : ('medium' as const);
+
+    const confidenceValue = adjustSignalConfidence(
+      baseConfidence,
+      signalSeverity,
+      idc.claimCount + idc.damageCount
+    );
+
+    signals.push({
+      code: 'INSURANCE_DAMAGE_INCONSISTENCY',
+      severity: signalSeverity,
+      confidence: confidenceValue,
+      evidenceSources: ['insurance_records', 'damage_records'],
+      evidenceCount: idc.claimCount + idc.damageCount,
+      meta: {
+        description: 'Mismatch between insurance claims and damage records',
+        claimCount: idc.claimCount,
+        damageCount: idc.damageCount,
+        matchedEvents: idc.matchedEvents,
+        mismatchType: idc.mismatchType,
+        correlationScore: idc.correlationScore,
+        message:
+          idc.mismatchType === 'claims_without_damage'
+            ? `${idc.claimCount} sigorta talebi var ancak sadece ${idc.damageCount} hasar kaydı eşleşti`
+            : `${idc.damageCount} hasar kaydı var ancak sadece ${idc.claimCount} sigorta talebi eşleşti`,
+        confidenceReason: `Correlation score: ${idc.correlationScore}/100 | Claims: ${idc.claimCount}, Damage records: ${idc.damageCount}`,
+        reasonCodes: reasonCodes?.insuranceRisk ?? [],
       },
     });
   }
@@ -402,6 +524,7 @@ export function buildVIO(aggregate: VehicleAggregate): VehicleIntelligenceOutput
 
       indexes: buildIndexes(aggregate),
       signals: buildSignals(aggregate),
+      derived: aggregate.derived,
       partLifeFeatures: extractPartLifeFeatures(aggregate),
 
       summary: aggregate.insightSummary,

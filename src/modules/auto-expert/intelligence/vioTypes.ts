@@ -4,6 +4,8 @@
  * Version: 1.0
  */
 
+import type { DerivedMetrics } from '../../vehicle-intelligence/types';
+
 /**
  * Intelligence index with machine key, optional label, value, and confidence
  */
@@ -60,6 +62,9 @@ export interface VehicleIntelligenceOutput {
 
   // Action signals and alerts
   signals: IntelligenceSignal[];
+
+  // Derived metrics (risk scores, intelligence analysis)
+  derived?: DerivedMetrics;
 
   // Features for downstream analysis
   partLifeFeatures: PartLifeFeatures;

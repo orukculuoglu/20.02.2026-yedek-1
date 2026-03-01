@@ -3,6 +3,11 @@
  * Defines VehicleAggregate and all related data structures
  */
 
+import type { ReasonCodes } from './normalizers/reasonCodes';
+import type { ServiceDisciplineAnalysis } from './serviceDiscipline';
+import type { ObdIntelligence } from './obdIntelligence';
+import type { InsuranceDamageCorrelation } from './correlationIntelligence';
+
 export interface KmHistoryRecord {
   date: string; // ISO date
   km: number;
@@ -50,9 +55,12 @@ export interface DerivedMetrics {
   odometerAnomaly: boolean;
   kmIntelligence: KmIntelligence; // Advanced KM analysis
   serviceGapScore: number; // 0-100 (0=perfect, 100=critical)
+  serviceDiscipline: ServiceDisciplineAnalysis; // Detailed service pattern analysis
   structuralRisk: number; // 0-100
   mechanicalRisk: number; // 0-100
   insuranceRisk: number; // 0-100
+  obdIntelligence: ObdIntelligence; // Fault code analysis
+  insuranceDamageCorrelation: InsuranceDamageCorrelation; // Insurance vs damage correlation
 }
 
 export interface IntelligenceIndexes {
@@ -74,4 +82,8 @@ export interface VehicleAggregate {
   indexes: IntelligenceIndexes;
 
   insightSummary: string;
+
+  explain?: {
+    reasons: ReasonCodes;
+  };
 }
