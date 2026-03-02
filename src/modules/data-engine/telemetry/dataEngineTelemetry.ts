@@ -1,4 +1,5 @@
 import type { CircuitState } from "../resilience/circuitBreaker";
+import { getRuntimeConfig } from "../config/dataEngineRuntimeConfig";
 
 /**
  * Data Engine Telemetry
@@ -27,6 +28,11 @@ export interface TelemetrySnapshot {
   successRate: number;              // % of sent vs (sent + queued + failed)
   circuitState?: CircuitState;      // CLOSED | OPEN | HALF_OPEN
   rateLimitedCount?: number;        // Number of rate limit rejections
+  dynamicConfig?: {
+    maxRequestsPerWindow: number;
+    circuitFailureThreshold: number;
+    circuitOpenTimeoutMs: number;
+  };
 }
 
 /**
@@ -162,6 +168,9 @@ export function getTelemetrySnapshot(): TelemetrySnapshot {
     averageLatencyMs = sum / telemetryState.latencySamples.length;
   }
 
+  // Get current runtime config
+  const config = getRuntimeConfig();
+
   return {
     totalSent: telemetryState.sentCount,
     totalQueued: telemetryState.queuedCount,
@@ -172,6 +181,11 @@ export function getTelemetrySnapshot(): TelemetrySnapshot {
     successRate: Math.round(successRate * 10) / 10,
     circuitState: telemetryState.circuitState,
     rateLimitedCount: telemetryState.rateLimitedCount,
+    dynamicConfig: {
+      maxRequestsPerWindow: config.maxRequestsPerWindow,
+      circuitFailureThreshold: config.circuitFailureThreshold,
+      circuitOpenTimeoutMs: config.circuitOpenTimeoutMs,
+    },
   };
 }
 

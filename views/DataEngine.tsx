@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package } from 'lucide-react';
+import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package, Settings } from 'lucide-react';
 import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
 import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
@@ -1415,6 +1415,19 @@ export const DataEngine: React.FC = () => {
                 {telemetry.lastError && (
                   <p className="text-xs text-red-600 mt-2">Last Error: {telemetry.lastError}</p>
                 )}
+              </div>
+
+              {/* Adaptive Runtime Config */}
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Settings size={16} className="text-purple-600" />
+                  Adaptive Runtime Config (DEV)
+                </h4>
+                <div className="text-xs text-slate-600 mt-2 grid grid-cols-2 gap-2">
+                  <div>Max Requests/10s: <span className="font-semibold text-purple-600">{telemetry.dynamicConfig?.maxRequestsPerWindow || 20}</span></div>
+                  <div>Failure Threshold: <span className="font-semibold text-purple-600">{telemetry.dynamicConfig?.circuitFailureThreshold || 5}</span></div>
+                  <div>Circuit Timeout: <span className="font-semibold text-purple-600">{telemetry.dynamicConfig?.circuitOpenTimeoutMs || 30000}ms</span></div>
+                </div>
               </div>
             </div>
           </div>

@@ -19,6 +19,7 @@ import { sanitizeMeta } from "../utils/sanitizeMeta";
 import { recordSent, recordQueued, recordFailed, updateCircuitState } from "../telemetry/dataEngineTelemetry";
 import { createCircuitBreaker, type CircuitState } from "../resilience/circuitBreaker";
 import { createRateLimiter } from "../resilience/rateLimiter";
+import { getRuntimeConfig, applyAdaptiveBackoff } from "../config/dataEngineRuntimeConfig";
 
 /**
  * Core sender interface
@@ -169,11 +170,56 @@ class MockQueueSender implements DataEngineSender {
 class HttpSender implements DataEngineSender {
   private fallback: MockQueueSender = new MockQueueSender();
   private circuit = createCircuitBreaker();
-  private rateLimiter = createRateLimiter(20, 10000); // 20 requests per 10 seconds
+  private rateLimiter: ReturnType<typeof createRateLimiter>;
+  private metrics = {
+    totalLatencyMs: 0,
+    requestCount: 0,
+    failureCount: 0,
+  };
+
+  constructor() {
+    const config = getRuntimeConfig();
+    this.rateLimiter = createRateLimiter(
+      config.maxRequestsPerWindow,
+      config.windowMs
+    );
+  }
+
+  /**
+   * Get average latency and failure rate for adaptive backoff
+   */
+  private getMetrics(): { averageLatencyMs: number; failureRate: number } {
+    const averageLatencyMs =
+      this.metrics.requestCount > 0
+        ? this.metrics.totalLatencyMs / this.metrics.requestCount
+        : 0;
+
+    const failureRate =
+      this.metrics.requestCount > 0
+        ? this.metrics.failureCount / this.metrics.requestCount
+        : 0;
+
+    return { averageLatencyMs, failureRate };
+  }
+
+  /**
+   * Check if runtime config has changed and recreate rate limiter if needed
+   */
+  private syncRuntimeConfig(): void {
+    const config = getRuntimeConfig();
+    // Rate limiter is recreated with new limits on each call
+    this.rateLimiter = createRateLimiter(
+      config.maxRequestsPerWindow,
+      config.windowMs
+    );
+  }
 
   async send<T>(
     envelope: DataEngineEventEnvelope<T>
   ): Promise<DataEngineSendResult> {
+    // Sync runtime config at start of send
+    this.syncRuntimeConfig();
+
     // STEP 1: Check rate limiter
     if (!this.rateLimiter.allow()) {
       if (import.meta.env.DEV) {
@@ -232,21 +278,35 @@ class HttpSender implements DataEngineSender {
         });
       }
 
+      // Update metrics for adaptive backoff
+      this.metrics.totalLatencyMs += latencyMs;
+      this.metrics.requestCount++;
+
       // Record successful send and update circuit breaker
       this.circuit.recordSuccess();
       updateCircuitState(this.circuit.getState());
       recordSent(latencyMs);
+
+      // Check if adaptive backoff should be applied
+      applyAdaptiveBackoff(this.getMetrics());
 
       return {
         status: "SENT",
         eventId: envelope.eventId,
       };
     } catch (error) {
+      // Update metrics for adaptive backoff
+      this.metrics.requestCount++;
+      this.metrics.failureCount++;
+
       // Record failure and update circuit breaker
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.circuit.recordFailure();
       updateCircuitState(this.circuit.getState());
       recordFailed(errorMsg);
+
+      // Check if adaptive backoff should be applied
+      applyAdaptiveBackoff(this.getMetrics());
 
       if (import.meta.env.DEV) {
         console.warn("[HttpSender] POST failed, falling back to queue", {
@@ -286,6 +346,30 @@ class HttpSender implements DataEngineSender {
    */
   getRateLimiterTokens() {
     return this.rateLimiter.getTokens();
+  }
+
+  /**
+   * Get current runtime config (DEV only)
+   */
+  getRuntimeConfig() {
+    return getRuntimeConfig();
+  }
+
+  /**
+   * Get metrics for monitoring (DEV only)
+   */
+  getMetricsSnapshot() {
+    return {
+      averageLatencyMs:
+        this.metrics.requestCount > 0
+          ? this.metrics.totalLatencyMs / this.metrics.requestCount
+          : 0,
+      failureRate:
+        this.metrics.requestCount > 0
+          ? this.metrics.failureCount / this.metrics.requestCount
+          : 0,
+      totalRequests: this.metrics.requestCount,
+    };
   }
 }
 
