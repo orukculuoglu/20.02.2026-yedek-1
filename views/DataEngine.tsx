@@ -27,6 +27,9 @@ import { getTelemetrySnapshot } from '../src/modules/data-engine/telemetry/dataE
 import { buildInsuranceAggregate, getInsuranceFraudRiskLevel } from '../src/modules/insurance/insuranceEngine';
 import { getMockInsuranceData } from '../src/modules/insurance/mockInsuranceProvider';
 import { emitInsuranceRiskSnapshot, getInsuranceAssessment } from '../src/modules/insurance/insuranceDataEngineIntegration';
+import { buildMarketValuationAggregate } from '../src/modules/market-valuation/marketValuationEngine';
+import { getSampleValuationInput } from '../src/modules/market-valuation/mockValuationDataBuilder';
+import { calculateAndEmitValuation } from '../src/modules/market-valuation/marketValuationDataEngineIntegration';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -62,6 +65,10 @@ export const DataEngine: React.FC = () => {
   const [insuranceData, setInsuranceData] = React.useState<any>(null);
   const [insuranceLoading, setInsuranceLoading] = React.useState(true);
   const demoVehicleId = 'VEH-001-SEDAN-BLUE'; // Sample vehicle for insurance demo
+  
+  // Market Valuation Domain state
+  const [marketValuationData, setMarketValuationData] = React.useState<any>(null);
+  const [valuationLoading, setValuationLoading] = React.useState(true);
   
   const tenantId = 'LENT-CORP-DEMO';
 
@@ -125,6 +132,34 @@ export const DataEngine: React.FC = () => {
     };
     
     loadInsuranceData();
+  }, []);
+
+  // Load Market Valuation Domain data
+  React.useEffect(() => {
+    const loadValuationData = async () => {
+      try {
+        // Get sample valuation input
+        const input = getSampleValuationInput(demoVehicleId);
+        
+        // Calculate and emit valuation
+        const { assessment, sendResult } = await calculateAndEmitValuation(input);
+        
+        setMarketValuationData(assessment);
+        
+        if (import.meta.env.DEV) {
+          console.debug('[DataEngine] Market valuation data loaded and event emitted', {
+            assessment,
+            sendResult,
+          });
+        }
+      } catch (error) {
+        console.error('[DataEngine] Error loading market valuation data:', error);
+      } finally {
+        setValuationLoading(false);
+      }
+    };
+    
+    loadValuationData();
   }, []);
 
   // Refresh telemetry every 2 seconds (DEV only)
@@ -1489,6 +1524,29 @@ export const DataEngine: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-xs text-red-600 mt-2">No insurance data available</p>
+                )}
+              </div>
+
+              {/* Market Valuation Domain */}
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <TrendingUp size={16} className="text-green-600" />
+                  Market Valuation Domain (DEV)
+                </h4>
+                {valuationLoading ? (
+                  <p className="text-xs text-slate-500 mt-2">Loading...</p>
+                ) : marketValuationData ? (
+                  <div className="text-xs text-slate-600 mt-2 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>Low: <span className="font-semibold text-blue-600">{(marketValuationData.aggregate.priceBand.low / 1000).toFixed(0)}k TRY</span></div>
+                      <div>Median: <span className="font-semibold text-green-600">{(marketValuationData.aggregate.priceBand.median / 1000).toFixed(0)}k TRY</span></div>
+                      <div>High: <span className="font-semibold text-orange-600">{(marketValuationData.aggregate.priceBand.high / 1000).toFixed(0)}k TRY</span></div>
+                    </div>
+                    <div>Confidence: <span className="font-semibold text-indigo-600">{marketValuationData.aggregate.confidence}%</span></div>
+                    <div>Source: <span className="font-semibold text-slate-700">{marketValuationData.aggregate.source}</span></div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-600 mt-2">No valuation data available</p>
                 )}
               </div>
             </div>
