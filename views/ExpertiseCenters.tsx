@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
     ClipboardCheck, ShieldCheck, FileText, Search, Award, MapPin, Gauge, 
     Activity, LogOut, CheckCircle2, AlertTriangle, Printer, Calendar, 
@@ -9,6 +9,9 @@ import {
 import { getExpertiseCenters } from '../services/dataService';
 import { ExpertiseProfile, ViewState } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { RecommendationsCard } from '../src/modules/bakim-merkezi/components/RecommendationsCard';
+import { buildRiskRecommendation } from '../src/services/recommendationEngine';
+import type { RiskRecommendation } from '../src/types/RiskRecommendation';
 
 interface ExpertiseCentersProps {
     onNavigate?: (view: ViewState, id?: string) => void;
@@ -41,6 +44,39 @@ export const ExpertiseCenters: React.FC<ExpertiseCentersProps> = ({ onNavigate }
     const [activeView, setActiveView] = useState<ExpertiseSubView>('DASHBOARD');
     const [loading, setLoading] = useState(true);
     const [selectedReport, setSelectedReport] = useState<typeof MOCK_REPORTS[0] | null>(null);
+
+    // Memoized recommendations for dashboard
+    const systemRecommendations = useMemo<RiskRecommendation[]>(() => {
+        // Generate demo recommendations for the dashboard
+        return [
+            buildRiskRecommendation({
+                vehicleId: "DEMO-EXP-001",
+                trustIndex: 35,
+                reliabilityIndex: 55,
+                maintenanceDiscipline: 62,
+                reasonCodes: [
+                    { code: "INSURANCE_DAMAGE_MISMATCH", severity: "high" },
+                    { code: "LOW_MAINTENANCE_DISCIPLINE", severity: "warn" }
+                ]
+            }),
+            buildRiskRecommendation({
+                vehicleId: "DEMO-EXP-002",
+                trustIndex: 72,
+                reliabilityIndex: 65,
+                maintenanceDiscipline: 78,
+                reasonCodes: [
+                    { code: "RELIABILITY_INDEX_LOW", severity: "warn" }
+                ]
+            }),
+            buildRiskRecommendation({
+                vehicleId: "DEMO-EXP-003",
+                trustIndex: 88,
+                reliabilityIndex: 82,
+                maintenanceDiscipline: 85,
+                reasonCodes: []
+            })
+        ];
+    }, []);
 
     useEffect(() => {
         setLoading(true);
@@ -194,6 +230,12 @@ export const ExpertiseCenters: React.FC<ExpertiseCentersProps> = ({ onNavigate }
                         </div>
                     </div>
                 </div>
+
+                {/* Sistem Önerileri */}
+                <RecommendationsCard 
+                    recommendations={systemRecommendations}
+                    title="Sistem Önerileri (Risk Analizi)"
+                />
             </div>
         );
     };

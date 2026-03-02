@@ -1,11 +1,16 @@
 /**
  * WorkOrder Vehicle History Section
  * Inline araç öyküsü gösterimi - WorkOrder detail'inin parçası olarak
+ * Includes risk recommendation based on latest risk indices
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Calendar, AlertCircle, X } from 'lucide-react';
 import { getVehicleHistoryEvents } from '../../../../services/dataService';
+import { getRiskIndexEventsByVehicleId } from '../../data-engine/eventLogger';
+import { generateRiskRecommendation } from '../../../services/recommendationEngine';
+import { RiskRecommendationCard } from './RiskRecommendationCard';
+import type { RiskRecommendation } from '../../../../types/RiskRecommendation';
 
 interface VehicleHistoryEntry {
   id: string;
@@ -37,6 +42,31 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [detailModalEventId, setDetailModalEventId] = useState<string | null>(null);
 
+  // Memoized recommendation from latest risk event
+  const recommendation: RiskRecommendation | null = useMemo(() => {
+    if (!vehicleId) return null;
+
+    try {
+      // Get latest risk index event for this vehicle
+      const latestEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
+      if (!latestEvents || latestEvents.length === 0) return null;
+
+      const latestEvent = latestEvents[0];
+      const rec = generateRiskRecommendation({
+        vehicleId,
+        event: latestEvent,
+      });
+
+      return rec;
+    } catch (err) {
+      console.debug('[WorkOrderVehicleHistory] Could not generate recommendation:', {
+        vehicleId,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }, [vehicleId]);
+
   // Load events on mount or when vehicleId changes
   useEffect(() => {
     if (!vehicleId && !vin && !plate) return;
@@ -51,12 +81,8 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
     setError(null);
 
     try {
-      console.log('[VehicleHistory] Loading for WorkOrder:', {
-        vehicleId,
-        vin,
-        plate,
-        tenantId
-      });
+      // Log only vehicleId (no PII: VIN/Plate)
+      console.debug('[WorkOrderVehicleHistory] Loading for vehicleId:', vehicleId);
 
       const result = await getVehicleHistoryEvents({
         vehicleId: vehicleId || undefined,
@@ -66,11 +92,11 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         limit: 20
       });
 
-      console.log('[VehicleHistory] Loaded events:', result.length);
+      console.debug('[WorkOrderVehicleHistory] Loaded events:', result.length);
       setEvents(result);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
-      console.error('[VehicleHistory] Error:', errorMsg);
+      console.debug('[WorkOrderVehicleHistory] Error:', errorMsg);
       setError(errorMsg);
     } finally {
       setIsLoading(false);
@@ -135,6 +161,11 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
             <ChevronDown size={14} />
           </button>
         </div>
+      )}
+
+      {/* Show Recommendation Card when collapsed if available */}
+      {!isExpanded && recommendation && (
+        <RiskRecommendationCard recommendation={recommendation} />
       )}
 
       {/* Accordion Section */}
@@ -217,6 +248,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
           {!isLoading && events.length === 0 && !error && (
             <div className="text-xs text-slate-500 italic">Bu araç için öykü kaydı bulunmadı.</div>
           )}
+
+          {/* Recommendation Card */}
+          {!isLoading && <RiskRecommendationCard recommendation={recommendation} />}
         </div>
       )}
 
