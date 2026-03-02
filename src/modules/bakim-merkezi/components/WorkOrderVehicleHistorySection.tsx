@@ -12,6 +12,14 @@ import { generateRiskRecommendation } from '../../../services/recommendationEngi
 import { RiskRecommendationCard } from './RiskRecommendationCard';
 import type { RiskRecommendation } from '../../../../types/RiskRecommendation';
 
+// DEV-only logger helper (runs only inside TS module, not exported to console)
+const isDev = import.meta.env.DEV;
+const devLog = (...args: any[]) => {
+  if (isDev) {
+    console.log('[WorkOrderVehicleHistory]', ...args);
+  }
+};
+
 interface VehicleHistoryEntry {
   id: string;
   ts: string;
@@ -49,24 +57,30 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
     try {
       // Get latest risk index event for this vehicle
       const latestEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
-      if (!latestEvents || latestEvents.length === 0) {
-        if (import.meta.env.DEV) {
-          console.debug('[WorkOrderVehicleHistory] No risk events found for vehicleId:', vehicleId);
-        }
+      const hasLatestEvents = latestEvents && latestEvents.length > 0;
+      
+      devLog('Fetched risk events:', {
+        vehicleId,
+        eventsCount: latestEvents?.length ?? 0,
+        hasLatestEvents
+      });
+
+      if (!hasLatestEvents) {
+        devLog('No risk events found');
         return null;
       }
 
       const latestEvent = latestEvents[0];
+      const hasIndices = latestEvent?.indices && Array.isArray(latestEvent.indices) && latestEvent.indices.length > 0;
       
-      // Validate event structure
-      if (!latestEvent?.indices || !Array.isArray(latestEvent.indices) || latestEvent.indices.length === 0) {
-        if (import.meta.env.DEV) {
-          console.debug('[WorkOrderVehicleHistory] Event has no indices:', {
-            hasEvent: !!latestEvent,
-            hasIndices: !!latestEvent?.indices,
-            indicesLength: latestEvent?.indices?.length ?? 0,
-          });
-        }
+      devLog('Latest event structure:', {
+        hasEvent: !!latestEvent,
+        indicesCount: latestEvent?.indices?.length ?? 0,
+        hasConfidenceSummary: !!latestEvent?.confidenceSummary
+      });
+
+      if (!hasIndices) {
+        devLog('WARNING: Event has no indices - recommendation cannot be generated');
         return null;
       }
 
@@ -80,40 +94,27 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         }
       };
 
-      if (import.meta.env.DEV) {
-        console.log('[WorkOrderVehicleHistory] RECOMMENDATION INPUT:', {
-          vehicleId,
-          indicesCount: mappedEvent.indices.length,
-          confidenceSummary: mappedEvent.confidenceSummary,
-          firstIndex: mappedEvent.indices[0] ? {
-            key: mappedEvent.indices[0].key,
-            value: mappedEvent.indices[0].value,
-            confidence: mappedEvent.indices[0].confidence,
-            hasReasonCodes: !!mappedEvent.indices[0].meta?.reasonCodes
-          } : null
-        });
-      }
+      devLog('Mapped event for recommendation:', {
+        indicesCount: mappedEvent.indices.length,
+        firstIndexKey: mappedEvent.indices[0]?.key,
+        confidenceSummary: mappedEvent.confidenceSummary
+      });
 
       const rec = generateRiskRecommendation({
         vehicleId,
         event: mappedEvent,
       });
 
-      if (import.meta.env.DEV) {
-        console.log('[WorkOrderVehicleHistory] RECOMMENDATION OUTPUT:', {
-          vehicleId,
-          hasRecommendation: !!rec,
-          priorityScore: rec?.priorityScore,
-          actionType: rec?.actionType,
-          reasonCodesCount: rec?.reasonCodes?.length ?? 0
-        });
-      }
+      devLog('Recommendation generated:', {
+        hasRecommendation: !!rec,
+        priorityScore: rec?.priorityScore,
+        actionType: rec?.actionType
+      });
 
       return rec;
     } catch (err) {
-      console.debug('[WorkOrderVehicleHistory] Could not generate recommendation:', {
-        vehicleId,
-        error: err instanceof Error ? err.message : 'Unknown error',
+      devLog('Error generating recommendation:', {
+        error: err instanceof Error ? err.message : 'Unknown error'
       });
       return null;
     }
@@ -133,8 +134,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
     setError(null);
 
     try {
-      // Log only vehicleId (no PII: VIN/Plate)
-      console.debug('[WorkOrderVehicleHistory] Loading for vehicleId:', vehicleId);
+      devLog('Loading vehicle history for vehicleId:', vehicleId);
 
       const result = await getVehicleHistoryEvents({
         vehicleId: vehicleId || undefined,
@@ -144,11 +144,11 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         limit: 20
       });
 
-      console.debug('[WorkOrderVehicleHistory] Loaded events:', result.length);
+      devLog('Loaded vehicle history events:', { count: result.length });
       setEvents(result);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
-      console.debug('[WorkOrderVehicleHistory] Error:', errorMsg);
+      devLog('Error loading vehicle history:', { error: errorMsg });
       setError(errorMsg);
     } finally {
       setIsLoading(false);
