@@ -43,18 +43,16 @@ export async function emitInsuranceRiskSnapshot(
 
     // Build event envelope
     const envelope: DataEngineEventEnvelope<InsuranceEventPayload> = {
+      schemaVersion: "DE-1.0",
       eventId: `EVT-${vehicleId}-${Date.now()}`,
       eventType: "RISK_INDEX_SNAPSHOT",
-      source: "INSURANCE_DOMAIN",
+      occurredAt: new Date().toISOString(),
       tenantId: "default",
       subject: { vehicleId },
       payload,
       idempotencyKey: `INS-${vehicleId}-${aggregate.generatedAt}`,
-      timestamp: new Date().toISOString(),
       meta: {
-        fraudRiskLevel: getInsuranceFraudRiskLevel(
-          aggregate.fraudRiskScore
-        ),
+        source: "INSURANCE_DOMAIN",
       },
     };
 
@@ -81,7 +79,10 @@ export async function emitInsuranceRiskSnapshot(
     return {
       status: "QUEUED",
       eventId: `EVT-${vehicleId}-${Date.now()}`,
-      error: errorMsg,
+      error: {
+        code: "INSURANCE_EMISSION_ERROR",
+        message: errorMsg,
+      },
     };
   }
 }
