@@ -49,13 +49,65 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
     try {
       // Get latest risk index event for this vehicle
       const latestEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
-      if (!latestEvents || latestEvents.length === 0) return null;
+      if (!latestEvents || latestEvents.length === 0) {
+        if (import.meta.env.DEV) {
+          console.debug('[WorkOrderVehicleHistory] No risk events found for vehicleId:', vehicleId);
+        }
+        return null;
+      }
 
       const latestEvent = latestEvents[0];
+      
+      // Validate event structure
+      if (!latestEvent?.indices || !Array.isArray(latestEvent.indices) || latestEvent.indices.length === 0) {
+        if (import.meta.env.DEV) {
+          console.debug('[WorkOrderVehicleHistory] Event has no indices:', {
+            hasEvent: !!latestEvent,
+            hasIndices: !!latestEvent?.indices,
+            indicesLength: latestEvent?.indices?.length ?? 0,
+          });
+        }
+        return null;
+      }
+
+      // Map event structure to ensure proper format
+      const mappedEvent = {
+        indices: latestEvent.indices || [],
+        confidenceSummary: latestEvent.confidenceSummary || {
+          average: 0,
+          min: 0,
+          max: 0
+        }
+      };
+
+      if (import.meta.env.DEV) {
+        console.log('[WorkOrderVehicleHistory] RECOMMENDATION INPUT:', {
+          vehicleId,
+          indicesCount: mappedEvent.indices.length,
+          confidenceSummary: mappedEvent.confidenceSummary,
+          firstIndex: mappedEvent.indices[0] ? {
+            key: mappedEvent.indices[0].key,
+            value: mappedEvent.indices[0].value,
+            confidence: mappedEvent.indices[0].confidence,
+            hasReasonCodes: !!mappedEvent.indices[0].meta?.reasonCodes
+          } : null
+        });
+      }
+
       const rec = generateRiskRecommendation({
         vehicleId,
-        event: latestEvent,
+        event: mappedEvent,
       });
+
+      if (import.meta.env.DEV) {
+        console.log('[WorkOrderVehicleHistory] RECOMMENDATION OUTPUT:', {
+          vehicleId,
+          hasRecommendation: !!rec,
+          priorityScore: rec?.priorityScore,
+          actionType: rec?.actionType,
+          reasonCodesCount: rec?.reasonCodes?.length ?? 0
+        });
+      }
 
       return rec;
     } catch (err) {

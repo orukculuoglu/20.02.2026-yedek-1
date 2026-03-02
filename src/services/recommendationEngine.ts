@@ -222,12 +222,27 @@ export function generateRiskRecommendation(input: {
   vehicleId: string;
   event?: any; // RiskIndexEvent or similar with indices array
 }): RiskRecommendation | null {
-  if (!input.vehicleId || !input.event || !input.event.indices) {
+  if (!input.vehicleId || !input.event) {
+    if (import.meta.env.DEV) {
+      console.debug('[generateRiskRecommendation] Missing vehicleId or event');
+    }
     return null;
   }
 
   // Extract indices from event
   const indices = input.event.indices || [];
+  
+  if (!Array.isArray(indices) || indices.length === 0) {
+    if (import.meta.env.DEV) {
+      console.debug('[generateRiskRecommendation] No valid indices in event', {
+        hasIndices: !!input.event.indices,
+        isArray: Array.isArray(indices),
+        length: indices.length
+      });
+    }
+    return null;
+  }
+
   const indexMap: Record<string, number> = {};
   const reasonCodes: any[] = [];
 
@@ -242,6 +257,14 @@ export function generateRiskRecommendation(input: {
     }
   });
 
+  // Require at least one index to generate recommendation
+  if (Object.keys(indexMap).length === 0) {
+    if (import.meta.env.DEV) {
+      console.debug('[generateRiskRecommendation] No valid index keys extracted from indices');
+    }
+    return null;
+  }
+
   // Build recommendation input from extracted data
   const recommendationInput: RecommendationInput = {
     vehicleId: input.vehicleId,
@@ -253,6 +276,15 @@ export function generateRiskRecommendation(input: {
     evidenceSourcesCount: indices.length,
     indices: indexMap,
   };
+
+  if (import.meta.env.DEV) {
+    console.debug('[generateRiskRecommendation] Building with input:', {
+      vehicleId: input.vehicleId,
+      indicesCount: indices.length,
+      indexKeys: Object.keys(indexMap),
+      reasonCodesCount: reasonCodes.length
+    });
+  }
 
   return buildRiskRecommendation(recommendationInput);
 }
