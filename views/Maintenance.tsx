@@ -3,6 +3,9 @@ import { getAppointments, acceptAppointment, setContext, getWorkOrder, getContex
 import type { ServiceAppointment, Fleet, WorkOrder } from '../types/fleetRental';
 import { buildInsuranceDomainAggregate, getInsuranceDomainInput } from '../src/modules/insurance-domain';
 import type { InsuranceDomainAggregate } from '../src/modules/insurance-domain';
+import { buildCrossDomainFindings, getFusionSeverity } from '../src/modules/cross-domain';
+import { buildCrossDomainRecommendations, getTopRecommendation } from '../services/recommendationRules';
+import type { CrossDomainContext, CrossDomainFusionResult } from '../src/modules/cross-domain';
 
 interface MaintenanceProps {
   fleets: Fleet[];
@@ -22,6 +25,8 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
   const [workOrderInsurance, setWorkOrderInsurance] = useState<InsuranceDomainAggregate | null>(null);
   const [loadingWorkOrderInsurance, setLoadingWorkOrderInsurance] = useState(false);
+  const [fusionResult, setFusionResult] = useState<CrossDomainFusionResult | null>(null);
+  const [loadingFusion, setLoadingFusion] = useState(false);
 
   // Update service context when fleet changes
   useEffect(() => {
@@ -34,6 +39,7 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
   useEffect(() => {
     if (!selectedWorkOrder) {
       setWorkOrderInsurance(null);
+      setFusionResult(null);
       return;
     }
 
@@ -46,6 +52,42 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
         const insuranceInput = getInsuranceDomainInput(vehicleId);
         const aggregate = buildInsuranceDomainAggregate(insuranceInput);
         setWorkOrderInsurance(aggregate);
+
+        // Compute cross-domain fusion 
+        // (in real scenario, we'd also load risk metrics from Data Engine)
+        setLoadingFusion(true);
+        try {
+          const ctx: CrossDomainContext = {
+            vehicleId,
+            insurance: {
+              coverageRiskIndex: aggregate.indexes.coverageRiskIndex,
+              policyStatus: aggregate.policy.status,
+              claimCount12m: aggregate.derived.claimCount12m,
+              lapseCount12m: aggregate.derived.lapseCount12m,
+              confidence: aggregate.confidence,
+              reasonCodes: aggregate.explain?.reasonCodes,
+            },
+            // Risk metrics would come from Data Engine in production
+            risk: {
+              trustIndex: 65, // Mock value
+              reliabilityIndex: 60,
+              structuralRisk: 20,
+              confidenceAvg: 70,
+            },
+            generatedAt: new Date().toISOString(),
+          };
+
+          const fusion = buildCrossDomainFindings(ctx);
+          setFusionResult(fusion);
+
+          if (import.meta.env.DEV) {
+            console.debug('[Maintenance] Fusion computed', fusion);
+          }
+        } catch (err) {
+          console.error('[Maintenance] Error computing fusion:', err);
+        } finally {
+          setLoadingFusion(false);
+        }
       }
     } catch (err) {
       console.error('[Maintenance] Error loading insurance:', err);
@@ -349,6 +391,64 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Cross-Domain Fusion Display (Phase 7.4) */}
+            {!loadingFusion && fusionResult && (
+              <div className={`mb-4 p-3 rounded border-l-4 ${
+                fusionResult.fusionScore >= 60
+                  ? 'bg-red-50 border-red-400'
+                  : fusionResult.fusionScore >= 30
+                  ? 'bg-yellow-50 border-yellow-400'
+                  : 'bg-blue-50 border-blue-400'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-800">
+                    Domain Arası Analiz
+                  </h3>
+                  <span className={`text-xs font-bold px-2 py-1 rounded ${
+                    fusionResult.fusionScore >= 60
+                      ? 'bg-red-200 text-red-800'
+                      : fusionResult.fusionScore >= 30
+                      ? 'bg-yellow-200 text-yellow-800'
+                      : 'bg-blue-200 text-blue-800'
+                  }`}>
+                    Puan: {fusionResult.fusionScore}
+                  </span>
+                </div>
+                
+                {/* Recommendations if any */}
+                {fusionResult.findings.some((f) => ['CROSS_DOMAIN_RISK_CONVERGENCE', 'CROSS_DOMAIN_SUSPICION_INDICES'].includes(f.code)) && (
+                  <div className="mb-2 p-2 bg-red-100 border border-red-300 rounded">
+                    <p className="text-xs font-bold text-red-900 mb-1">⚠️ ÖNERİ: UZMAN İNCELEMESİ</p>
+                    {(() => {
+                      const recs = buildCrossDomainRecommendations(selectedWorkOrder?.workOrderId || '', fusionResult);
+                      const topRec = getTopRecommendation(recs);
+                      return topRec ? (
+                        <p className="text-xs text-red-800">{topRec.recommendation}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+
+                {/* Findings List */}
+                {fusionResult.findings.length > 0 && (
+                  <div className="space-y-1">
+                    {fusionResult.findings.map((f, idx) => (
+                      <div key={idx} className="text-xs p-1 bg-white rounded">
+                        <span className={`font-bold ${
+                          f.severity === 'high' ? 'text-red-700' :
+                          f.severity === 'warn' ? 'text-yellow-700' :
+                          'text-blue-700'
+                        }`}>
+                          {f.code}:
+                        </span>
+                        <span className="text-gray-700 ml-1">{f.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

@@ -32,6 +32,7 @@ export function buildInsuranceDomainIndices(
     key: "coverageRiskIndex",
     value: aggregate.indexes.coverageRiskIndex,
     confidence: aggregate.confidence,
+    updatedAt: aggregate.generatedAt,
     meta: indexMeta,
   };
 

@@ -10,7 +10,7 @@ import type {
   InsuranceDomainInput,
   InsurancePolicySnapshot,
   InsuranceEvent,
-} from "./types";
+} from "../types";
 
 /**
  * Mock insurance database
@@ -62,19 +62,19 @@ const MOCK_INSURANCE_EVENTS: Record<string, InsuranceEvent[]> = {
       type: "CLAIM",
       date: "2024-11-15",
       amountTRY: 25000,
-      severity: "high",
+      severity: "major",
       meta: { description: "Collision damage" },
     },
     {
       type: "INQUIRY",
       date: "2024-12-01",
-      severity: "info",
+      severity: "minor",
       meta: { description: "Coverage consultation" },
     },
     {
       type: "INQUIRY",
       date: "2024-12-10",
-      severity: "info",
+      severity: "minor",
       meta: { description: "Claim status check" },
     },
   ],
@@ -82,27 +82,27 @@ const MOCK_INSURANCE_EVENTS: Record<string, InsuranceEvent[]> = {
     {
       type: "LAPSE",
       date: "2024-07-01",
-      severity: "high",
+      severity: "major",
       meta: { description: "Policy lapsed due to non-renewal" },
     },
     {
       type: "CLAIM",
       date: "2024-03-20",
       amountTRY: 15000,
-      severity: "medium",
+      severity: "major",
       meta: { description: "Theft partial" },
     },
     {
       type: "CLAIM",
       date: "2024-09-05",
       amountTRY: 8000,
-      severity: "low",
+      severity: "minor",
       meta: { description: "Glass damage" },
     },
     {
       type: "LAPSE",
       date: "2024-10-15",
-      severity: "high",
+      severity: "major",
       meta: { description: "Policy lapsed again" },
     },
   ],
