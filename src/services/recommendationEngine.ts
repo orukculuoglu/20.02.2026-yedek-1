@@ -20,6 +20,9 @@ import {
   RECOMMENDATION_RULES,
   type RecommendationContext,
 } from "./recommendationRules";
+import { ingestDataEngineEvent } from "../modules/data-engine/ingestion/dataEngineIngestion";
+import { generateEventId } from "../modules/data-engine/contracts/dataEngineEventTypes";
+import type { DataEngineEventEnvelope, RecommendationsGeneratedPayload } from "../modules/data-engine/contracts/dataEngineEventTypes";
 
 /**
  * In-memory event log for recommendation analytics
@@ -435,6 +438,31 @@ export function generateRiskRecommendation(input: {
       recommendationEventLog.shift();
     }
   });
+
+  // PHASE 6.1: Emit recommendation event to Data Engine ingestion bus
+  // PII-safe: Uses vehicleId only, includes audit trail via generatedFrom
+  if (finalRecommendations.length > 0) {
+    const recommendationEvent: DataEngineEventEnvelope<RecommendationsGeneratedPayload> = {
+      eventId: generateEventId(),
+      eventType: "RECOMMENDATIONS_GENERATED",
+      source: "RISK_ENGINE",
+      vehicleId: input.vehicleId || "UNKNOWN",
+      occurredAt: new Date().toISOString(),
+      schemaVersion: "1.0",
+      payload: {
+        recommendations: finalRecommendations.map((rec) => ({
+          actionType: rec.actionType,
+          priorityScore: rec.priorityScore,
+          recommendation: rec.recommendation,
+          reason: rec.reason,
+          generatedFrom: rec.generatedFrom,
+        })),
+      },
+      piiSafe: true,
+    };
+
+    ingestDataEngineEvent(recommendationEvent);
+  }
 
   if (import.meta.env.DEV) {
     console.debug('[generateRiskRecommendation] Final recommendations with guaranteed trace:', {

@@ -20,6 +20,43 @@ import type {
   DataEngineIndex,
 } from "../contracts/dataEngineApiContract";
 import { isRealApiEnabled, createApiConfig, apiGet } from "../../../../services/apiClient";
+import { ingestDataEngineEvent } from "../ingestion/dataEngineIngestion";
+import { generateEventId } from "../contracts/dataEngineEventTypes";
+import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload } from "../contracts/dataEngineEventTypes";
+
+/**
+ * Emit RISK_INDICES_UPDATED event to Data Engine ingestion bus
+ * Only emits for risk domain
+ */
+function emitRiskIndicesEvent(
+  req: GetDataEngineIndicesRequest,
+  indices: DataEngineIndex[]
+): void {
+  if (req.domain !== "risk" || indices.length === 0) {
+    return;
+  }
+
+  const riskEvent: DataEngineEventEnvelope<RiskIndicesUpdatedPayload> = {
+    eventId: generateEventId(),
+    eventType: "RISK_INDICES_UPDATED",
+    source: "DATA_ENGINE",
+    vehicleId: req.vehicleId,
+    occurredAt: new Date().toISOString(),
+    schemaVersion: "1.0",
+    payload: {
+      indices: indices.map((idx) => ({
+        key: idx.key,
+        value: idx.value,
+        confidence: idx.confidence,
+        updatedAt: idx.updatedAt,
+        meta: idx.meta,
+      })),
+    },
+    piiSafe: true,
+  };
+
+  ingestDataEngineEvent(riskEvent);
+}
 
 /**
  * Fetch data engine indices from backend or mock
@@ -123,9 +160,14 @@ async function fetchFromRealApi(
       });
     }
 
+    const responseData = response.data || [];
+
+    // Emit event to ingestion bus (Phase 6.1)
+    emitRiskIndicesEvent(req, responseData);
+
     return {
       success: true,
-      data: response.data || [],
+      data: responseData,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -162,9 +204,14 @@ async function fetchFromMockImplementation(
       });
     }
 
+    const responseData = data || [];
+
+    // Emit event to ingestion bus (Phase 6.1)
+    emitRiskIndicesEvent(req, responseData);
+
     return {
       success: true,
-      data: data || [],
+      data: responseData,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

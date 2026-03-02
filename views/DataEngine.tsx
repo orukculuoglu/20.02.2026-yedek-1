@@ -19,6 +19,7 @@ import OperationalRiskList from '../src/modules/data-engine/components/Operation
 import OperationalRiskDashboard from '../src/modules/data-engine/components/OperationalRiskDashboard';
 import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConfidence';
 import { getRecommendationEventLog } from '../src/services/recommendationEngine';
+import { getDataEngineEvents } from '../src/modules/data-engine/ingestion/dataEngineIngestion';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -1217,6 +1218,96 @@ export const DataEngine: React.FC = () => {
           events={getRecommendationEventLog()}
           showDevJson={import.meta.env.DEV}
         />
+      </div>
+
+      {/* Data Engine Event Stream (Phase 6.1 Ingestion) */}
+      <div className="mt-8 space-y-6">
+        <div>
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <TrendingUp size={20} className="text-indigo-600" />
+            Event Stream (Ingestion) - Son 50 Olay
+          </h3>
+
+          {(() => {
+            const allEvents = getDataEngineEvents();
+            const recentEvents = allEvents.slice(0, 50);
+
+            if (recentEvents.length === 0) {
+              return (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                  <Database size={32} className="mx-auto mb-4 text-slate-300" />
+                  <p className="text-slate-500">Henüz hiçbir event kaydedilmemiştir</p>
+                  <p className="text-xs text-slate-400 mt-2">Recommendations üretilince veya risk indices hesaplanınca olaylar burada görünecektir</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Zaman</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Event Type</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Source</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Vehicle ID</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {recentEvents.map((evt) => (
+                        <tr key={evt.eventId} className="hover:bg-slate-50 transition">
+                          <td className="px-4 py-3 text-slate-600 text-xs font-mono">
+                            {new Date(evt.occurredAt).toLocaleString('tr-TR')}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                              evt.eventType === "RECOMMENDATIONS_GENERATED"
+                                ? "bg-amber-100 text-amber-700"
+                                : evt.eventType === "RISK_INDICES_UPDATED"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-slate-100 text-slate-700"
+                            }`}>
+                              {evt.eventType}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 text-sm">
+                            <span className="font-mono text-xs">{evt.source}</span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-700 font-semibold">
+                            {evt.vehicleId}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {import.meta.env.DEV && (
+                              <details className="inline-block group">
+                                <summary className="cursor-pointer font-semibold text-blue-600 hover:text-blue-700 text-xs">
+                                  Details
+                                </summary>
+                                <div className="absolute right-0 top-8 w-96 bg-slate-900 text-slate-100 p-3 rounded border border-slate-700 shadow-lg z-50 hidden group-open:block max-h-64 overflow-auto">
+                                  <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                                    {JSON.stringify(
+                                      {
+                                        ...evt,
+                                        payload: evt.payload /* sanitized in UI already */,
+                                      },
+                                      null,
+                                      2
+                                    )}
+                                  </pre>
+                                </div>
+                              </details>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Risk Index Events */}
