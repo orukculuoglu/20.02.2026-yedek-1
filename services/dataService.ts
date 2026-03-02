@@ -1918,7 +1918,7 @@ export async function getOemAlternativesForPart(
  */
 export async function getDataEngineIndices(
   params: {
-    domain: "risk" | "part";
+    domain: "risk" | "part" | "insurance";
     vehicleId?: string;
     vin?: string;
     plate?: string;

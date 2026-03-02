@@ -13,7 +13,7 @@
 /**
  * Supported domains for data engine indices
  */
-export type DataEngineDomain = "risk" | "part";
+export type DataEngineDomain = "risk" | "part" | "insurance";
 
 /**
  * Request to fetch data engine indices

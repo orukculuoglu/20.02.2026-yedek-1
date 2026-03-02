@@ -532,13 +532,14 @@ export async function generateAllIndices(snapshot: PartMasterSnapshot) {
  * Get Data Engine Indices - Multi-domain entry point
  * Primary: VIO for risk domain with full explainability
  * Fallback: VehicleAggregate for numeric-only risk indices
+ * Insurance: Mock event generation for insurance domain (Phase 8.1)
  * Existing: Part domain maintains backward compatibility
  * 
- * @param params Domain, vehicleId, vin, plate for risk domain (required)
- * @returns Promise of DataEngineIndex[] with domain="risk" | "part"
+ * @param params Domain, vehicleId, vin (risk), plate (risk)
+ * @returns Promise of DataEngineIndex[] with domain="risk" | "part" | "insurance"
  */
 export async function getDataEngineIndices(params: {
-  domain: 'risk' | 'part';
+  domain: 'risk' | 'part' | 'insurance';
   vehicleId?: string;
   vin?: string;
   plate?: string;
@@ -582,6 +583,24 @@ export async function getDataEngineIndices(params: {
     // Part domain: keep existing behavior (backward compatible)
     console.log(`[DataEngineIndices] Part domain not yet implemented in getIndices`);
     return [];
+  } else if (domain === 'insurance') {
+    // Insurance domain: Mock event generation (Phase 8.1)
+    if (!vehicleId) {
+      throw new Error('[DataEngineIndices] Insurance domain requires: vehicleId');
+    }
+    try {
+      // Dynamic import to avoid circular dependencies
+      const insuranceModule = await import('../src/modules/data-engine/domains/insurance/insuranceEventFactory');
+      const mockEvent = insuranceModule.buildMockInsuranceEvent(vehicleId);
+      
+      if (import.meta.env.DEV) {
+        console.log(`[DataEngineIndices] ✓ Insurance domain mock generated for ${vehicleId}`);
+      }
+      return mockEvent.indices;
+    } catch (err) {
+      console.error(`[DataEngineIndices] Error fetching insurance indices for ${vehicleId}:`, err);
+      throw err;
+    }
   } else {
     throw new Error(`[DataEngineIndices] Unsupported domain: ${domain}`);
   }

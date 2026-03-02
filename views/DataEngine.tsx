@@ -61,7 +61,12 @@ export const DataEngine: React.FC = () => {
   const [queueFlushLoading, setQueueFlushLoading] = React.useState(false);
   const [telemetry, setTelemetry] = React.useState(getTelemetrySnapshot());
   
-  // Insurance Domain state
+  // Data Engine Insurance Domain state (Phase 8.1)
+  const [insuranceDomainIndices, setInsuranceDomainIndices] = React.useState<any[]>([]);
+  const [insuranceDomainLoading, setInsuranceDomainLoading] = React.useState(false);
+  const [insuranceDomainVehicleId, setInsuranceDomainVehicleId] = React.useState('');
+  
+  // Insurance Domain state (Phase 7.3 - Legacy)
   const [insuranceData, setInsuranceData] = React.useState<any>(null);
   const [insuranceLoading, setInsuranceLoading] = React.useState(true);
   const demoVehicleId = 'VEH-001-SEDAN-BLUE'; // Sample vehicle for insurance demo
@@ -97,7 +102,46 @@ export const DataEngine: React.FC = () => {
     loadIndices();
   }, []);
 
-  // Load Risk Index Events
+  // Handler: Fetch Insurance Domain Indices (Phase 8.1)
+  const handleFetchInsuranceIndices = async () => {
+    if (!insuranceDomainVehicleId.trim()) {
+      return;
+    }
+    setInsuranceDomainLoading(true);
+    try {
+      const { getDataEngineIndices } = await import('../services/dataService');
+      const indices = await getDataEngineIndices({
+        domain: 'insurance',
+        vehicleId: insuranceDomainVehicleId,
+      });
+      setInsuranceDomainIndices(indices || []);
+      if (import.meta.env.DEV) {
+        console.debug('[DataEngine Insurance] Indices fetched:', {
+          vehicleId: insuranceDomainVehicleId,
+          count: indices?.length || 0,
+          indices,
+        });
+      }
+    } catch (error) {
+      console.error('[DataEngine Insurance] Error fetching indices:', error);
+      setInsuranceDomainIndices([]);
+    } finally {
+      setInsuranceDomainLoading(false);
+    }
+  };
+
+  const handleGenerateMockInsuranceEvent = async () => {
+    const mockVehicleId = insuranceDomainVehicleId || 'TEST-VEHICLE-' + Math.random().toString(36).substr(2, 9);
+    setInsuranceDomainVehicleId(mockVehicleId);
+    // Call the fetch after setting vehicleId
+    await handleFetchInsuranceIndices();
+  };
+
+  React.useEffect(() => {
+    if (insuranceDomainVehicleId && !insuranceDomainIndices.length) {
+      handleFetchInsuranceIndices();
+    }
+  }, [insuranceDomainVehicleId]);
   React.useEffect(() => {
     const events = getLastRiskIndexEvents(tenantId, 20);
     setRiskIndexEvents(events);
@@ -1505,7 +1549,73 @@ export const DataEngine: React.FC = () => {
                 </div>
               </div>
 
-              {/* Insurance Domain */}
+              {/* Data Engine Insurance Domain (Phase 8.1) - NEW */}
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Database size={16} className="text-cyan-600" />
+                  Insurance Domain (Data Engine - Phase 8.1)
+                </h4>
+                <div className="mt-3 space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Vehicle ID (e.g., TEST-VEH-001)"
+                      value={insuranceDomainVehicleId}
+                      onChange={(e) => setInsuranceDomainVehicleId(e.target.value)}
+                      className="flex-1 text-xs px-2 py-1 border border-slate-300 rounded bg-white text-slate-900"
+                    />
+                    <button
+                      onClick={handleGenerateMockInsuranceEvent}
+                      disabled={insuranceDomainLoading}
+                      className={`text-xs px-3 py-1 rounded font-semibold transition ${
+                        insuranceDomainLoading
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-cyan-600 text-white hover:bg-cyan-700'
+                      }`}
+                    >
+                      {insuranceDomainLoading ? 'Loading...' : 'Generate Mock'}
+                    </button>
+                  </div>
+                  
+                  {insuranceDomainIndices.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-600">
+                        Returned {insuranceDomainIndices.length} index(es):
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {insuranceDomainIndices.map((idx, i) => (
+                          <div key={i} className="bg-slate-50 border border-slate-200 rounded p-2">
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="text-xs font-bold text-slate-800 flex-1">{idx.key}</span>
+                              <span className="text-xs font-semibold text-cyan-600">{idx.value.toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between text-[10px] text-slate-500">
+                              <span>Confidence: {idx.confidence}%</span>
+                              <span>Domain: {idx.domain}</span>
+                            </div>
+                            {idx.meta && (
+                              <details className="mt-1 text-[10px] text-slate-600">
+                                <summary className="cursor-pointer font-semibold hover:text-slate-800">
+                                  Metadata ({Object.keys(idx.meta).length} fields)
+                                </summary>
+                                <pre className="mt-1 bg-slate-100 p-1 rounded overflow-auto max-h-20 text-[9px] font-mono">
+                                  {JSON.stringify(idx.meta, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : insuranceDomainLoading ? (
+                    <p className="text-xs text-slate-500">Fetching insurance indices...</p>
+                  ) : (
+                    <p className="text-xs text-slate-400">Enter vehicle ID and click Generate Mock to fetch indices</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Insurance Domain (Legacy Phase 7.3) */}
               <div className="mt-4 pt-4 border-t border-slate-200">
                 <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                   <Shield size={16} className="text-orange-600" />

@@ -14,8 +14,9 @@ import type { VehicleIntelligenceOutput } from '../auto-expert/intelligence/vioT
  * DataEngineDomain: Classification of data domains
  * - "part": Parts ecosystem indices
  * - "risk": Risk and trust indices
+ * - "insurance": Insurance domain indices
  */
-export type DataEngineDomain = 'part' | 'risk';
+export type DataEngineDomain = 'part' | 'risk' | 'insurance';
 
 /**
  * DataEngineIndex: Machine-readable index format for external consumption

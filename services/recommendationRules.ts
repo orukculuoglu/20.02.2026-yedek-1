@@ -8,7 +8,7 @@
  * - Can be called from RiskAnalysis or WorkOrder contexts
  */
 
-import type { CrossDomainFusionResult } from "../modules/cross-domain";
+import type { CrossDomainFusionResult } from "../src/modules/cross-domain";
 
 /**
  * Recommendation action types
