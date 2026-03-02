@@ -12,6 +12,7 @@ import { PartMasterPart, PartMasterCatalog } from '../types/partMaster';
 import { OffersPanel } from '../components/OffersPanel';
 import { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } from '../src/modules/data-engine/eventLogger';
 import type { RiskIndexEvent } from '../src/modules/data-engine/eventLogger';
+import { sanitizeMeta } from '../src/modules/data-engine/utils/sanitizeMeta';
 import { RiskSegmentDashboard } from '../src/modules/data-engine/components/RiskSegmentDashboard';
 import TenantAnalyticsDashboard from '../src/modules/data-engine/components/TenantAnalyticsDashboard';
 import OperationalRiskList from '../src/modules/data-engine/components/OperationalRiskList';
@@ -1412,17 +1413,17 @@ export const DataEngine: React.FC = () => {
                   {selectedEventForDrawer.source}
                 </span>
               </div>
-              {/* Raw Meta JSON - DEV MODE ONLY */}
+              {/* Raw Meta JSON - DEV MODE ONLY (PII-SAFE SANITIZED) */}
               {import.meta.env.DEV && selectedEventForDrawer.indices && selectedEventForDrawer.indices.some(idx => idx.meta) && (
                 <details className="bg-slate-50 border border-slate-200 rounded p-3 text-xs">
                   <summary className="font-semibold text-slate-700 cursor-pointer hover:text-slate-900">
-                    Raw Meta JSON (Genişlet) - DEV ONLY
+                    Raw Meta JSON (Genişlet) - DEV ONLY [PII-safe: sanitized]
                   </summary>
                   <div className="mt-2 overflow-auto max-h-40 bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono whitespace-pre-wrap break-words">
                     {JSON.stringify(
                       selectedEventForDrawer.indices
                         .filter(idx => idx.meta)
-                        .map(idx => ({ key: idx.key, meta: idx.meta })),
+                        .map(idx => ({ key: idx.key, meta: sanitizeMeta(idx.meta) })),
                       null,
                       2
                     )}
