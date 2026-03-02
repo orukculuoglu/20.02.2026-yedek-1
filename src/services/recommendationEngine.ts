@@ -41,6 +41,18 @@ function generateRecommendationId(vehicleId: string): string {
 }
 
 /**
+ * Extract trace info from event with comprehensive fallback chain
+ * Ensures every recommendation has source/time/id for audit trail
+ */
+function extractEventTrace(event: any): { source: string; eventTime?: string; eventId?: string } {
+  return {
+    source: event.source ?? event.dataSource ?? event.provider ?? "Bilinmiyor",
+    eventTime: event.generatedAt ?? event.timestamp ?? event.createdAt,
+    eventId: event.id ?? event.eventId,
+  };
+}
+
+/**
  * Evaluate recommendation rules against context
  * Returns list of matched recommendations sorted by priority, deduplicated by actionType, max 3
  */
@@ -387,10 +399,14 @@ export function generateRiskRecommendation(input: {
   const recommendations = evaluateRulesAndGenerateRecommendations(ctx, normalizedCodes);
 
   if (import.meta.env.DEV) {
-    console.debug('[generateRiskRecommendation] Recommendations generated:', {
+    console.debug('[generateRiskRecommendation] Recommendations with trace:', {
       count: recommendations.length,
-      actionTypes: recommendations.map((r) => r.actionType),
-      scores: recommendations.map((r) => r.priorityScore),
+      items: recommendations.map((r) => ({
+        action: r.actionType,
+        score: r.priorityScore,
+        source: r.generatedFrom?.source,
+        time: r.generatedFrom?.eventTime ? new Date(r.generatedFrom.eventTime).toLocaleTimeString('tr-TR') : undefined,
+      })),
     });
   }
 

@@ -84,24 +84,28 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         return { recommendations: [], confidence: undefined };
       }
 
-      // Map event structure to ensure proper format for rule evaluation
-      // Include all event properties for traceability (source, id, timestamp)
+      // Map event structure ensuring trace fields (id/source/time) are preserved
+      // These are critical for audit trail and source attribution in recommendations
       const mappedEvent = {
-        ...latestEvent, // Spread all properties (id, source, generatedAt)
+        ...latestEvent, // Spread all event properties first
         indices: latestEvent.indices || [],
         confidenceSummary: latestEvent.confidenceSummary || {
           average: 0,
           min: 0,
           max: 0
-        }
+        },
+        // Explicit trace fallback chain to ensure generatedFrom is populated
+        id: (latestEvent as any).id ?? (latestEvent as any).eventId,
+        source: (latestEvent as any).source ?? (latestEvent as any).dataSource ?? (latestEvent as any).provider ?? "Bilinmiyor",
+        generatedAt:
+          (latestEvent as any).generatedAt ?? (latestEvent as any).timestamp ?? (latestEvent as any).createdAt,
       };
 
-      devLog('Mapped event for rule evaluation:', {
+      devLog('Mapped event with trace fallbacks:', {
         indicesCount: mappedEvent.indices.length,
-        firstIndexKey: mappedEvent.indices[0]?.key,
-        confidenceSummary: mappedEvent.confidenceSummary,
-        eventSource: mappedEvent.source,
-        eventId: mappedEvent.id
+        hasTraceId: !!mappedEvent.id,
+        source: mappedEvent.source,
+        hasTimestamp: !!mappedEvent.generatedAt
       });
 
       // Extract confidence value from event

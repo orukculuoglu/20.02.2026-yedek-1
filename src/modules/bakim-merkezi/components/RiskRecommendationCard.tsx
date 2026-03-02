@@ -30,6 +30,20 @@ export const RiskRecommendationCard: React.FC<RiskRecommendationCardProps> = ({
     ? [recommendation]
     : [];
 
+  // DEV-only verification logging (PII-safe: no VIN/plate)
+  if (import.meta.env.DEV && items.length > 0) {
+    console.log('[RiskRecommendationCard] Trace verification:', {
+      itemsCount: items.length,
+      trace: items.map((item, idx) => ({
+        idx,
+        action: item.actionType,
+        source: item.generatedFrom?.source,
+        hasTime: !!item.generatedFrom?.eventTime,
+        hasEventId: !!item.generatedFrom?.eventId,
+      })),
+    });
+  }
+
   // Empty state message
   if (items.length === 0) {
     return (
