@@ -2026,3 +2026,64 @@ function computeSeverity(indices: any[]): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
   const hasAnyValue = indices.some(idx => idx.value > 50);
   return hasAnyValue ? 'MEDIUM' : 'LOW';
 }
+
+// ========== DATA ENGINE SENDER TEST HOOK (Phase 6.4) ==========
+
+/**
+ * Test Data Engine sender (mock/real routing)
+ * DEV ONLY: Used to verify event sending works
+ * 
+ * Usage (in browser console):
+ * import("/services/dataService").then(m => m.testDataEngineSender()).then(console.log)
+ */
+export async function testDataEngineSender(): Promise<any> {
+  try {
+    const { getDataEngineSender } = await import("../src/modules/data-engine/adapters/dataEngineSender");
+    const { 
+      makeEventId, 
+      makeOccurredAt, 
+      makeIdempotencyKey 
+    } = await import("../src/modules/data-engine/contracts/dataEngineContract");
+
+    const sender = getDataEngineSender();
+
+    const envelope = {
+      schemaVersion: "DE-1.0" as const,
+      eventId: makeEventId(),
+      eventType: "RISK_INDEX_SNAPSHOT" as const,
+      occurredAt: makeOccurredAt(),
+      tenantId: "LENT-CORP-SECURE",
+      subject: { vehicleId: "VEH-TEST-11" },
+      payload: {
+        indexes: [
+          { key: "trustIndex", value: 44, confidence: 0.68 },
+          { key: "riskScore", value: 32, confidence: 0.75 },
+        ],
+      },
+      idempotencyKey: makeIdempotencyKey({
+        vehicleId: "VEH-TEST-11",
+        indexKeys: ["trustIndex", "riskScore"],
+      }),
+      meta: {
+        source: "data-engine",
+        env: import.meta.env.MODE,
+        appVersion: "6.4",
+      },
+    };
+
+    if (import.meta.env.DEV) {
+      console.log("[testDataEngineSender] Sending test envelope:", envelope);
+    }
+
+    const result = await sender.send(envelope);
+
+    if (import.meta.env.DEV) {
+      console.log("[testDataEngineSender] Result:", result);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("[testDataEngineSender] Error:", error);
+    throw error;
+  }
+}
