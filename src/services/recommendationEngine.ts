@@ -1,8 +1,8 @@
 /**
  * Risk Recommendation Engine
  * Enterprise-grade recommendation engine for vehicle risk assessment
- * Implements priority-based rules for actionable recommendations
- * Supports normalized, structured reason codes
+ * Implements priority-based rule evaluation for actionable recommendations
+ * Supports normalized, structured reason codes and rule-driven policies
  */
 
 import type {
@@ -16,6 +16,10 @@ import {
   countBySeverity,
   getHighestSeverity,
 } from "../modules/data-engine/normalizers/reasonCodeNormalizer";
+import {
+  RECOMMENDATION_RULES,
+  type RecommendationContext,
+} from "./recommendationRules";
 
 /**
  * Clamp value to 0-100 range
@@ -34,6 +38,80 @@ function generateRecommendationId(vehicleId: string): string {
     // Fallback for environments without crypto
     return `${vehicleId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
+}
+
+/**
+ * Evaluate recommendation rules against context
+ * Returns list of matched recommendations sorted by priority, deduplicated by actionType, max 3
+ */
+function evaluateRulesAndGenerateRecommendations(
+  ctx: RecommendationContext,
+  normalizedCodes: StructuredReasonCode[]
+): RiskRecommendation[] {
+  // Evaluate all rules and build candidates
+  const candidates: RiskRecommendation[] = [];
+
+  for (const rule of RECOMMENDATION_RULES) {
+    try {
+      // Check if this rule matches the context
+      if (rule.when(ctx)) {
+        // Calculate priority for this rule
+        const priorityScore = rule.priority(ctx);
+
+        // Build recommendation from rule
+        const rec: RiskRecommendation = {
+          id: generateRecommendationId(ctx.vehicleId),
+          vehicleId: ctx.vehicleId,
+          actionType: rule.actionType,
+          priorityScore: clamp100(priorityScore),
+          reason: rule.reason(ctx),
+          recommendation: rule.recommendation(ctx),
+          reasonCodes: normalizedCodes.length > 0 ? normalizedCodes : undefined,
+          generatedAt: new Date().toISOString(),
+          source: "DATA_ENGINE",
+          generatedFrom: {
+            source: ctx.source,
+            eventTime: ctx.eventTime,
+            eventId: ctx.eventId,
+          },
+        };
+
+        // Add rule evidence keys if available
+        if (rule.evidenceKeys && rule.evidenceKeys.length > 0) {
+          rec.evidence = {
+            indexes: rule.evidenceKeys.reduce((acc, key) => {
+              if (ctx.indexMap && key in ctx.indexMap) {
+                acc[key] = ctx.indexMap[key];
+              }
+              return acc;
+            }, {} as Record<string, number>),
+          };
+        }
+
+        candidates.push(rec);
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.debug(`[evaluateRules] Error evaluating rule ${rule.id}:`, err);
+      }
+    }
+  }
+
+  // Deduplicate by actionType (keep highest priority for each action type)
+  const deduplicatedMap = new Map<string, RiskRecommendation>();
+  for (const candidate of candidates) {
+    const key = candidate.actionType;
+    if (!deduplicatedMap.has(key) || candidate.priorityScore > (deduplicatedMap.get(key)?.priorityScore ?? 0)) {
+      deduplicatedMap.set(key, candidate);
+    }
+  }
+
+  // Sort by priority descending and return top 3
+  const results = Array.from(deduplicatedMap.values())
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .slice(0, 3);
+
+  return results;
 }
 
 /**
@@ -214,37 +292,43 @@ export function buildRiskRecommendation(
   };
 }
 /**
- * Generate recommendation from risk event data (with indices)
- * Extracts indices and reason codes from event, then builds recommendation
+ * Generate recommendations from risk event data (with indices)
+ * Uses rule-based policy engine to evaluate all matching rules
+ * Extracts indices and reason codes from event, then evaluates rules
+ * Returns array of top 3 recommendations sorted by priority
  * Used by UI components (e.g., WorkOrder) that have access to risk index data
+ *
+ * RULES-BASED OUTPUT:
+ * - If no rules match => return empty array [], UI shows "yeterli risk verisi yok"
+ * - Otherwise => return 1-3 recommendations sorted by priority (highest first)
  */
 export function generateRiskRecommendation(input: {
   vehicleId: string;
   event?: any; // RiskIndexEvent or similar with indices array
-}): RiskRecommendation | null {
+}): RiskRecommendation[] {
   if (!input.vehicleId || !input.event) {
     if (import.meta.env.DEV) {
       console.debug('[generateRiskRecommendation] Missing vehicleId or event');
     }
-    return null;
+    return [];
   }
 
   // Extract indices from event
   const indices = input.event.indices || [];
-  
+
   if (!Array.isArray(indices) || indices.length === 0) {
     if (import.meta.env.DEV) {
       console.debug('[generateRiskRecommendation] No valid indices in event', {
         hasIndices: !!input.event.indices,
         isArray: Array.isArray(indices),
-        length: indices.length
+        length: indices.length,
       });
     }
-    return null;
+    return [];
   }
 
   const indexMap: Record<string, number> = {};
-  const reasonCodes: any[] = [];
+  const reasonCodesRaw: any[] = [];
 
   // Process indices
   indices.forEach((idx: any) => {
@@ -253,7 +337,7 @@ export function generateRiskRecommendation(input: {
     }
     // Collect reason codes from meta
     if (idx.meta?.reasonCodes && Array.isArray(idx.meta.reasonCodes)) {
-      reasonCodes.push(...idx.meta.reasonCodes);
+      reasonCodesRaw.push(...idx.meta.reasonCodes);
     }
   });
 
@@ -262,41 +346,49 @@ export function generateRiskRecommendation(input: {
     if (import.meta.env.DEV) {
       console.debug('[generateRiskRecommendation] No valid index keys extracted from indices');
     }
-    return null;
+    return [];
   }
 
-  // Build recommendation input from extracted data
-  const recommendationInput: RecommendationInput = {
+  // Normalize reason codes
+  const normalizedCodes = normalizeReasonCodes(reasonCodesRaw);
+
+  // Build recommendation context for rule evaluation
+  const ctx: RecommendationContext = {
     vehicleId: input.vehicleId,
-    trustIndex: indexMap.trustIndex,
-    reliabilityIndex: indexMap.reliabilityIndex,
-    maintenanceDiscipline: indexMap.maintenanceDiscipline,
-    insuranceRisk: indexMap.insuranceRisk,
-    reasonCodes: reasonCodes.length > 0 ? reasonCodes : undefined,
+    trustIndex: indexMap.trustIndex ?? 50,
+    reliabilityIndex: indexMap.reliabilityIndex ?? 50,
+    maintenanceDiscipline: indexMap.maintenanceDiscipline ?? 50,
+    insuranceRisk: indexMap.insuranceRisk ?? 50,
+    reasonCodes: normalizedCodes,
+    indexMap,
     evidenceSourcesCount: indices.length,
-    indices: indexMap,
+    confidenceSummary: input.event.confidenceSummary,
+    source: input.event.source,
+    eventTime: input.event.generatedAt || input.event.timestamp || input.event.createdAt,
+    eventId: input.event.id,
   };
 
   if (import.meta.env.DEV) {
-    console.debug('[generateRiskRecommendation] Building with input:', {
+    console.debug('[generateRiskRecommendation] Context built:', {
       vehicleId: input.vehicleId,
       indicesCount: indices.length,
       indexKeys: Object.keys(indexMap),
-      reasonCodesCount: reasonCodes.length
+      reasonCodesCount: normalizedCodes.length,
+      trustIndex: ctx.trustIndex,
+      maintenanceDiscipline: ctx.maintenanceDiscipline,
     });
   }
 
-  // Build the recommendation
-  const recommendation = buildRiskRecommendation(recommendationInput);
+  // Evaluate rules and generate recommendations
+  const recommendations = evaluateRulesAndGenerateRecommendations(ctx, normalizedCodes);
 
-  // Add traceability info from source event
-  if (recommendation && input.event) {
-    recommendation.generatedFrom = {
-      source: input.event.source,
-      eventTime: input.event.generatedAt || input.event.timestamp || input.event.createdAt,
-      eventId: input.event.id
-    };
+  if (import.meta.env.DEV) {
+    console.debug('[generateRiskRecommendation] Recommendations generated:', {
+      count: recommendations.length,
+      actionTypes: recommendations.map((r) => r.actionType),
+      scores: recommendations.map((r) => r.priorityScore),
+    });
   }
 
-  return recommendation;
+  return recommendations;
 }

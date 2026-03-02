@@ -50,9 +50,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [detailModalEventId, setDetailModalEventId] = useState<string | null>(null);
 
-  // Memoized recommendation and confidence from latest risk event
-  const { recommendation, confidence } = useMemo(() => {
-    if (!vehicleId) return { recommendation: null, confidence: undefined };
+  // Memoized recommendations and confidence from latest risk event
+  const { recommendations, confidence } = useMemo(() => {
+    if (!vehicleId) return { recommendations: [], confidence: undefined };
 
     try {
       // Get latest risk index event for this vehicle
@@ -67,7 +67,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
       if (!hasLatestEvents) {
         devLog('No risk events found');
-        return { recommendation: null, confidence: undefined };
+        return { recommendations: [], confidence: undefined };
       }
 
       const latestEvent = latestEvents[0];
@@ -81,10 +81,10 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
       if (!hasIndices) {
         devLog('WARNING: Event has no indices - recommendation cannot be generated');
-        return { recommendation: null, confidence: undefined };
+        return { recommendations: [], confidence: undefined };
       }
 
-      // Map event structure to ensure proper format
+      // Map event structure to ensure proper format for rule evaluation
       const mappedEvent = {
         indices: latestEvent.indices || [],
         confidenceSummary: latestEvent.confidenceSummary || {
@@ -94,7 +94,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         }
       };
 
-      devLog('Mapped event for recommendation:', {
+      devLog('Mapped event for rule evaluation:', {
         indicesCount: mappedEvent.indices.length,
         firstIndexKey: mappedEvent.indices[0]?.key,
         confidenceSummary: mappedEvent.confidenceSummary
@@ -103,24 +103,26 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       // Extract confidence value from event
       const confidenceValue = mappedEvent.confidenceSummary?.average;
 
-      const rec = generateRiskRecommendation({
+      // Generate recommendations using rule-based policy engine
+      // Returns array of 0-3 recommendations sorted by priority
+      const recs = generateRiskRecommendation({
         vehicleId,
         event: mappedEvent,
       });
 
-      devLog('Recommendation generated:', {
-        hasRecommendation: !!rec,
-        priorityScore: rec?.priorityScore,
-        actionType: rec?.actionType,
+      devLog('Recommendations generated (rule-based):', {
+        count: recs.length,
+        actionTypes: recs.map((r) => r.actionType),
+        scores: recs.map((r) => r.priorityScore),
         confidence: confidenceValue
       });
 
-      return { recommendation: rec, confidence: confidenceValue };
+      return { recommendations: recs, confidence: confidenceValue };
     } catch (err) {
-      devLog('Error generating recommendation:', {
+      devLog('Error generating recommendations:', {
         error: err instanceof Error ? err.message : 'Unknown error'
       });
-      return { recommendation: null, confidence: undefined };
+      return { recommendations: [], confidence: undefined };
     }
   }, [vehicleId, tenantId]);
 
@@ -220,8 +222,8 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       )}
 
       {/* Show Recommendation Card when collapsed if available */}
-      {!isExpanded && recommendation && (
-        <RiskRecommendationCard recommendation={recommendation} confidence={confidence} />
+      {!isExpanded && recommendations.length > 0 && (
+        <RiskRecommendationCard recommendations={recommendations} confidence={confidence} />
       )}
 
       {/* Accordion Section */}
@@ -306,7 +308,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
           )}
 
           {/* Recommendation Card */}
-          {!isLoading && <RiskRecommendationCard recommendation={recommendation} confidence={confidence} />}
+          {!isLoading && <RiskRecommendationCard recommendations={recommendations} confidence={confidence} />}
         </div>
       )}
 
