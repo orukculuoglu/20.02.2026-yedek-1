@@ -17,6 +17,8 @@ import * as effectiveOfferEngine from './effectiveOfferEngine';
 import { dataEngine } from './dataEngine/dataEngine';
 import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
 import { createApiConfig, apiGet, handleApiError, isRealApiEnabled, getSupplierOffers as apiGetSupplierOffers, getEffectiveOffers as apiGetEffectiveOffers, getSuppliers as apiGetSuppliers } from './apiClient';
+import { fetchDataEngineIndices } from '../src/modules/data-engine/api/dataEngineApiClient';
+import type { GetDataEngineIndicesRequest, GetDataEngineIndicesResponse } from '../src/modules/data-engine/contracts/dataEngineApiContract';
 import { initializeFeed, getActiveFeedsForPart } from './supplierFeedEngine';
 
 // ========== CANONICAL PART MASTER API WRAPPERS ==========
@@ -1897,14 +1899,46 @@ export async function getOemAlternativesForPart(
 // ========== DATA ENGINE INDICES ==========
 
 /**
- * Get Data Engine Indices - Multi-domain entry point
+ * Get Data Engine Indices - Multi-domain entry point (Backend-ready)
+ * 
+ * Routes between real API and local mock based on VITE_USE_REAL_API flag.
  * Primary: VIO for risk domain with full explainability
  * Fallback: VehicleAggregate for numeric-only risk indices
  * 
- * @param params Domain ("risk" | "part"), vehicleId, vin, plate
+ * Contract:
+ * @param params Domain ("risk" | "part"), vehicleId, vin?, plate?
  * @returns Promise of DataEngineIndex[] with domain-specific indices
+ * 
+ * Design:
+ * - Real API: GET /data-engine/indices?domain=...&vehicleId=...
+ * - Mock: Local dataEngineIndices.getDataEngineIndices() (VITE_USE_REAL_API=false, default)
+ * - PII-safe: VIN/plate NOT sent to API by default
+ * 
+ * Phase 6.0: Backend contract layer introduced
  */
-export const getDataEngineIndices = dataEngineIndices.getDataEngineIndices;
+export async function getDataEngineIndices(
+  params: {
+    domain: "risk" | "part";
+    vehicleId?: string;
+    vin?: string;
+    plate?: string;
+  }
+): Promise<any[]> {
+  const req: GetDataEngineIndicesRequest = {
+    domain: params.domain,
+    vehicleId: params.vehicleId || "",
+    vin: params.vin,
+    plate: params.plate,
+  };
+
+  const response: GetDataEngineIndicesResponse = await fetchDataEngineIndices(req);
+
+  if (!response.success) {
+    throw new Error(response.error?.message || "Failed to fetch data engine indices");
+  }
+
+  return response.data || [];
+}
 
 /**
  * Get Vehicle History Events (Araç Öyküsü)
