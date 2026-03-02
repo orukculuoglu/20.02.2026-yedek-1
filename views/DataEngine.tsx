@@ -16,7 +16,9 @@ import { sanitizeMeta } from '../src/modules/data-engine/utils/sanitizeMeta';
 import { RiskSegmentDashboard } from '../src/modules/data-engine/components/RiskSegmentDashboard';
 import TenantAnalyticsDashboard from '../src/modules/data-engine/components/TenantAnalyticsDashboard';
 import OperationalRiskList from '../src/modules/data-engine/components/OperationalRiskList';
+import OperationalRiskDashboard from '../src/modules/data-engine/components/OperationalRiskDashboard';
 import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConfidence';
+import { getRecommendationEventLog } from '../src/services/recommendationEngine';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -1206,6 +1208,14 @@ export const DataEngine: React.FC = () => {
           events={getLastRiskIndexEvents(tenantId, 500)} 
           maxEvents={maxEventsForDashboard}
           onMaxEventsChange={setMaxEventsForDashboard}
+        />
+      </div>
+
+      {/* Operational Risk Analytics - Kural Tetikleme Metrikleri + Risk Dağılımı */}
+      <div className="mt-8">
+        <OperationalRiskDashboard 
+          events={getRecommendationEventLog()}
+          showDevJson={import.meta.env.DEV}
         />
       </div>
 

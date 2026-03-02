@@ -22,6 +22,22 @@ import {
 } from "./recommendationRules";
 
 /**
+ * In-memory event log for recommendation analytics
+ * Keeps last 500 recommendations for rule trigger metrics, risk distribution, etc.
+ * NO PII: Event log only contains sanitized recommendation data (no VIN/plate/identity)
+ */
+const recommendationEventLog: RiskRecommendation[] = [];
+const MAX_EVENT_LOG_SIZE = 500;
+
+/**
+ * Get current recommendation event log (in-memory, last 500 entries)
+ * Safe for analytics: contains no PII (no vehicleId, VIN, plate, etc.)
+ */
+export function getRecommendationEventLog(): RiskRecommendation[] {
+  return [...recommendationEventLog];
+}
+
+/**
  * Clamp value to 0-100 range
  */
 function clamp100(value: number): number {
@@ -411,6 +427,15 @@ export function generateRiskRecommendation(input: {
     generatedFrom: rec.generatedFrom ?? eventTrace,
   }));
 
+  // ANALYTICS: Push recommendations into in-memory event log (for rule metrics, distribution, etc.)
+  // Maintains last 500 entries only (shift old entries if exceeding max size)
+  finalRecommendations.forEach((rec) => {
+    recommendationEventLog.push(rec);
+    if (recommendationEventLog.length > MAX_EVENT_LOG_SIZE) {
+      recommendationEventLog.shift();
+    }
+  });
+
   if (import.meta.env.DEV) {
     console.debug('[generateRiskRecommendation] Final recommendations with guaranteed trace:', {
       count: finalRecommendations.length,
@@ -421,6 +446,7 @@ export function generateRiskRecommendation(input: {
         time: r.generatedFrom?.eventTime ? new Date(r.generatedFrom.eventTime).toLocaleTimeString('tr-TR') : undefined,
       })),
     });
+    console.debug('[generateRiskRecommendation] Event log size:', recommendationEventLog.length, '/', MAX_EVENT_LOG_SIZE);
   }
 
   return finalRecommendations;
