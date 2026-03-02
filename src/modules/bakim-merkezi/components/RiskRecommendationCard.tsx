@@ -74,6 +74,8 @@ export const RiskRecommendationCard: React.FC<RiskRecommendationCardProps> = ({
         return 'Sigorta İncelemesi';
       case 'DIAGNOSTIC_CHECK':
         return 'Diyagnostik Kontrol';
+      case 'MECHANICAL_DIAG':
+        return 'Mekanik Kontrol';
       case 'DATA_QUALITY_REVIEW':
         return 'Veri Kalite İncelemesi';
       case 'RISK_ASSESSMENT':

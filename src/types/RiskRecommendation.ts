@@ -8,6 +8,8 @@ export type ActionType =
   | "MAINTENANCE_CHECK"
   | "INSURANCE_REVIEW"
   | "DIAGNOSTIC_CHECK"
+  | "MECHANICAL_DIAG"
+  | "RISK_ASSESSMENT"
   | "DATA_QUALITY_REVIEW"
   | "NONE";
 
