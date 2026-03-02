@@ -16,7 +16,9 @@ import type {
 } from "../contracts/dataEngineContract";
 import { isRealApiEnabled, createApiConfig, apiPost } from "../../../../services/apiClient";
 import { sanitizeMeta } from "../utils/sanitizeMeta";
-import { recordSent, recordQueued, recordFailed } from "../telemetry/dataEngineTelemetry";
+import { recordSent, recordQueued, recordFailed, updateCircuitState } from "../telemetry/dataEngineTelemetry";
+import { createCircuitBreaker, type CircuitState } from "../resilience/circuitBreaker";
+import { createRateLimiter } from "../resilience/rateLimiter";
 
 /**
  * Core sender interface
@@ -162,13 +164,40 @@ class MockQueueSender implements DataEngineSender {
 /**
  * HTTP SENDER: Real backend API
  * POSTs to /data-engine/events with fallback to mock queue on failure
+ * Includes circuit breaker and rate limiter for resilience
  */
 class HttpSender implements DataEngineSender {
   private fallback: MockQueueSender = new MockQueueSender();
+  private circuit = createCircuitBreaker();
+  private rateLimiter = createRateLimiter(20, 10000); // 20 requests per 10 seconds
 
   async send<T>(
     envelope: DataEngineEventEnvelope<T>
   ): Promise<DataEngineSendResult> {
+    // STEP 1: Check rate limiter
+    if (!this.rateLimiter.allow()) {
+      if (import.meta.env.DEV) {
+        console.debug("[HttpSender] Rate limited, queueing event", {
+          eventId: envelope.eventId,
+        });
+      }
+      recordFailed("RATE_LIMITED");
+      return this.fallback.send(envelope);
+    }
+
+    // STEP 2: Check circuit breaker
+    if (!this.circuit.canRequest()) {
+      const circuitState = this.circuit.getState();
+      if (import.meta.env.DEV) {
+        console.debug("[HttpSender] Circuit breaker rejecting request", {
+          eventId: envelope.eventId,
+          circuitState,
+        });
+      }
+      recordFailed(`CIRCUIT_${circuitState}`);
+      return this.fallback.send(envelope);
+    }
+
     const startTime = performance.now();
 
     try {
@@ -203,7 +232,9 @@ class HttpSender implements DataEngineSender {
         });
       }
 
-      // Record successful send
+      // Record successful send and update circuit breaker
+      this.circuit.recordSuccess();
+      updateCircuitState(this.circuit.getState());
       recordSent(latencyMs);
 
       return {
@@ -211,8 +242,10 @@ class HttpSender implements DataEngineSender {
         eventId: envelope.eventId,
       };
     } catch (error) {
-      // Record failure
+      // Record failure and update circuit breaker
       const errorMsg = error instanceof Error ? error.message : String(error);
+      this.circuit.recordFailure();
+      updateCircuitState(this.circuit.getState());
       recordFailed(errorMsg);
 
       if (import.meta.env.DEV) {
@@ -239,6 +272,20 @@ class HttpSender implements DataEngineSender {
    */
   clearFallbackQueue(): void {
     this.fallback.clearQueue();
+  }
+
+  /**
+   * Get circuit breaker state (DEV only)
+   */
+  getCircuitState() {
+    return this.circuit.getState();
+  }
+
+  /**
+   * Get rate limiter token count (DEV only)
+   */
+  getRateLimiterTokens() {
+    return this.rateLimiter.getTokens();
   }
 }
 

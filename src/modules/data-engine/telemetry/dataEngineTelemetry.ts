@@ -1,3 +1,5 @@
+import type { CircuitState } from "../resilience/circuitBreaker";
+
 /**
  * Data Engine Telemetry
  * Lightweight runtime metrics for event delivery observability
@@ -7,6 +9,8 @@
  * - Latency tracking (last 100 samples)
  * - Average latency calculation
  * - Last error message (non-PII)
+ * - Circuit breaker state tracking
+ * - Rate limit rejection tracking
  * - DEV-only diagnostics
  */
 
@@ -21,6 +25,8 @@ export interface TelemetrySnapshot {
   queueSize: number;
   lastError?: string;
   successRate: number;              // % of sent vs (sent + queued + failed)
+  circuitState?: CircuitState;      // CLOSED | OPEN | HALF_OPEN
+  rateLimitedCount?: number;        // Number of rate limit rejections
 }
 
 /**
@@ -30,9 +36,11 @@ interface TelemetryState {
   sentCount: number;
   queuedCount: number;
   failedCount: number;
+  rateLimitedCount: number;
   latencySamples: number[];         // Last 100 samples
   lastErrorMessage?: string;
   queueSize: number;
+  circuitState: CircuitState;
 }
 
 const MAX_LATENCY_SAMPLES = 100;
@@ -42,9 +50,11 @@ const telemetryState: TelemetryState = {
   sentCount: 0,
   queuedCount: 0,
   failedCount: 0,
+  rateLimitedCount: 0,
   latencySamples: [],
   lastErrorMessage: undefined,
   queueSize: 0,
+  circuitState: "CLOSED",
 };
 
 /**
@@ -106,12 +116,33 @@ export function recordQueueProcessed(): void {
  */
 export function recordFailed(errorMessage: string): void {
   telemetryState.failedCount++;
+
+  // Track rate limit rejections separately
+  if (errorMessage === "RATE_LIMITED") {
+    telemetryState.rateLimitedCount++;
+  }
+
   telemetryState.lastErrorMessage = sanitizeErrorMessage(errorMessage);
 
   if (import.meta.env.DEV) {
     console.debug("[DE-Telemetry] Event failed", {
       error: telemetryState.lastErrorMessage,
       failedCount: telemetryState.failedCount,
+      isRateLimited: errorMessage === "RATE_LIMITED",
+    });
+  }
+}
+
+/**
+ * Update circuit breaker state
+ * Called by HttpSender to sync state
+ */
+export function updateCircuitState(state: CircuitState): void {
+  telemetryState.circuitState = state;
+
+  if (import.meta.env.DEV) {
+    console.debug("[DE-Telemetry] Circuit state changed", {
+      circuitState: state,
     });
   }
 }
@@ -139,6 +170,8 @@ export function getTelemetrySnapshot(): TelemetrySnapshot {
     queueSize: telemetryState.queueSize,
     lastError: telemetryState.lastErrorMessage,
     successRate: Math.round(successRate * 10) / 10,
+    circuitState: telemetryState.circuitState,
+    rateLimitedCount: telemetryState.rateLimitedCount,
   };
 }
 
@@ -150,9 +183,11 @@ export function resetTelemetry(): void {
   telemetryState.sentCount = 0;
   telemetryState.queuedCount = 0;
   telemetryState.failedCount = 0;
+  telemetryState.rateLimitedCount = 0;
   telemetryState.latencySamples = [];
   telemetryState.lastErrorMessage = undefined;
   telemetryState.queueSize = 0;
+  telemetryState.circuitState = "CLOSED";
 
   if (import.meta.env.DEV) {
     console.debug("[DE-Telemetry] Telemetry reset");

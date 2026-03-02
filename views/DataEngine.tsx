@@ -1398,6 +1398,19 @@ export const DataEngine: React.FC = () => {
                   <div>Avg Latency: <span className="font-semibold">{telemetry.averageLatencyMs}ms</span></div>
                   <div>Queue Size: <span className="font-semibold">{telemetry.queueSize}</span></div>
                   <div>Success: <span className="font-semibold text-green-600">{telemetry.successRate.toFixed(1)}%</span></div>
+                  <div>
+                    Circuit: 
+                    <span className={`font-semibold ml-1 ${
+                      telemetry.circuitState === "CLOSED" 
+                        ? "text-green-600" 
+                        : telemetry.circuitState === "OPEN" 
+                        ? "text-red-600" 
+                        : "text-yellow-600"
+                    }`}>
+                      {telemetry.circuitState || "CLOSED"}
+                    </span>
+                  </div>
+                  <div>Rate Limited: <span className="font-semibold text-orange-600">{telemetry.rateLimitedCount || 0}</span></div>
                 </div>
                 {telemetry.lastError && (
                   <p className="text-xs text-red-600 mt-2">Last Error: {telemetry.lastError}</p>
