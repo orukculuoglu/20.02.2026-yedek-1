@@ -398,10 +398,23 @@ export function generateRiskRecommendation(input: {
   // Evaluate rules and generate recommendations
   const recommendations = evaluateRulesAndGenerateRecommendations(ctx, normalizedCodes);
 
+  // FORCE-INJECT generatedFrom on final recommendations to guarantee source attribution
+  // This ensures every recommendation has complete trace info for UI display
+  const eventTrace = {
+    source: input.event?.source ?? input.event?.dataSource ?? input.event?.provider ?? "Bilinmiyor",
+    eventTime: input.event?.generatedAt ?? input.event?.timestamp ?? input.event?.createdAt ?? undefined,
+    eventId: input.event?.id ?? input.event?.eventId ?? undefined,
+  };
+
+  const finalRecommendations = recommendations.map((rec) => ({
+    ...rec,
+    generatedFrom: rec.generatedFrom ?? eventTrace,
+  }));
+
   if (import.meta.env.DEV) {
-    console.debug('[generateRiskRecommendation] Recommendations with trace:', {
-      count: recommendations.length,
-      items: recommendations.map((r) => ({
+    console.debug('[generateRiskRecommendation] Final recommendations with guaranteed trace:', {
+      count: finalRecommendations.length,
+      items: finalRecommendations.map((r) => ({
         action: r.actionType,
         score: r.priorityScore,
         source: r.generatedFrom?.source,
@@ -410,5 +423,5 @@ export function generateRiskRecommendation(input: {
     });
   }
 
-  return recommendations;
+  return finalRecommendations;
 }
