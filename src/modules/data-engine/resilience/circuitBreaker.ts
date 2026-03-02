@@ -137,10 +137,9 @@ export function createCircuitBreaker(
           });
         }
       }
-    }
-
-    if (state.state === "HALF_OPEN") {
-      state.halfOpenAttempts++;
+    } else if (state.state === "OPEN") {
+      // In OPEN state, increment failure count for tracking
+      // (no state change, will transition to HALF_OPEN via timeout)
     }
   }
 
