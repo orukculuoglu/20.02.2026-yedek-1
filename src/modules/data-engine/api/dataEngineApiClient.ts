@@ -20,18 +20,19 @@ import type {
   DataEngineIndex,
 } from "../contracts/dataEngineApiContract";
 import { isRealApiEnabled, createApiConfig, apiGet } from "../../../../services/apiClient";
-import { ingestDataEngineEvent } from "../ingestion/dataEngineIngestion";
+import { sendDataEngineEvent } from "../ingestion/dataEngineEventSender";
 import { generateEventId } from "../contracts/dataEngineEventTypes";
 import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload } from "../contracts/dataEngineEventTypes";
 
 /**
- * Emit RISK_INDICES_UPDATED event to Data Engine ingestion bus
+ * Emit RISK_INDICES_UPDATED event to Data Engine event sender (mock/real switch)
  * Only emits for risk domain
+ * Fire-and-forget: Does not block API response
  */
-function emitRiskIndicesEvent(
+async function emitRiskIndicesEvent(
   req: GetDataEngineIndicesRequest,
   indices: DataEngineIndex[]
-): void {
+): Promise<void> {
   if (req.domain !== "risk" || indices.length === 0) {
     return;
   }
@@ -55,7 +56,15 @@ function emitRiskIndicesEvent(
     piiSafe: true,
   };
 
-  ingestDataEngineEvent(riskEvent);
+  // Fire-and-forget: Sender handles mock/real routing with graceful fallback
+  try {
+    await sendDataEngineEvent(riskEvent);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[DataEngineApiClient] Failed to send risk indices event:", error);
+    }
+    // Silent failure: Event already ingested locally as fallback
+  }
 }
 
 /**
@@ -162,8 +171,13 @@ async function fetchFromRealApi(
 
     const responseData = response.data || [];
 
-    // Emit event to ingestion bus (Phase 6.1)
-    emitRiskIndicesEvent(req, responseData);
+    // Fire-and-forget: Emit event via sender with mock/real routing (Phase 6.2)
+    emitRiskIndicesEvent(req, responseData).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn("[DataEngineApiClient] Event emission failed:", err);
+      }
+      // Silent fallback: Event already ingested locally via sender
+    });
 
     return {
       success: true,
@@ -206,8 +220,13 @@ async function fetchFromMockImplementation(
 
     const responseData = data || [];
 
-    // Emit event to ingestion bus (Phase 6.1)
-    emitRiskIndicesEvent(req, responseData);
+    // Fire-and-forget: Emit event via sender with mock/real routing (Phase 6.2)
+    emitRiskIndicesEvent(req, responseData).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn("[DataEngineApiClient] Event emission failed:", err);
+      }
+      // Silent fallback: Event already ingested locally via sender
+    });
 
     return {
       success: true,

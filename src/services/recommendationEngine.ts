@@ -20,7 +20,7 @@ import {
   RECOMMENDATION_RULES,
   type RecommendationContext,
 } from "./recommendationRules";
-import { ingestDataEngineEvent } from "../modules/data-engine/ingestion/dataEngineIngestion";
+import { sendDataEngineEvent } from "../modules/data-engine/ingestion/dataEngineEventSender";
 import { generateEventId } from "../modules/data-engine/contracts/dataEngineEventTypes";
 import type { DataEngineEventEnvelope, RecommendationsGeneratedPayload } from "../modules/data-engine/contracts/dataEngineEventTypes";
 
@@ -439,8 +439,9 @@ export function generateRiskRecommendation(input: {
     }
   });
 
-  // PHASE 6.1: Emit recommendation event to Data Engine ingestion bus
+  // PHASE 6.2: Emit recommendation event via sender (mock/real switch)
   // PII-safe: Uses vehicleId only, includes audit trail via generatedFrom
+  // Fire-and-forget: Sender handles mock/real routing with graceful fallback
   if (finalRecommendations.length > 0) {
     const recommendationEvent: DataEngineEventEnvelope<RecommendationsGeneratedPayload> = {
       eventId: generateEventId(),
@@ -461,7 +462,12 @@ export function generateRiskRecommendation(input: {
       piiSafe: true,
     };
 
-    ingestDataEngineEvent(recommendationEvent);
+    // Fire-and-forget: Send event with proper error handling
+    sendDataEngineEvent(recommendationEvent).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn('[generateRiskRecommendation] Failed to send event:', err);
+      }
+    });
   }
 
   if (import.meta.env.DEV) {

@@ -20,6 +20,7 @@ import OperationalRiskDashboard from '../src/modules/data-engine/components/Oper
 import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConfidence';
 import { getRecommendationEventLog } from '../src/services/recommendationEngine';
 import { getDataEngineEvents } from '../src/modules/data-engine/ingestion/dataEngineIngestion';
+import { isRealApiEnabled } from '../services/apiClient';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -1220,13 +1221,20 @@ export const DataEngine: React.FC = () => {
         />
       </div>
 
-      {/* Data Engine Event Stream (Phase 6.1 Ingestion) */}
+      {/* Data Engine Event Stream (Phase 6.1 Ingestion, Phase 6.2 Sender) */}
       <div className="mt-8 space-y-6">
         <div>
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <TrendingUp size={20} className="text-indigo-600" />
-            Event Stream (Ingestion) - Son 50 Olay
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <TrendingUp size={20} className="text-indigo-600" />
+              Event Stream (Ingestion) - Son 50 Olay
+            </h3>
+            {import.meta.env.DEV && (
+              <div className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 font-mono">
+                Sender: {isRealApiEnabled() ? "REAL (HTTP)" : "MOCK (Local)"}
+              </div>
+            )}
+          </div>
 
           {(() => {
             const allEvents = getDataEngineEvents();
