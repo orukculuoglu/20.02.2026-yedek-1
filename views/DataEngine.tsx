@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package, Settings } from 'lucide-react';
+import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package, Settings, Shield } from 'lucide-react';
 import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
 import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
@@ -24,6 +24,9 @@ import { isRealApiEnabled } from '../services/apiClient';
 import { getQueueStats } from '../src/modules/data-engine/eventQueue';
 import { flushQueuedEvents } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
 import { getTelemetrySnapshot } from '../src/modules/data-engine/telemetry/dataEngineTelemetry';
+import { buildInsuranceAggregate, getInsuranceFraudRiskLevel } from '../src/modules/insurance/insuranceEngine';
+import { getMockInsuranceData } from '../src/modules/insurance/mockInsuranceProvider';
+import { emitInsuranceRiskSnapshot, getInsuranceAssessment } from '../src/modules/insurance/insuranceDataEngineIntegration';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -54,6 +57,12 @@ export const DataEngine: React.FC = () => {
   const [operationalRiskSegmentFilter, setOperationalRiskSegmentFilter] = React.useState<'all' | 'medium' | 'high'>('all');
   const [queueFlushLoading, setQueueFlushLoading] = React.useState(false);
   const [telemetry, setTelemetry] = React.useState(getTelemetrySnapshot());
+  
+  // Insurance Domain state
+  const [insuranceData, setInsuranceData] = React.useState<any>(null);
+  const [insuranceLoading, setInsuranceLoading] = React.useState(true);
+  const demoVehicleId = 'VEH-001-SEDAN-BLUE'; // Sample vehicle for insurance demo
+  
   const tenantId = 'LENT-CORP-DEMO';
 
   // Load Part Master indices
@@ -85,6 +94,37 @@ export const DataEngine: React.FC = () => {
   React.useEffect(() => {
     const events = getLastRiskIndexEvents(tenantId, 20);
     setRiskIndexEvents(events);
+  }, []);
+
+  // Load Insurance Domain data
+  React.useEffect(() => {
+    const loadInsuranceData = async () => {
+      try {
+        // Get mock insurance data
+        const { policies, claims } = getMockInsuranceData(demoVehicleId);
+        
+        // Build aggregate
+        const aggregate = buildInsuranceAggregate(demoVehicleId, policies, claims);
+        
+        // Get assessment with indices
+        const assessment = getInsuranceAssessment(aggregate);
+        
+        setInsuranceData(assessment);
+        
+        // Emit event via Phase 6 sender
+        await emitInsuranceRiskSnapshot(demoVehicleId, aggregate);
+        
+        if (import.meta.env.DEV) {
+          console.debug('[DataEngine] Insurance data loaded and event emitted', assessment);
+        }
+      } catch (error) {
+        console.error('[DataEngine] Error loading insurance data:', error);
+      } finally {
+        setInsuranceLoading(false);
+      }
+    };
+    
+    loadInsuranceData();
   }, []);
 
   // Refresh telemetry every 2 seconds (DEV only)
@@ -1428,6 +1468,28 @@ export const DataEngine: React.FC = () => {
                   <div>Failure Threshold: <span className="font-semibold text-purple-600">{telemetry.dynamicConfig?.circuitFailureThreshold || 5}</span></div>
                   <div>Circuit Timeout: <span className="font-semibold text-purple-600">{telemetry.dynamicConfig?.circuitOpenTimeoutMs || 30000}ms</span></div>
                 </div>
+              </div>
+
+              {/* Insurance Domain */}
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Shield size={16} className="text-orange-600" />
+                  Insurance Domain (DEV)
+                </h4>
+                {insuranceLoading ? (
+                  <p className="text-xs text-slate-500 mt-2">Loading...</p>
+                ) : insuranceData ? (
+                  <div className="text-xs text-slate-600 mt-2 grid grid-cols-2 gap-2">
+                    <div>Fraud Risk: <span className={`font-semibold ${insuranceData.aggregate.fraudRiskScore > 50 ? 'text-red-600' : 'text-green-600'}`}>{insuranceData.aggregate.fraudRiskScore}</span></div>
+                    <div>Risk Level: <span className="font-semibold text-orange-600">{insuranceData.riskLevel}</span></div>
+                    <div>Coverage Continuity: <span className="font-semibold text-blue-600">{insuranceData.aggregate.coverageContinuityScore}</span></div>
+                    <div>Claim Frequency: <span className="font-semibold text-blue-600">{insuranceData.aggregate.claimFrequencyScore}</span></div>
+                    <div>Policies: <span className="font-semibold">{insuranceData.aggregate.policies.length}</span></div>
+                    <div>Claims: <span className="font-semibold">{insuranceData.aggregate.claims.length}</span></div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-600 mt-2">No insurance data available</p>
+                )}
               </div>
             </div>
           </div>
