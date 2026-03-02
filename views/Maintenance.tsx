@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { getAppointments, acceptAppointment, setContext, getWorkOrder, getContext } from '../services/fleetRentalService';
 import type { ServiceAppointment, Fleet, WorkOrder } from '../types/fleetRental';
+import { buildInsuranceDomainAggregate, getInsuranceDomainInput } from '../src/modules/insurance-domain';
+import type { InsuranceDomainAggregate } from '../src/modules/insurance-domain';
 
 interface MaintenanceProps {
   fleets: Fleet[];
@@ -18,6 +20,8 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
   const [role, setRole] = useState<'admin' | 'ops' | 'viewer'>('ops');
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
+  const [workOrderInsurance, setWorkOrderInsurance] = useState<InsuranceDomainAggregate | null>(null);
+  const [loadingWorkOrderInsurance, setLoadingWorkOrderInsurance] = useState(false);
 
   // Update service context when fleet changes
   useEffect(() => {
@@ -25,6 +29,30 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
       setContext(selectedFleet.fleetId, role);
     }
   }, [selectedFleet, role]);
+
+  // Load insurance data when work order is selected
+  useEffect(() => {
+    if (!selectedWorkOrder) {
+      setWorkOrderInsurance(null);
+      return;
+    }
+
+    setLoadingWorkOrderInsurance(true);
+    try {
+      // Extract vehicleId from work order (fallback to workOrderId if needed)
+      // For now, assuming workOrderId can be used as a vehicle identifier
+      const vehicleId = selectedWorkOrder.workOrderId || '';
+      if (vehicleId) {
+        const insuranceInput = getInsuranceDomainInput(vehicleId);
+        const aggregate = buildInsuranceDomainAggregate(insuranceInput);
+        setWorkOrderInsurance(aggregate);
+      }
+    } catch (err) {
+      console.error('[Maintenance] Error loading insurance:', err);
+    } finally {
+      setLoadingWorkOrderInsurance(false);
+    }
+  }, [selectedWorkOrder]);
 
   // Load appointments
   useEffect(() => {
@@ -282,6 +310,42 @@ export default function Maintenance({ fleets, selectedFleet, onWorkOrderCreated,
                     <div className="font-bold text-blue-900">
                       {selectedWorkOrder.origin.arrivalMode === 'Appointment' && '📅 Randevu'}
                       {selectedWorkOrder.origin.arrivalMode === 'WalkIn' && '🚶 Alışveriş'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Insurance Info Display (Phase 7.3) */}
+            {!loadingWorkOrderInsurance && workOrderInsurance && (
+              <div className="mb-4 bg-purple-50 p-3 rounded border border-purple-200">
+                <h3 className="text-xs font-semibold text-purple-900 uppercase tracking-wider mb-2">Sigorta Durumu</h3>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-purple-700">Durum:</span>
+                    <div className="font-bold text-purple-900">
+                      {workOrderInsurance.policy.policyType} / {workOrderInsurance.policy.status}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-purple-700">Bitiş Tarihi:</span>
+                    <div className="font-bold text-purple-900">
+                      {workOrderInsurance.policy.endDate ? new Date(workOrderInsurance.policy.endDate).toLocaleDateString('tr-TR') : 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-purple-700">12 Ay Hasar:</span>
+                    <div className="font-bold text-purple-900">{workOrderInsurance.derived.claimCount12m}</div>
+                  </div>
+                  <div>
+                    <span className="text-purple-700">Kapsam Riski:</span>
+                    <div className={`font-bold text-sm px-2 py-1 rounded inline-block ${
+                      workOrderInsurance.indexes.coverageRiskIndex < 25 ? 'bg-green-100 text-green-800' :
+                      workOrderInsurance.indexes.coverageRiskIndex < 50 ? 'bg-yellow-100 text-yellow-800' :
+                      workOrderInsurance.indexes.coverageRiskIndex < 75 ? 'bg-orange-100 text-orange-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {workOrderInsurance.indexes.coverageRiskIndex}
                     </div>
                   </div>
                 </div>

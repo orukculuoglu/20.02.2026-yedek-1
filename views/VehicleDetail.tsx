@@ -4,13 +4,16 @@ import {
     ArrowLeft, CheckCircle, AlertOctagon, Wrench, DollarSign, Activity, 
     FileText, Share2, Info, ChevronDown, ChevronUp, Package, Calendar, 
     TurkishLira, ClipboardList, ShieldAlert, BadgeCheck, Loader2, 
-    ExternalLink, Cpu, Brain, Shield, Lock, ShieldCheck, Fingerprint, EyeOff, ZapOff 
+    ExternalLink, Cpu, Brain, Shield, Lock, ShieldCheck, Fingerprint, EyeOff, ZapOff,
+    Heart, AlertCircle
 } from 'lucide-react';
 import { VehicleProfile, OEMPart, DamageRecord, ViewState, PrivacyContext } from '../types';
 import { getVehicleProfile, getVehicleOEMParts, getVehicleDamageHistory } from '../services/dataService';
 import { calculatePrivacyContext } from '../services/securityService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { PdfExportModal } from '../components/PdfExportModal';
+import { buildInsuranceDomainAggregate, getInsuranceDomainInput, getCoverageRiskLevel } from '../src/modules/insurance-domain';
+import type { InsuranceDomainAggregate } from '../src/modules/insurance-domain';
 
 interface VehicleDetailProps {
   vehicleId: string;
@@ -31,6 +34,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicleId, onBack,
   // Damage History State
   const [showDamage, setShowDamage] = useState(false);
   const [damageHistory, setDamageHistory] = useState<DamageRecord[]>([]);
+
+  // Insurance State
+  const [insurance, setInsurance] = useState<InsuranceDomainAggregate | null>(null);
+  const [loadingInsurance, setLoadingInsurance] = useState(true);
 
   // PDF Modal State
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -54,6 +61,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicleId, onBack,
         setParts(data);
         setPartsLoading(false);
     });
+
+    // Load insurance domain data
+    setLoadingInsurance(true);
+    try {
+      const insuranceInput = getInsuranceDomainInput(vehicleId);
+      const aggregate = buildInsuranceDomainAggregate(insuranceInput);
+      setInsurance(aggregate);
+      if (import.meta.env.DEV) {
+        console.debug('[VehicleDetail] Insurance domain loaded', aggregate);
+      }
+    } catch (err) {
+      console.error('[VehicleDetail] Error loading insurance data:', err);
+    } finally {
+      setLoadingInsurance(false);
+    }
 
   }, [vehicleId]);
 
@@ -218,7 +240,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicleId, onBack,
             <p className="text-3xl font-bold text-slate-800">%{profile.damage_probability}</p>
         </div>
 
-         <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
              <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><TurkishLira size={20} /></div>
                 <h3 className="font-semibold text-slate-700">Piyasa Endeksi</h3>
@@ -226,6 +248,36 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicleId, onBack,
             <p className="text-3xl font-bold text-slate-800">{maskedPrice.toLocaleString('tr-TR')} ₺</p>
             {privacyCtx.maskingLevel !== 'NONE' && <p className="text-[9px] text-orange-500 font-bold mt-1">ROUNDED FOR PRIVACY</p>}
         </div>
+
+        {/* Insurance Coverage Card */}
+        {!loadingInsurance && insurance && (
+          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><Heart size={20} /></div>
+              <h3 className="font-semibold text-slate-700">Sigorta</h3>
+            </div>
+            <div className="mb-3">
+              <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Durum</p>
+              <p className="text-sm font-bold text-slate-800 mt-1">
+                {insurance.policy.policyType} · {insurance.policy.status}
+              </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Kapsam Riski</p>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{insurance.indexes.coverageRiskIndex}</p>
+              </div>
+              <div className={`px-3 py-2 rounded-lg font-bold text-xs uppercase tracking-wider ${
+                insurance.indexes.coverageRiskIndex < 25 ? 'bg-green-100 text-green-700' :
+                insurance.indexes.coverageRiskIndex < 50 ? 'bg-yellow-100 text-yellow-700' :
+                insurance.indexes.coverageRiskIndex < 75 ? 'bg-orange-100 text-orange-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {getCoverageRiskLevel(insurance.indexes.coverageRiskIndex)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* LIABILITY BANNER */}
@@ -282,6 +334,87 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicleId, onBack,
             </div>
         </div>
       </div>
+
+      {/* Insurance Details Section */}
+      {!loadingInsurance && insurance && (
+        <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-xl border border-purple-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-purple-600 text-white rounded-lg"><Heart size={20} /></div>
+              <div>
+                <h3 className="font-bold text-slate-800">Sigorta Durumu Analizi</h3>
+                <p className="text-xs text-slate-500 mt-1">Kapsamlı kapsam riski değerlendirmesi</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-600">GÜVENİR SEVİYESİ</span>
+              <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-purple-600 transition-all"
+                  style={{width: `${insurance.confidence}%`}}
+                ></div>
+              </div>
+              <span className="text-xs font-bold text-slate-700">{insurance.confidence}%</span>
+            </div>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-white p-4 rounded-lg border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">12 Ay Hasar</p>
+              <p className="text-2xl font-bold text-slate-800 mt-2">{insurance.derived.claimCount12m}</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">12 Ay Lapse</p>
+              <p className="text-2xl font-bold text-slate-800 mt-2">{insurance.derived.lapseCount12m}</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">6 Ay Sorgulama</p>
+              <p className="text-2xl font-bold text-slate-800 mt-2">{insurance.derived.inquiryCount6m}</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Son Hasar</p>
+              <p className="text-sm font-bold text-slate-800 mt-2">
+                {insurance.derived.lastClaimDate ? new Date(insurance.derived.lastClaimDate).toLocaleDateString('tr-TR') : 'Yok'}
+              </p>
+            </div>
+          </div>
+
+          {/* Reason Codes */}
+          {insurance.explain?.reasonCodes && insurance.explain.reasonCodes.length > 0 && (
+            <div className="border-t border-purple-200 pt-4">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-3">Riski Etkileyen Faktörler</p>
+              <div className="space-y-2">
+                {insurance.explain.reasonCodes.map((code, idx) => (
+                  <div key={idx} className={`p-3 rounded-lg border-l-4 flex items-start gap-3 ${
+                    code.severity === 'high' ? 'bg-red-50 border-red-300' :
+                    code.severity === 'warn' ? 'bg-yellow-50 border-yellow-300' :
+                    'bg-blue-50 border-blue-300'
+                  }`}>
+                    <AlertCircle size={16} className={`mt-0.5 flex-shrink-0 ${
+                      code.severity === 'high' ? 'text-red-600' :
+                      code.severity === 'warn' ? 'text-yellow-600' :
+                      'text-blue-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`text-sm font-bold ${
+                        code.severity === 'high' ? 'text-red-900' :
+                        code.severity === 'warn' ? 'text-yellow-900' :
+                        'text-blue-900'
+                      }`}>{code.code}</p>
+                      <p className={`text-xs ${
+                        code.severity === 'high' ? 'text-red-700' :
+                        code.severity === 'warn' ? 'text-yellow-700' :
+                        'text-blue-700'
+                      }`}>{code.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-8 flex justify-end">
           <button 
