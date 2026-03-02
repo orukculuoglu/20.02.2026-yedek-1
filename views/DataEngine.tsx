@@ -21,6 +21,8 @@ import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConf
 import { getRecommendationEventLog } from '../src/services/recommendationEngine';
 import { getDataEngineEvents } from '../src/modules/data-engine/ingestion/dataEngineIngestion';
 import { isRealApiEnabled } from '../services/apiClient';
+import { getQueueStats, flushQueue } from '../src/modules/data-engine/eventQueue';
+import { flushQueuedEvents } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -49,6 +51,7 @@ export const DataEngine: React.FC = () => {
   const [selectedEventForDrawer, setSelectedEventForDrawer] = React.useState<RiskIndexEvent | null>(null);
   const [tenantAnalyticsPeriod, setTenantAnalyticsPeriod] = React.useState<'week' | 'month' | 'all'>('month');
   const [operationalRiskSegmentFilter, setOperationalRiskSegmentFilter] = React.useState<'all' | 'medium' | 'high'>('all');
+  const [queueFlushLoading, setQueueFlushLoading] = React.useState(false);
   const tenantId = 'LENT-CORP-DEMO';
 
   // Load Part Master indices
@@ -1317,6 +1320,54 @@ export const DataEngine: React.FC = () => {
           })()}
         </div>
       </div>
+
+      {/* DEV-only: Event Queue Diagnostics (Phase 6.3) */}
+      {import.meta.env.DEV && (
+        <div className="mt-8">
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <TrendingUp size={16} className="text-purple-600" />
+                  Event Queue (DEV)
+                </h4>
+                <p className="text-xs text-slate-600 mt-1">
+                  {(() => {
+                    const stats = getQueueStats();
+                    if (stats.size === 0) {
+                      return "No events queued (✓ clean)";
+                    }
+                    return `${stats.size} event(s) pending retry | Oldest: ${stats.oldestAt ? new Date(stats.oldestAt).toLocaleTimeString('tr-TR') : 'N/A'} | Next retry: ${stats.oldestRetryAt ? new Date(stats.oldestRetryAt).toLocaleTimeString('tr-TR') : 'N/A'}`;
+                  })()}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  setQueueFlushLoading(true);
+                  try {
+                    const result = await flushQueue(flushQueuedEvents);
+                    console.log("[DataEngine] Queue flush result:", result);
+                  } catch (err) {
+                    console.error("[DataEngine] Queue flush failed:", err);
+                  } finally {
+                    setQueueFlushLoading(false);
+                  }
+                }}
+                disabled={queueFlushLoading || getQueueStats().size === 0}
+                className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                  queueFlushLoading
+                    ? "bg-slate-300 text-slate-600 cursor-not-allowed"
+                    : getQueueStats().size === 0
+                    ? "bg-slate-200 text-slate-400 cursor-default"
+                    : "bg-purple-600 text-white hover:bg-purple-700 active:scale-95"
+                }`}
+              >
+                {queueFlushLoading ? "Flushing..." : "Flush Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Risk Index Events */}
       <div className="mt-8 space-y-6">

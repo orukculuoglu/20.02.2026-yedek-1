@@ -12,6 +12,7 @@
 
 import type { DataEngineEventEnvelope } from "../contracts/dataEngineEventTypes";
 import { ingestDataEngineEvent } from "./dataEngineIngestion";
+import { enqueueEvent, flushQueue } from "../eventQueue";
 import { isRealApiEnabled, createApiConfig, apiPost } from "../../../../services/apiClient";
 
 export interface SendEventResult {
@@ -88,11 +89,11 @@ export async function sendDataEngineEvent(
       mode: "REAL",
     };
   } catch (error) {
-    // Graceful fallback: Use local ingestion if POST fails
+    // Graceful fallback: Enqueue for retry + use local ingestion
     const errorMsg = error instanceof Error ? error.message : String(error);
 
     if (import.meta.env.DEV) {
-      console.warn("[DataEngineEventSender] REAL mode - POST failed, falling back to MOCK", {
+      console.warn("[DataEngineEventSender] REAL mode - POST failed, enqueueing for retry", {
         eventType: evt.eventType,
         source: evt.source,
         vehicleId: evt.vehicleId,
@@ -100,7 +101,10 @@ export async function sendDataEngineEvent(
       });
     }
 
-    // Fall back to local ingestion (silent, no UI impact)
+    // Add to retry queue (PII-safe: payload is already redacted by eventQueue)
+    enqueueEvent({ ...evt });
+
+    // Also ingest locally for immediate appearance in Event Stream
     ingestDataEngineEvent(evt);
 
     return {
@@ -110,4 +114,21 @@ export async function sendDataEngineEvent(
       error: errorMsg,
     };
   }
+}
+
+/**
+ * Manually flush queued events
+ * Useful for DEV testing and diagnostics
+ * @returns Flush result with sent/failed/remaining counts
+ */
+export async function flushQueuedEvents(): Promise<{ sent: number; failed: number; remaining: number }> {
+  return flushQueue(sendDataEngineEventPayload);
+}
+
+/**
+ * Internal function to send event payload (used by queue flush)
+ */
+async function sendDataEngineEventPayload(payload: any): Promise<void> {
+  const config = createApiConfig();
+  await apiPost<{ ok: boolean; eventId: string }>("/data-engine/events", payload, config);
 }
