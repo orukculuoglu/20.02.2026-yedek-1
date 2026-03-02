@@ -85,7 +85,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       }
 
       // Map event structure to ensure proper format for rule evaluation
+      // Include all event properties for traceability (source, id, timestamp)
       const mappedEvent = {
+        ...latestEvent, // Spread all properties (id, source, generatedAt)
         indices: latestEvent.indices || [],
         confidenceSummary: latestEvent.confidenceSummary || {
           average: 0,
@@ -97,7 +99,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       devLog('Mapped event for rule evaluation:', {
         indicesCount: mappedEvent.indices.length,
         firstIndexKey: mappedEvent.indices[0]?.key,
-        confidenceSummary: mappedEvent.confidenceSummary
+        confidenceSummary: mappedEvent.confidenceSummary,
+        eventSource: mappedEvent.source,
+        eventId: mappedEvent.id
       });
 
       // Extract confidence value from event

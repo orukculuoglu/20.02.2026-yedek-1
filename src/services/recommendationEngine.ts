@@ -69,8 +69,9 @@ function evaluateRulesAndGenerateRecommendations(
           reasonCodes: normalizedCodes.length > 0 ? normalizedCodes : undefined,
           generatedAt: new Date().toISOString(),
           source: "DATA_ENGINE",
+          // Always populate generatedFrom with source/time/id, using fallbacks if needed
           generatedFrom: {
-            source: ctx.source,
+            source: ctx.source ?? "Bilinmiyor",
             eventTime: ctx.eventTime,
             eventId: ctx.eventId,
           },
@@ -363,9 +364,12 @@ export function generateRiskRecommendation(input: {
     indexMap,
     evidenceSourcesCount: indices.length,
     confidenceSummary: input.event.confidenceSummary,
-    source: input.event.source,
-    eventTime: input.event.generatedAt || input.event.timestamp || input.event.createdAt,
-    eventId: input.event.id,
+    // Extract event source with fallbacks
+    source: input.event.source ?? input.event.dataSource ?? input.event.provider ?? undefined,
+    // Extract event timestamp with fallbacks
+    eventTime: input.event.generatedAt ?? input.event.timestamp ?? input.event.createdAt ?? undefined,
+    // Extract event ID
+    eventId: input.event.id ?? input.event.eventId ?? undefined,
   };
 
   if (import.meta.env.DEV) {

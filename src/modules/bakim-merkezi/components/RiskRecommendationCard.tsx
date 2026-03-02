@@ -159,10 +159,10 @@ export const RiskRecommendationCard: React.FC<RiskRecommendationCardProps> = ({
           Oluşturulma: {new Date(rec.generatedAt).toLocaleString('tr-TR')}
         </div>
 
-        {/* Source Attribution */}
-        {rec.generatedFrom?.source && (
+        {/* Source Attribution - Always show if generatedFrom exists */}
+        {rec.generatedFrom && (
           <div className="mt-1 text-[10px] text-slate-500 ml-6">
-            Kaynak: {rec.generatedFrom.source}
+            Kaynak: {rec.generatedFrom.source || "Bilinmiyor"}
             {rec.generatedFrom.eventTime && (
               <> • {new Date(rec.generatedFrom.eventTime).toLocaleTimeString('tr-TR')}</>
             )}
