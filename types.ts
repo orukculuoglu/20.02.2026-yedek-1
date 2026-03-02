@@ -380,6 +380,8 @@ export interface OperationalDetails {
     customerName: string;
     customerPhone: string;
     plate: string;
+    vehicleId?: string; // Vehicle identifier from data engine
+    vin?: string; // Vehicle Identification Number
     mileage?: number; // Kilometre (KM) - Odometer reading
     consentStatus: 'GRANTED' | 'PENDING' | 'DENIED';
     internalNotes: string;

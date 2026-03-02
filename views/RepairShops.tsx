@@ -162,16 +162,18 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
 
     // --- WORK ORDER RISK RECOMMENDATION ---
     useEffect(() => {
-        if (!selectedOrder?.operationalDetails?.vehicleId) {
+        if (!selectedOrder?.id || !selectedOrder?.operationalDetails) {
             setWorkOrderRecommendation(null);
             return;
         }
 
-        const vehicleId = selectedOrder.operationalDetails.vehicleId;
+        // Use order ID as vehicle ID if vehicleId not available
+        const vehicleId = selectedOrder.operationalDetails.vehicleId || selectedOrder.id;
+        const tenantId = 'LENT-CORP-DEMO'; // Default tenant
         
         // Try to get recent risk event data for this vehicle
         try {
-            const recentEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
+            const recentEvents = getRiskIndexEventsByVehicleId(tenantId, vehicleId, 1);
             const latestEvent = recentEvents[0];
             
             if (latestEvent) {
@@ -198,7 +200,7 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
             const recommendation = buildRiskRecommendation({ vehicleId });
             setWorkOrderRecommendation(recommendation);
         }
-    }, [selectedOrder?.operationalDetails?.vehicleId]);
+    }, [selectedOrder?.id, selectedOrder?.operationalDetails]);
 
     const applyWorkOrderPatch = (orderId: string, patch: Partial<ServiceWorkOrder>) => {
         // V2.6: Cost Chain - Apply cost when transitioning to Delivery columns
@@ -842,12 +844,12 @@ export const RepairShops: React.FC<RepairShopsProps> = ({ onNavigate }) => {
                         {/* Sistem Risk Önerisi Panel */}
                         <WorkOrderRiskRecommendation 
                             recommendation={workOrderRecommendation}
-                            vehicleId={selectedOrder.operationalDetails?.vehicleId}
+                            vehicleId={selectedOrder.operationalDetails?.vehicleId || selectedOrder.id}
                         />
 
                         {/* Araç Öyküsü Section - WorkOrder Context'inde */}
                         <WorkOrderVehicleHistorySection
-                            vehicleId={selectedOrder.operationalDetails?.vehicleId}
+                            vehicleId={selectedOrder.operationalDetails?.vehicleId || selectedOrder.id}
                             vin={selectedOrder.operationalDetails?.vin}
                             plate={selectedOrder.operationalDetails?.plate}
                             tenantId={'LENT-CORP-DEMO'}

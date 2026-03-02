@@ -10,7 +10,7 @@ import { getVehicleHistoryEvents } from '../../../../services/dataService';
 import { getRiskIndexEventsByVehicleId } from '../../data-engine/eventLogger';
 import { generateRiskRecommendation } from '../../../services/recommendationEngine';
 import { RiskRecommendationCard } from './RiskRecommendationCard';
-import type { RiskRecommendation } from '../../../../types/RiskRecommendation';
+import type { RiskRecommendation } from '../../../types/RiskRecommendation';
 
 // DEV-only logger helper (runs only inside TS module, not exported to console)
 const isDev = import.meta.env.DEV;
@@ -56,7 +56,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
     try {
       // Get latest risk index event for this vehicle
-      const latestEvents = getRiskIndexEventsByVehicleId(vehicleId, 1);
+      const latestEvents = getRiskIndexEventsByVehicleId(tenantId, vehicleId, 1);
       const hasLatestEvents = latestEvents && latestEvents.length > 0;
       
       devLog('Fetched risk events:', {
@@ -118,7 +118,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       });
       return null;
     }
-  }, [vehicleId]);
+  }, [vehicleId, tenantId]);
 
   // Load events on mount or when vehicleId changes
   useEffect(() => {
