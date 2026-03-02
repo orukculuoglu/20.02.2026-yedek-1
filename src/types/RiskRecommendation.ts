@@ -35,6 +35,12 @@ export interface RiskRecommendation {
   };
   generatedAt: string; // ISO 8601 timestamp
   source: "DATA_ENGINE";
+  // Trace/audit information: where this recommendation came from
+  generatedFrom?: {
+    source?: string; // e.g., "EXPERTISE", "FLEET_TELEMETRY", "MANUAL"
+    eventTime?: string; // ISO timestamp of the source event
+    eventId?: string; // Source event ID for traceability
+  };
 }
 
 export interface RecommendationInput {

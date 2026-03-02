@@ -286,5 +286,17 @@ export function generateRiskRecommendation(input: {
     });
   }
 
-  return buildRiskRecommendation(recommendationInput);
+  // Build the recommendation
+  const recommendation = buildRiskRecommendation(recommendationInput);
+
+  // Add traceability info from source event
+  if (recommendation && input.event) {
+    recommendation.generatedFrom = {
+      source: input.event.source,
+      eventTime: input.event.generatedAt || input.event.timestamp || input.event.createdAt,
+      eventId: input.event.id
+    };
+  }
+
+  return recommendation;
 }

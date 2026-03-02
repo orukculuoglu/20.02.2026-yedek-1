@@ -7,6 +7,7 @@
 import React from 'react';
 import { AlertCircle, Lightbulb, AlertTriangle, Info } from 'lucide-react';
 import type { RiskRecommendation } from '../../../types/RiskRecommendation';
+import { sanitizeMeta } from '../../../modules/data-engine/utils/sanitizeMeta';
 
 interface RiskRecommendationCardProps {
   // New unified interface: support array of recommendations
@@ -155,6 +156,16 @@ export const RiskRecommendationCard: React.FC<RiskRecommendationCardProps> = ({
         <div className="mt-2 text-[10px] text-slate-500 ml-6 border-t border-current border-opacity-10 pt-1.5">
           Oluşturulma: {new Date(rec.generatedAt).toLocaleString('tr-TR')}
         </div>
+
+        {/* Source Attribution */}
+        {rec.generatedFrom?.source && (
+          <div className="mt-1 text-[10px] text-slate-500 ml-6">
+            Kaynak: {rec.generatedFrom.source}
+            {rec.generatedFrom.eventTime && (
+              <> • {new Date(rec.generatedFrom.eventTime).toLocaleTimeString('tr-TR')}</>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -171,6 +182,20 @@ export const RiskRecommendationCard: React.FC<RiskRecommendationCardProps> = ({
 
       {/* Render up to 3 recommendation cards */}
       {items.slice(0, 3).map(rec => renderCard(rec))}
+
+      {/* DEV-only Debug Panel (Sanitized) */}
+      {import.meta.env.DEV && items.length > 0 && (
+        <details className="mt-3 border border-slate-300 rounded-lg">
+          <summary className="cursor-pointer px-3 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700">
+            🔍 Debug: Sanitized Recommendation Data
+          </summary>
+          <div className="p-3 bg-slate-50 overflow-auto max-h-60">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-words text-slate-700">
+              {JSON.stringify(sanitizeMeta({ recommendations: items, confidence }), null, 2)}
+            </pre>
+          </div>
+        </details>
+      )}
     </div>
   );
 };

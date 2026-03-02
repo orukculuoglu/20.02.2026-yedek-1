@@ -50,9 +50,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [detailModalEventId, setDetailModalEventId] = useState<string | null>(null);
 
-  // Memoized recommendation from latest risk event
-  const recommendation: RiskRecommendation | null = useMemo(() => {
-    if (!vehicleId) return null;
+  // Memoized recommendation and confidence from latest risk event
+  const { recommendation, confidence } = useMemo(() => {
+    if (!vehicleId) return { recommendation: null, confidence: undefined };
 
     try {
       // Get latest risk index event for this vehicle
@@ -67,7 +67,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
       if (!hasLatestEvents) {
         devLog('No risk events found');
-        return null;
+        return { recommendation: null, confidence: undefined };
       }
 
       const latestEvent = latestEvents[0];
@@ -81,7 +81,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
       if (!hasIndices) {
         devLog('WARNING: Event has no indices - recommendation cannot be generated');
-        return null;
+        return { recommendation: null, confidence: undefined };
       }
 
       // Map event structure to ensure proper format
@@ -100,6 +100,9 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
         confidenceSummary: mappedEvent.confidenceSummary
       });
 
+      // Extract confidence value from event
+      const confidenceValue = mappedEvent.confidenceSummary?.average;
+
       const rec = generateRiskRecommendation({
         vehicleId,
         event: mappedEvent,
@@ -108,15 +111,16 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       devLog('Recommendation generated:', {
         hasRecommendation: !!rec,
         priorityScore: rec?.priorityScore,
-        actionType: rec?.actionType
+        actionType: rec?.actionType,
+        confidence: confidenceValue
       });
 
-      return rec;
+      return { recommendation: rec, confidence: confidenceValue };
     } catch (err) {
       devLog('Error generating recommendation:', {
         error: err instanceof Error ? err.message : 'Unknown error'
       });
-      return null;
+      return { recommendation: null, confidence: undefined };
     }
   }, [vehicleId, tenantId]);
 
@@ -217,7 +221,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
 
       {/* Show Recommendation Card when collapsed if available */}
       {!isExpanded && recommendation && (
-        <RiskRecommendationCard recommendation={recommendation} />
+        <RiskRecommendationCard recommendation={recommendation} confidence={confidence} />
       )}
 
       {/* Accordion Section */}
@@ -302,7 +306,7 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
           )}
 
           {/* Recommendation Card */}
-          {!isLoading && <RiskRecommendationCard recommendation={recommendation} />}
+          {!isLoading && <RiskRecommendationCard recommendation={recommendation} confidence={confidence} />}
         </div>
       )}
 
