@@ -16,10 +16,11 @@ import * as dataEngineIndices from './dataEngineIndices';
 import * as effectiveOfferEngine from './effectiveOfferEngine';
 import { dataEngine } from './dataEngine/dataEngine';
 import { applyVehicleRiskEngine } from '../src/engine/fleetRisk/vehicleRiskEngine';
-import { createApiConfig, apiGet, handleApiError, isRealApiEnabled, getSupplierOffers as apiGetSupplierOffers, getEffectiveOffers as apiGetEffectiveOffers, getSuppliers as apiGetSuppliers } from './apiClient';
+import { createApiConfig, apiGet, handleApiError, isRealApiEnabled, getSupplierOffers as apiGetSupplierOffers, getEffectiveOffers as apiGetEffectiveOffers, getSuppliers as apiGetSuppliers, getOemAlternatives } from './apiClient';
 import { fetchDataEngineIndices } from '../src/modules/data-engine/api/dataEngineApiClient';
 import type { GetDataEngineIndicesRequest, GetDataEngineIndicesResponse } from '../src/modules/data-engine/contracts/dataEngineApiContract';
 import { initializeFeed, getActiveFeedsForPart } from './supplierFeedEngine';
+import { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } from '../src/modules/data-engine/eventLogger';
 
 // ========== CANONICAL PART MASTER API WRAPPERS ==========
 
@@ -1868,7 +1869,6 @@ export async function getOemAlternativesForPart(
     console.log(`[DataService] Fetching OEM alternatives: ${brand} ${oemPartNumber}`);
     
     // Use apiClient wrapper (handles real API vs demo mode)
-    const { getOemAlternatives } = await import('./apiClient');
     const result = await getOemAlternatives(oemPartNumber, brand);
     
     if ((result as any)?.success === true) {
@@ -1966,9 +1966,6 @@ export async function getVehicleHistoryEvents(params: {
   const limit = params.limit || 50;
 
   try {
-    // Import eventLogger to read from event store
-    const { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } = await import('../src/modules/data-engine/eventLogger');
-
     // Fetch events based on vehicleId (primary filter)
     let events = [];
     if (params.vehicleId) {

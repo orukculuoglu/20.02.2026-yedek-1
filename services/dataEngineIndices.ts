@@ -20,6 +20,9 @@ import {
   PartMasterCatalog,
   SupplierOffer,
 } from '../types/partMaster';
+import { getVIO } from '../src/modules/auto-expert/intelligence/vioStore';
+import { getOrBuild } from '../src/modules/vehicle-intelligence/vehicleStore';
+import { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } from '../src/modules/data-engine/indicesDomainEngine';
 
 export interface PartIndex {
   partMasterId: string;
@@ -557,13 +560,6 @@ export async function getDataEngineIndices(params: {
         `[DataEngineIndices] Risk domain requires: ${missingFields.join(', ')}`
       );
     }
-
-    // Import VIO store
-    const { getVIO } = await import('../src/modules/auto-expert/intelligence/vioStore');
-    const { getOrBuild } = await import('../src/modules/vehicle-intelligence/vehicleStore');
-    const { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } = await import(
-      '../src/modules/data-engine/indicesDomainEngine'
-    );
 
     try {
       // Try primary source: VIO

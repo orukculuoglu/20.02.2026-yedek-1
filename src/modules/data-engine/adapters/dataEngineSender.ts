@@ -16,6 +16,7 @@ import type {
 } from "../contracts/dataEngineContract";
 import { isRealApiEnabled, createApiConfig, apiPost } from "../../../../services/apiClient";
 import { sanitizeMeta } from "../utils/sanitizeMeta";
+import { recordSent, recordQueued, recordFailed } from "../telemetry/dataEngineTelemetry";
 
 /**
  * Core sender interface
@@ -57,6 +58,9 @@ class MockQueueSender implements DataEngineSender {
         queueSize: this.buffer.length,
       });
     }
+
+    // Record telemetry
+    recordQueued();
 
     return {
       status: "QUEUED",
@@ -165,6 +169,8 @@ class HttpSender implements DataEngineSender {
   async send<T>(
     envelope: DataEngineEventEnvelope<T>
   ): Promise<DataEngineSendResult> {
+    const startTime = performance.now();
+
     try {
       if (import.meta.env.DEV) {
         console.debug("[HttpSender] Sending event to backend", {
@@ -187,20 +193,27 @@ class HttpSender implements DataEngineSender {
         },
       });
 
+      const latencyMs = performance.now() - startTime;
+
       if (import.meta.env.DEV) {
         console.debug("[HttpSender] Event sent successfully", {
           eventId: envelope.eventId,
           responseEventId: response.eventId,
+          latencyMs: Math.round(latencyMs),
         });
       }
+
+      // Record successful send
+      recordSent(latencyMs);
 
       return {
         status: "SENT",
         eventId: envelope.eventId,
       };
     } catch (error) {
-      // Fallback to mock queue
+      // Record failure
       const errorMsg = error instanceof Error ? error.message : String(error);
+      recordFailed(errorMsg);
 
       if (import.meta.env.DEV) {
         console.warn("[HttpSender] POST failed, falling back to queue", {

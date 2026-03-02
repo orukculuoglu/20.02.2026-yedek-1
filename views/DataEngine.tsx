@@ -21,8 +21,9 @@ import { formatConfidence } from '../src/modules/data-engine/utils/normalizeConf
 import { getRecommendationEventLog } from '../src/services/recommendationEngine';
 import { getDataEngineEvents } from '../src/modules/data-engine/ingestion/dataEngineIngestion';
 import { isRealApiEnabled } from '../services/apiClient';
-import { getQueueStats, flushQueue } from '../src/modules/data-engine/eventQueue';
+import { getQueueStats } from '../src/modules/data-engine/eventQueue';
 import { flushQueuedEvents } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
+import { getTelemetrySnapshot } from '../src/modules/data-engine/telemetry/dataEngineTelemetry';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -52,6 +53,7 @@ export const DataEngine: React.FC = () => {
   const [tenantAnalyticsPeriod, setTenantAnalyticsPeriod] = React.useState<'week' | 'month' | 'all'>('month');
   const [operationalRiskSegmentFilter, setOperationalRiskSegmentFilter] = React.useState<'all' | 'medium' | 'high'>('all');
   const [queueFlushLoading, setQueueFlushLoading] = React.useState(false);
+  const [telemetry, setTelemetry] = React.useState(getTelemetrySnapshot());
   const tenantId = 'LENT-CORP-DEMO';
 
   // Load Part Master indices
@@ -83,6 +85,16 @@ export const DataEngine: React.FC = () => {
   React.useEffect(() => {
     const events = getLastRiskIndexEvents(tenantId, 20);
     setRiskIndexEvents(events);
+  }, []);
+
+  // Refresh telemetry every 2 seconds (DEV only)
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
+      const interval = setInterval(() => {
+        setTelemetry(getTelemetrySnapshot());
+      }, 2000);
+      return () => clearInterval(interval);
+    }
   }, []);
 
   // Mock veriyi yükle
@@ -1345,7 +1357,7 @@ export const DataEngine: React.FC = () => {
                 onClick={async () => {
                   setQueueFlushLoading(true);
                   try {
-                    const result = await flushQueue(flushQueuedEvents);
+                    const result = await flushQueuedEvents();
                     console.log("[DataEngine] Queue flush result:", result);
                   } catch (err) {
                     console.error("[DataEngine] Queue flush failed:", err);
@@ -1364,6 +1376,33 @@ export const DataEngine: React.FC = () => {
               >
                 {queueFlushLoading ? "Flushing..." : "Flush Now"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEV-only: Data Engine Telemetry (Phase 6.5) */}
+      {import.meta.env.DEV && (
+        <div className="mt-8">
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Database size={16} className="text-blue-600" />
+                  Telemetry (DEV)
+                </h4>
+                <div className="text-xs text-slate-600 mt-2 grid grid-cols-2 gap-2">
+                  <div>Sent: <span className="font-semibold text-green-600">{telemetry.totalSent}</span></div>
+                  <div>Queued: <span className="font-semibold text-yellow-600">{telemetry.totalQueued}</span></div>
+                  <div>Failed: <span className="font-semibold text-red-600">{telemetry.totalFailed}</span></div>
+                  <div>Avg Latency: <span className="font-semibold">{telemetry.averageLatencyMs}ms</span></div>
+                  <div>Queue Size: <span className="font-semibold">{telemetry.queueSize}</span></div>
+                  <div>Success: <span className="font-semibold text-green-600">{telemetry.successRate.toFixed(1)}%</span></div>
+                </div>
+                {telemetry.lastError && (
+                  <p className="text-xs text-red-600 mt-2">Last Error: {telemetry.lastError}</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
