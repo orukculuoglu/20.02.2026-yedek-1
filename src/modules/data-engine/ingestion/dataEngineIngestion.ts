@@ -22,6 +22,8 @@ import type {
   DataEngineEventFilter,
 } from "../contracts/dataEngineEventTypes";
 import { isPiiSafeEvent } from "../contracts/dataEngineEventTypes";
+import { pushUnifiedDataEngineEventLog } from "../eventLogger";
+import { applyDataEngineEventToSnapshot } from "../../vehicle-state/vehicleStateReducer";
 
 /**
  * Maximum number of events to keep in memory (circular buffer)
@@ -128,6 +130,24 @@ export function ingestDataEngineEvent(evt: DataEngineEventEnvelope): void {
   eventBuffer.push(eventWithIngestionTime);
   if (eventBuffer.length > EVENT_BUFFER_LIMIT) {
     eventBuffer.shift();
+  }
+
+  // Log to unified event log (for UI visibility)
+  try {
+    pushUnifiedDataEngineEventLog(evt);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[DataEngineIngestion] Failed to log unified event:", error);
+    }
+  }
+
+  // Update vehicle state snapshot (read-model for UI)
+  try {
+    applyDataEngineEventToSnapshot(evt);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[DataEngineIngestion] Failed to apply event to snapshot:", error);
+    }
   }
 
   // Persist to storage

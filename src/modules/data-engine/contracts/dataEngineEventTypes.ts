@@ -23,7 +23,8 @@ export type DataEngineEventSource =
  * Event type classification
  */
 export type DataEngineEventType =
-  | "RISK_INDICES_UPDATED"     // Risk metrics computed
+  | "RISK_INDICES_UPDATED"      // Risk metrics computed
+  | "INSURANCE_INDICES_UPDATED" // Insurance metrics computed
   | "RECOMMENDATIONS_GENERATED" // Risk recommendations created
   | "VEHICLE_HISTORY_UPDATED";  // Vehicle timeline modified
 

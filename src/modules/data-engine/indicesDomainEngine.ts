@@ -9,14 +9,7 @@
 
 import type { VehicleAggregate } from '../vehicle-intelligence/types';
 import type { VehicleIntelligenceOutput } from '../auto-expert/intelligence/vioTypes';
-
-/**
- * DataEngineDomain: Classification of data domains
- * - "part": Parts ecosystem indices
- * - "risk": Risk and trust indices
- * - "insurance": Insurance domain indices
- */
-export type DataEngineDomain = 'part' | 'risk' | 'insurance';
+import type { DataEngineDomain } from './contracts/dataEngineApiContract';
 
 /**
  * DataEngineIndex: Machine-readable index format for external consumption

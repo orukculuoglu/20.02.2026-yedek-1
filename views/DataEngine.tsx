@@ -13,6 +13,10 @@ import { OffersPanel } from '../components/OffersPanel';
 import { getLastRiskIndexEvents, getRiskIndexEventsByVehicleId } from '../src/modules/data-engine/eventLogger';
 import type { RiskIndexEvent } from '../src/modules/data-engine/eventLogger';
 import { sanitizeMeta } from '../src/modules/data-engine/utils/sanitizeMeta';
+import { getUnifiedDataEngineEventLog, clearUnifiedDataEngineEventLog } from '../src/modules/data-engine/eventLogger';
+import type { DataEngineEventLogEntry } from '../src/modules/data-engine/eventLogger';
+import { getSnapshot, getAllSnapshots, clearSnapshots } from '../src/modules/vehicle-state/vehicleStateSnapshotStore';
+import type { VehicleStateSnapshot } from '../src/modules/vehicle-state/vehicleStateSnapshotStore';
 import { RiskSegmentDashboard } from '../src/modules/data-engine/components/RiskSegmentDashboard';
 import TenantAnalyticsDashboard from '../src/modules/data-engine/components/TenantAnalyticsDashboard';
 import OperationalRiskList from '../src/modules/data-engine/components/OperationalRiskList';
@@ -23,7 +27,7 @@ import { getDataEngineEvents } from '../src/modules/data-engine/ingestion/dataEn
 import { isRealApiEnabled } from '../services/apiClient';
 import { getQueueStats } from '../src/modules/data-engine/eventQueue';
 import { flushQueuedEvents } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
-import { getTelemetrySnapshot } from '../src/modules/data-engine/telemetry/dataEngineTelemetry';
+import { getTelemetrySnapshot, resetTelemetry } from '../src/modules/data-engine/telemetry/dataEngineTelemetry';
 import { buildInsuranceAggregate, getInsuranceFraudRiskLevel } from '../src/modules/insurance/insuranceEngine';
 import { getMockInsuranceData } from '../src/modules/insurance/mockInsuranceProvider';
 import { emitInsuranceRiskSnapshot, getInsuranceAssessment } from '../src/modules/insurance/insuranceDataEngineIntegration';
@@ -60,6 +64,14 @@ export const DataEngine: React.FC = () => {
   const [operationalRiskSegmentFilter, setOperationalRiskSegmentFilter] = React.useState<'all' | 'medium' | 'high'>('all');
   const [queueFlushLoading, setQueueFlushLoading] = React.useState(false);
   const [telemetry, setTelemetry] = React.useState(getTelemetrySnapshot());
+  
+  // Unified Data Engine Event Log state (Phase 6.7)
+  const [unifiedEventLog, setUnifiedEventLog] = React.useState<DataEngineEventLogEntry[]>([]);
+  const [eventLogDomainFilter, setEventLogDomainFilter] = React.useState<'all' | 'risk' | 'insurance' | 'part'>('all');
+  
+  // Vehicle State Snapshot state (Phase 6.8)
+  const [snapshotVehicleId, setSnapshotVehicleId] = React.useState('');
+  const [selectedSnapshot, setSelectedSnapshot] = React.useState<VehicleStateSnapshot | null>(null);
   
   // Data Engine Insurance Domain state (Phase 8.1)
   const [insuranceDomainIndices, setInsuranceDomainIndices] = React.useState<any[]>([]);
@@ -137,15 +149,38 @@ export const DataEngine: React.FC = () => {
     await handleFetchInsuranceIndices();
   };
 
+  // Helper: Refresh telemetry snapshot (Phase 6.8.1)
+  const refreshTelemetry = () => {
+    const snapshot = getTelemetrySnapshot();
+    setTelemetry(snapshot);
+  };
+
   React.useEffect(() => {
     if (insuranceDomainVehicleId && !insuranceDomainIndices.length) {
       handleFetchInsuranceIndices();
     }
   }, [insuranceDomainVehicleId]);
+  
   React.useEffect(() => {
     const events = getLastRiskIndexEvents(tenantId, 20);
     setRiskIndexEvents(events);
   }, []);
+
+  // Load unified event log (Phase 6.7) - reactive to domain filter
+  React.useEffect(() => {
+    const events = getUnifiedDataEngineEventLog(eventLogDomainFilter === 'all' ? undefined : (eventLogDomainFilter as any));
+    setUnifiedEventLog(events.slice(0, 50)); // Show last 50
+  }, [eventLogDomainFilter]);
+
+  // Load vehicle state snapshot (Phase 6.8) - reactive to vehicleId input
+  React.useEffect(() => {
+    if (snapshotVehicleId.trim()) {
+      const snapshot = getSnapshot(snapshotVehicleId);
+      setSelectedSnapshot(snapshot);
+    } else {
+      setSelectedSnapshot(null);
+    }
+  }, [snapshotVehicleId]);
 
   // Load Insurance Domain data
   React.useEffect(() => {
@@ -1535,6 +1570,21 @@ export const DataEngine: React.FC = () => {
                   <p className="text-xs text-red-600 mt-2">Last Error: {telemetry.lastError}</p>
                 )}
               </div>
+              
+              {/* Reset Telemetry Button (DEV only) - Phase 6.8.1 */}
+              {import.meta.env.DEV && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetTelemetry();
+                    refreshTelemetry();
+                  }}
+                  className="h-fit rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50 transition"
+                  title="DEV only: Reset telemetry counters"
+                >
+                  Reset
+                </button>
+              )}
 
               {/* Adaptive Runtime Config */}
               <div className="mt-4 pt-4 border-t border-slate-200">
@@ -1899,6 +1949,303 @@ export const DataEngine: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Unified Data Engine Event Log - Phase 6.7 (DEV MODE) */}
+      {import.meta.env.DEV && (
+        <div className="mt-8 space-y-6">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Database size={20} className="text-purple-600" />
+              Data Engine Event Log (DEV)
+            </h3>
+
+            {/* Domain Filter */}
+            <div className="mb-4 flex gap-2">
+              {(['all', 'risk', 'insurance', 'part'] as const).map((domain) => (
+                <button
+                  key={domain}
+                  onClick={() => setEventLogDomainFilter(domain)}
+                  className={`px-3 py-2 rounded text-sm font-medium transition ${
+                    eventLogDomainFilter === domain
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {domain === 'all' ? 'Tümü' : domain.charAt(0).toUpperCase() + domain.slice(1)}
+                </button>
+              ))}
+              {unifiedEventLog.length > 0 && (
+                <button
+                  onClick={() => {
+                    clearUnifiedDataEngineEventLog();
+                    setUnifiedEventLog([]);
+                  }}
+                  className="ml-auto px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded text-sm font-medium transition"
+                >
+                  Temizle
+                </button>
+              )}
+            </div>
+
+            {/* Events Table */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+              {unifiedEventLog.length === 0 ? (
+                <div className="p-12 text-center text-slate-500">
+                  <Database size={32} className="mx-auto mb-4 text-slate-300" />
+                  <p>Henüz event bulunmamaktadır</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700 w-24">Saat</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700 w-20">Domain</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700">Event Type</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700 w-32">Vehicle ID</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700 w-24">İndeks Sayısı</th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-700 w-32">Özet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unifiedEventLog.map((event) => (
+                      <tr
+                        key={event.eventId}
+                        className="border-b border-slate-100 hover:bg-purple-50 transition"
+                      >
+                        <td className="px-4 py-3 text-slate-700 text-xs font-mono">
+                          {new Date(event.occurredAt).toLocaleTimeString('tr-TR')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold text-white ${
+                              event.domain === 'risk'
+                                ? 'bg-blue-600'
+                                : event.domain === 'insurance'
+                                ? 'bg-purple-600'
+                                : event.domain === 'part'
+                                ? 'bg-amber-600'
+                                : 'bg-slate-600'
+                            }`}
+                          >
+                            {event.domain}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-900 font-semibold text-xs">
+                          {event.eventType.replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 font-mono text-xs">{event.vehicleId}</td>
+                        <td className="px-4 py-3 text-slate-700 font-semibold text-center">
+                          {event.indicesSummary.length}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">
+                          <details className="cursor-pointer">
+                            <summary className="text-slate-700 font-medium hover:text-slate-900">
+                              ({event.indicesSummary.length} items)
+                            </summary>
+                            <div className="mt-2 bg-slate-50 p-2 rounded text-xs space-y-1 max-h-40 overflow-auto">
+                              {event.indicesSummary.map((idx, i) => (
+                                <div key={i} className="flex justify-between text-slate-700">
+                                  <span className="font-mono">{idx.key}:</span>
+                                  <span className="font-semibold">
+                                    {(Math.round(idx.value * 100) / 100).toFixed(1)}
+                                    {idx.confidence !== undefined &&
+                                      ` (conf: ${(Math.round(idx.confidence * 10) / 10).toFixed(1)})`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle State Snapshot (DEV MODE) - Phase 6.8 */}
+      {import.meta.env.DEV && (
+        <div className="mt-8 space-y-6">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Cpu size={20} className="text-teal-600" />
+              VehicleState Snapshot (DEV)
+            </h3>
+
+            {/* Vehicle ID Input */}
+            <div className="mb-4 flex gap-2">
+              <input
+                type="text"
+                placeholder="Vehicle ID (ör: 11)"
+                value={snapshotVehicleId}
+                onChange={(e) => setSnapshotVehicleId(e.target.value)}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
+              />
+              {snapshotVehicleId && (
+                <button
+                  onClick={() => setSnapshotVehicleId('')}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition"
+                >
+                  Temizle
+                </button>
+              )}
+              {selectedSnapshot && (
+                <button
+                  onClick={() => {
+                    clearSnapshots();
+                    setSelectedSnapshot(null);
+                  }}
+                  className="px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium transition"
+                >
+                  Sil
+                </button>
+              )}
+            </div>
+
+            {/* Snapshot Display */}
+            {selectedSnapshot ? (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Vehicle ID</p>
+                    <p className="text-lg font-bold text-slate-900 font-mono">{selectedSnapshot.vehicleId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Son Güncelleme</p>
+                    <p className="text-sm text-slate-700">
+                      {new Date(selectedSnapshot.updatedAt).toLocaleString('tr-TR')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Last Event */}
+                {selectedSnapshot.lastEvent && (
+                  <div className="bg-slate-50 border border-slate-200 rounded p-4">
+                    <p className="text-xs font-semibold text-slate-700 mb-2 uppercase">Son Event</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Domain:</span>
+                        <span className="font-mono font-semibold">{selectedSnapshot.lastEvent.domain}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Event Type:</span>
+                        <span className="font-mono font-semibold">{selectedSnapshot.lastEvent.eventType}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Saat:</span>
+                        <span className="font-mono">{new Date(selectedSnapshot.lastEvent.occurredAt).toLocaleTimeString('tr-TR')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Kaynak:</span>
+                        <span className="font-mono">{selectedSnapshot.lastEvent.source || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Risk Indices */}
+                {selectedSnapshot.risk && selectedSnapshot.risk.indices.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded p-4">
+                    <p className="text-xs font-semibold text-blue-700 mb-3 uppercase flex items-center gap-2">
+                      <span className="w-2 h-2 bg-blue-600 rounded-full" />
+                      Risk Indices
+                      {selectedSnapshot.risk.confidenceAverage !== undefined && (
+                        <span className="ml-auto text-blue-600">Avg Conf: {selectedSnapshot.risk.confidenceAverage.toFixed(1)}%</span>
+                      )}
+                    </p>
+                    <div className="space-y-2">
+                      {selectedSnapshot.risk.indices.map((idx, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white rounded px-3 py-2">
+                          <span className="font-mono text-xs text-slate-700">{idx.key}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-blue-600">{(Math.round(idx.value * 100) / 100).toFixed(1)}</span>
+                            {idx.confidence !== undefined && (
+                              <span className="text-xs text-slate-500">(conf: {(Math.round(idx.confidence * 10) / 10).toFixed(1)})</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Insurance Indices */}
+                {selectedSnapshot.insurance && selectedSnapshot.insurance.indices.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded p-4">
+                    <p className="text-xs font-semibold text-purple-700 mb-3 uppercase flex items-center gap-2">
+                      <span className="w-2 h-2 bg-purple-600 rounded-full" />
+                      Insurance Indices
+                    </p>
+                    <div className="space-y-2">
+                      {selectedSnapshot.insurance.indices.map((idx, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white rounded px-3 py-2">
+                          <span className="font-mono text-xs text-slate-700">{idx.key}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-purple-600">{(Math.round(idx.value * 100) / 100).toFixed(1)}</span>
+                            {idx.confidence !== undefined && (
+                              <span className="text-xs text-slate-500">(conf: {(Math.round(idx.confidence * 10) / 10).toFixed(1)})</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Part Indices */}
+                {selectedSnapshot.part && selectedSnapshot.part.indices.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded p-4">
+                    <p className="text-xs font-semibold text-amber-700 mb-3 uppercase flex items-center gap-2">
+                      <span className="w-2 h-2 bg-amber-600 rounded-full" />
+                      Part Indices
+                    </p>
+                    <div className="space-y-2">
+                      {selectedSnapshot.part.indices.map((idx, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white rounded px-3 py-2">
+                          <span className="font-mono text-xs text-slate-700">{idx.key}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-amber-600">{(Math.round(idx.value * 100) / 100).toFixed(1)}</span>
+                            {idx.confidence !== undefined && (
+                              <span className="text-xs text-slate-500">(conf: {(Math.round(idx.confidence * 10) / 10).toFixed(1)})</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Raw JSON (DEV) */}
+                {import.meta.env.DEV && (
+                  <details className="bg-slate-50 border border-slate-200 rounded p-3 text-xs">
+                    <summary className="font-semibold text-slate-700 cursor-pointer hover:text-slate-900">
+                      Raw JSON Snapshot (Genişlet)
+                    </summary>
+                    <div className="mt-2 overflow-auto max-h-60 bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono whitespace-pre-wrap break-all">
+                      {JSON.stringify(selectedSnapshot, null, 2)}
+                    </div>
+                  </details>
+                )}
+              </div>
+            ) : snapshotVehicleId ? (
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-12 text-center text-slate-500">
+                <Cpu size={32} className="mx-auto mb-4 text-slate-300" />
+                <p>Snapshot bulunamadı</p>
+                <p className="text-xs mt-2 text-slate-400">Vehicle ID: {snapshotVehicleId}</p>
+              </div>
+            ) : (
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-12 text-center text-slate-500">
+                <Cpu size={32} className="mx-auto mb-4 text-slate-300" />
+                <p>Vehicle ID girerek snapshot'ı görüntüleyin</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

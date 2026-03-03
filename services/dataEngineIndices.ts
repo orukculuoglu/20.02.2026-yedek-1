@@ -10,6 +10,7 @@
  * - trustScore01: Data quality + offer coverage
  */
 
+import type { DataEngineIndex } from '../src/modules/data-engine/contracts/dataEngineApiContract';
 import { 
   PartMasterSnapshot,
   SupplyHealthIndex,
@@ -23,6 +24,9 @@ import {
 import { getVIO } from '../src/modules/auto-expert/intelligence/vioStore';
 import { getOrBuild } from '../src/modules/vehicle-intelligence/vehicleStore';
 import { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } from '../src/modules/data-engine/indicesDomainEngine';
+import { sendDataEngineEvent } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
+import { generateEventId } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
+import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
 
 export interface PartIndex {
   partMasterId: string;
@@ -528,6 +532,50 @@ export async function generateAllIndices(snapshot: PartMasterSnapshot) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Emit INSURANCE_INDICES_UPDATED event to Data Engine event pipeline
+ * Fire-and-forget: Does not block index generation
+ * PII-safe: Only vehicleId in context, no VIN/plate
+ */
+async function emitInsuranceIndicesEvent(
+  vehicleId: string,
+  indices: DataEngineIndex[]
+): Promise<void> {
+  if (indices.length === 0) {
+    return;
+  }
+
+  const insuranceEvent: DataEngineEventEnvelope<RiskIndicesUpdatedPayload> = {
+    eventId: generateEventId(),
+    eventType: "INSURANCE_INDICES_UPDATED",
+    source: "DATA_ENGINE",
+    vehicleId,
+    occurredAt: new Date().toISOString(),
+    schemaVersion: "1.0",
+    payload: {
+      indices: indices.map((idx) => ({
+        key: idx.key,
+        value: idx.value,
+        confidence: idx.confidence,
+        updatedAt: idx.updatedAt,
+        meta: idx.meta,
+      })),
+    },
+    piiSafe: true,
+  };
+
+  // Fire-and-forget: Sender handles mock/real routing with graceful fallback
+  try {
+    await sendDataEngineEvent(insuranceEvent);
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[DataEngineIndices] Failed to send insurance indices event:", error);
+    }
+    // Silent failure: Event already ingested locally as fallback
+  }
+}
+
 /**
  * Get Data Engine Indices - Multi-domain entry point
  * Primary: VIO for risk domain with full explainability
@@ -543,7 +591,7 @@ export async function getDataEngineIndices(params: {
   vehicleId?: string;
   vin?: string;
   plate?: string;
-}) {
+}): Promise<DataEngineIndex[]> {
   const { domain, vehicleId, vin, plate } = params;
   
   console.log(`[DataEngineIndices.getIndices] domain="${domain}", vehicleId="${vehicleId}"`);
@@ -596,6 +644,10 @@ export async function getDataEngineIndices(params: {
       if (import.meta.env.DEV) {
         console.log(`[DataEngineIndices] ✓ Insurance domain mock generated for ${vehicleId}`);
       }
+      
+      // Emit event to pipeline (fire-and-forget, doesn't block return)
+      await emitInsuranceIndicesEvent(vehicleId, mockEvent.indices);
+      
       return mockEvent.indices;
     } catch (err) {
       console.error(`[DataEngineIndices] Error fetching insurance indices for ${vehicleId}:`, err);

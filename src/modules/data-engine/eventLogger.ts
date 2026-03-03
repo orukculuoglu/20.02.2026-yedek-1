@@ -216,3 +216,183 @@ export function maskPlate(plate: string): string {
   if (plate.length < 2) return '*';
   return `${plate[0]}${plate.length - 2}*${plate[plate.length - 1]}`;
 }
+
+/* ============================================================================
+ * GENERIC DATA ENGINE EVENT LOG (Phase 6.7)
+ * Domain-aware event log for unified visibility across risk/insurance domains
+ * PII-safe: Only index key/value/confidence, no meta/VIN/plate
+ * ============================================================================
+ */
+
+import type { DataEngineEventEnvelope } from './contracts/dataEngineEventTypes';
+
+/**
+ * Generic Data Engine Event Log Entry
+ * Unified format for risk/insurance/other domain indices
+ */
+export interface DataEngineEventLogEntry {
+  eventId: string;
+  eventType: string;
+  domain: 'risk' | 'insurance' | 'part' | string;
+  vehicleId: string;
+  source: string;
+  occurredAt: string; // ISO 8601
+  indicesSummary: Array<{
+    key: string;
+    value: number;
+    confidence?: number;
+  }>;
+}
+
+const MAX_UNIFIED_EVENTS = 200;
+const UNIFIED_STORAGE_KEY = 'LENT_DE_UNIFIED_EVENTS_V1';
+
+/**
+ * In-memory unified event log
+ */
+let unifiedEventLog: DataEngineEventLogEntry[] = [];
+
+/**
+ * Initialize unified event log from localStorage
+ */
+function initializeUnifiedEventLog(): void {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(UNIFIED_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          unifiedEventLog = parsed.slice(-MAX_UNIFIED_EVENTS);
+          if (import.meta.env.DEV) {
+            console.debug('[DataEngineEventLogger] Loaded', unifiedEventLog.length, 'unified events');
+          }
+        }
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[DataEngineEventLogger] Failed to load unified events:', error);
+      }
+    }
+  }
+}
+
+/**
+ * Persist unified event log to localStorage
+ */
+function persistUnifiedEventLog(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(UNIFIED_STORAGE_KEY, JSON.stringify(unifiedEventLog));
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[DataEngineEventLogger] Failed to persist unified events:', error);
+    }
+  }
+}
+
+/**
+ * Log a generic DataEngineEventEnvelope to unified event log
+ * Extracts domain from eventType, extracts indices summary from payload
+ * PII-safe: Drops all meta fields, only keeps key/value/confidence
+ */
+export function pushUnifiedDataEngineEventLog(envelope: DataEngineEventEnvelope): void {
+  // Determine domain from eventType
+  let domain = 'unknown';
+  if (envelope.eventType.includes('RISK')) domain = 'risk';
+  else if (envelope.eventType.includes('INSURANCE')) domain = 'insurance';
+  else if (envelope.eventType.includes('PART')) domain = 'part';
+
+  // Extract indices summary from payload (PII-safe: only key/value/confidence)
+  let indicesSummary: DataEngineEventLogEntry['indicesSummary'] = [];
+  if (
+    envelope.payload &&
+    typeof envelope.payload === 'object' &&
+    'indices' in envelope.payload &&
+    Array.isArray(envelope.payload.indices)
+  ) {
+    indicesSummary = (envelope.payload.indices as any[])
+      .slice(0, 10) // Max 10 items
+      .map((idx) => ({
+        key: idx.key || 'unknown',
+        value: typeof idx.value === 'number' ? idx.value : 0,
+        confidence: typeof idx.confidence === 'number' ? idx.confidence : undefined,
+      }));
+  }
+
+  const entry: DataEngineEventLogEntry = {
+    eventId: envelope.eventId,
+    eventType: envelope.eventType,
+    domain,
+    vehicleId: envelope.vehicleId,
+    source: envelope.source,
+    occurredAt: envelope.occurredAt,
+    indicesSummary,
+  };
+
+  // Add to log
+  unifiedEventLog.push(entry);
+
+  // Maintain ring buffer
+  if (unifiedEventLog.length > MAX_UNIFIED_EVENTS) {
+    unifiedEventLog = unifiedEventLog.slice(-MAX_UNIFIED_EVENTS);
+  }
+
+  // Persist
+  persistUnifiedEventLog();
+
+  if (import.meta.env.DEV) {
+    console.debug('[DataEngineEventLogger] Unified event logged:', {
+      eventId: entry.eventId,
+      domain: entry.domain,
+      vehicleId: entry.vehicleId,
+      indexCount: entry.indicesSummary.length,
+    });
+  }
+}
+
+/**
+ * Get unified event log (optionally filtered by domain)
+ */
+export function getUnifiedDataEngineEventLog(
+  domain?: 'risk' | 'insurance' | 'part' | 'all'
+): DataEngineEventLogEntry[] {
+  // Initialize if needed
+  if (unifiedEventLog.length === 0) {
+    initializeUnifiedEventLog();
+  }
+
+  if (!domain || domain === 'all') {
+    return [...unifiedEventLog].reverse(); // Newest first
+  }
+
+  return unifiedEventLog
+    .filter((e) => e.domain === domain)
+    .reverse(); // Newest first
+}
+
+/**
+ * Clear unified event log (DEV only)
+ */
+export function clearUnifiedDataEngineEventLog(): void {
+  if (!import.meta.env.DEV) {
+    console.warn('[DataEngineEventLogger] clearUnifiedDataEngineEventLog() is DEV-only');
+    return;
+  }
+
+  unifiedEventLog = [];
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(UNIFIED_STORAGE_KEY);
+    } catch (error) {
+      console.warn('[DataEngineEventLogger] Failed to clear localStorage:', error);
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    console.debug('[DataEngineEventLogger] Unified event log cleared');
+  }
+}
+
+// Initialize on module load
+initializeUnifiedEventLog();
