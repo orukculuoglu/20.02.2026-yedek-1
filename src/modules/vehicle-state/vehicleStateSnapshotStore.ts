@@ -15,17 +15,29 @@
  */
 
 /**
+ * Finding item - safely renderable expertise/diagnostics finding
+ */
+export interface Finding {
+  code: string;
+  severity: string;
+  message: string;
+}
+
+/**
  * VehicleState Snapshot - Unified read-model for UI
  * PII-safe representation of vehicle's analytical state
+ * 
+ * Single Source of Truth for all UI components reading vehicle data.
+ * Derived from Data Engine event stream, not primary source.
  */
 export type VehicleStateSnapshot = {
   vehicleId: string;
   schemaVersion: "1.0";
-  updatedAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601, snapshot-wide
 
   lastEvent?: {
     eventId: string;
-    domain: "risk" | "insurance" | "part" | string;
+    domain: "risk" | "insurance" | "part" | "expertise" | "service" | "odometer" | "diagnostics" | string;
     eventType: string;
     occurredAt: string;
     source?: string;
@@ -39,6 +51,7 @@ export type VehicleStateSnapshot = {
       confidence?: number;
     }>;
     confidenceAverage?: number;
+    lastUpdatedAt?: string;
   };
 
   // Insurance domain indices (from INSURANCE_INDICES_UPDATED events)
@@ -48,6 +61,7 @@ export type VehicleStateSnapshot = {
       value: number;
       confidence?: number;
     }>;
+    lastUpdatedAt?: string;
   };
 
   // Part domain indices (from PART_INDICES_UPDATED events)
@@ -57,6 +71,41 @@ export type VehicleStateSnapshot = {
       value: number;
       confidence?: number;
     }>;
+    lastUpdatedAt?: string;
+  };
+
+  // Expertise domain (from expert reports and findings)
+  expertise?: {
+    lastReportAt?: string;
+    findings?: Finding[];
+    lastUpdatedAt?: string;
+  };
+
+  // Service records domain
+  service?: {
+    recordsCount?: number;
+    lastServiceAt?: string;
+    lastUpdatedAt?: string;
+  };
+
+  // Odometer domain
+  odometer?: {
+    currentKm?: number;
+    historyCount?: number;
+    status?: "normal" | "anomaly";
+    lastUpdatedAt?: string;
+  };
+
+  // Diagnostics domain
+  diagnostics?: {
+    obdCount?: number;
+    lastDtcAt?: string;
+    lastUpdatedAt?: string;
+  };
+
+  // Data sources present in this snapshot
+  sources?: {
+    present: string[];
   };
 };
 

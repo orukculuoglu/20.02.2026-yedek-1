@@ -63,7 +63,15 @@ export async function syncRiskFromExpertReport(report: ExpertReport) {
       riskScore: response.riskScore,
     };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    // Safely extract error message from various error types
+    let errorMsg = 'Unknown error';
+    if (error instanceof Error) {
+      errorMsg = error.message;
+    } else if (error && typeof error === 'object' && 'message' in error) {
+      errorMsg = String((error as Record<string, any>).message);
+    } else if (typeof error === 'string') {
+      errorMsg = error;
+    }
 
     // Audit log: failure
     auditStore.append({

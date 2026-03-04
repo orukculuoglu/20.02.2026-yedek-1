@@ -1,15 +1,13 @@
 /**
- * Risk Indices Panel - Phase 2 Debug & Visibility
- * Displays getDataEngineIndices(domain:"risk") output
+ * Risk Indices Panel - Snapshot-based Data Engine Visualization
+ * Displays Risk Indices from Vehicle State Snapshot (Single Source of Truth)
  * Compact summary + accordion detail view
- * Logs events to Data Engine event store
  */
 
 import React, { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, AlertCircle, Loader } from 'lucide-react';
-import { getDataEngineIndices } from '../../../../services/dataService';
+import { getRiskIndices } from '../../vehicle-state/snapshotAccessor';
 import { logRiskIndices } from '../../data-engine/eventLogger';
-import type { DataEngineIndex } from '../../data-engine/indicesDomainEngine';
 
 interface RiskIndicesPanelProps {
   vehicleId?: string;
@@ -33,22 +31,12 @@ export function RiskIndicesPanel({ vehicleId: initialVehicleId, vin: initialVin,
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [indices, setIndices] = useState<DataEngineIndex[]>([]);
+  const [indices, setIndices] = useState<Array<{ key: string; value: number; confidence?: number }>>([]);
 
-  // Fetch risk indices
+  // Fetch risk indices from Vehicle State Snapshot (Single Source of Truth)
   const fetchRiskIndices = async () => {
     if (!vehicleIdInput.trim()) {
       setError('Vehicle ID gereklidir');
-      return;
-    }
-
-    if (!vinInput.trim()) {
-      setError('VIN gereklidir');
-      return;
-    }
-
-    if (!plateInput.trim()) {
-      setError('Plaka gereklidir');
       return;
     }
 
@@ -56,39 +44,50 @@ export function RiskIndicesPanel({ vehicleId: initialVehicleId, vin: initialVin,
     setError(null);
 
     try {
-      console.log('[OtoEkspertiz] risk indices fetch', {
+      console.log('[RiskIndicesPanel] Fetching from snapshot', { vehicleId: vehicleIdInput });
+
+      // Read from snapshot (Single Source of Truth)
+      const result = getRiskIndices(vehicleIdInput);
+
+      if (!result || result.length === 0) {
+        setError(`Araç ${vehicleIdInput} için risk verisi bulunamadı. Lütfen veri motorunu çalıştırın.`);
+        setIndices([]);
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[RiskIndicesPanel] Snapshot result', {
         vehicleId: vehicleIdInput,
-        vin: vinInput,
-        plate: plateInput
+        count: result.length
       });
 
-      const result = await getDataEngineIndices({
-        domain: 'risk',
-        vehicleId: vehicleIdInput,
-        vin: vinInput,
-        plate: plateInput
-      });
-
-      console.log('[OtoEkspertiz] risk indices result', result.length);
       setIndices(result);
 
-      // Log event to Data Engine event store
+      // Log event to Data Engine event store for audit trail (optional)
       try {
         logRiskIndices({
-          tenantId: 'LENT-CORP-DEMO', // TODO: Get from context/auth in production
+          tenantId: 'LENT-CORP-DEMO',
           vehicleId: vehicleIdInput,
           vin: vinInput,
           plate: plateInput,
           indices: result,
-          source: 'EXPERTISE'
+          source: 'EXPERTISE_SNAPSHOT'
         });
       } catch (logErr) {
-        console.warn('[OtoEkspertiz] Failed to log risk indices event', logErr);
+        console.warn('[RiskIndicesPanel] Failed to log event', logErr);
         // Silent fail - don't disrupt UI
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
-      console.error('[OtoEkspertiz] risk indices error', errorMsg);
+      // Safely extract error message
+      let errorMsg = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMsg = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        errorMsg = err;
+      }
+      console.error('[RiskIndicesPanel] Error', errorMsg);
       setError(errorMsg);
       setIndices([]);
     } finally {
@@ -144,7 +143,20 @@ export function RiskIndicesPanel({ vehicleId: initialVehicleId, vin: initialVin,
           } else if (typeof rc === 'object' && rc !== null) {
             code = rc.code || String(rc);
             severity = rc.severity || 'info';
-            message = rc.message;
+            // Safely extract message - convert to string if it's an object
+            if (typeof rc.message === 'string') {
+              message = rc.message;
+            } else if (rc.message && typeof rc.message === 'object') {
+              // If message is an object with message property, extract it
+              if ('message' in rc.message) {
+                message = String(rc.message.message);
+              } else {
+                // Otherwise just stringify the whole object
+                message = JSON.stringify(rc.message);
+              }
+            } else if (rc.message) {
+              message = String(rc.message);
+            }
           } else {
             code = String(rc);
           }

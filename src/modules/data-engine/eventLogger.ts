@@ -5,6 +5,7 @@
  */
 
 import type { DataEngineIndex } from './indicesDomainEngine';
+import { appendEvent } from './store/localEventStore';
 
 /**
  * Risk Index Event - Logged when risk indices are calculated
@@ -296,6 +297,9 @@ function persistUnifiedEventLog(): void {
  * PII-safe: Drops all meta fields, only keeps key/value/confidence
  */
 export function pushUnifiedDataEngineEventLog(envelope: DataEngineEventEnvelope): void {
+  // Append to local event store (DEV-only, no-op in production)
+  appendEvent(envelope);
+
   // Determine domain from eventType
   let domain = 'unknown';
   if (envelope.eventType.includes('RISK')) domain = 'risk';

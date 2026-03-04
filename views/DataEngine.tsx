@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package, Settings, Shield } from 'lucide-react';
+import { Cpu, Database, RefreshCw, TrendingUp, AlertTriangle, Info, ChevronDown, X, Package, Settings, Shield, CheckCircle } from 'lucide-react';
 import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
 import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
@@ -34,6 +34,7 @@ import { emitInsuranceRiskSnapshot, getInsuranceAssessment } from '../src/module
 import { buildMarketValuationAggregate } from '../src/modules/market-valuation/marketValuationEngine';
 import { getSampleValuationInput } from '../src/modules/market-valuation/mockValuationDataBuilder';
 import { calculateAndEmitValuation } from '../src/modules/market-valuation/marketValuationDataEngineIntegration';
+import { getStoredEvents, getStoreStats, clearStoredEvents, replayToSnapshots, getLastStoredEvent, replayAllToSnapshotMap, replayVehicleToSnapshotMap } from '../src/modules/data-engine/store/localEventStore';
 
 export const DataEngine: React.FC = () => {
   // State management
@@ -72,6 +73,14 @@ export const DataEngine: React.FC = () => {
   // Vehicle State Snapshot state (Phase 6.8)
   const [snapshotVehicleId, setSnapshotVehicleId] = React.useState('');
   const [selectedSnapshot, setSelectedSnapshot] = React.useState<VehicleStateSnapshot | null>(null);
+  
+  // Local Event Store state (DEV-only, Phase 6.9)
+  const [storeStats, setStoreStats] = React.useState(getStoreStats());
+  const [showStoreJson, setShowStoreJson] = React.useState(false);
+  const [replayVehicleIdInput, setReplayVehicleIdInput] = React.useState('');
+  const [replayLoading, setReplayLoading] = React.useState(false);
+  const [useReplayedSnapshots, setUseReplayedSnapshots] = React.useState(false);
+  const [replayedSnapshots, setReplayedSnapshots] = React.useState<Map<string, VehicleStateSnapshot> | null>(null);
   
   // Data Engine Insurance Domain state (Phase 8.1)
   const [insuranceDomainIndices, setInsuranceDomainIndices] = React.useState<any[]>([]);
@@ -173,14 +182,63 @@ export const DataEngine: React.FC = () => {
   }, [eventLogDomainFilter]);
 
   // Load vehicle state snapshot (Phase 6.8) - reactive to vehicleId input
+  // Also checks replay snapshots if enabled
   React.useEffect(() => {
     if (snapshotVehicleId.trim()) {
-      const snapshot = getSnapshot(snapshotVehicleId);
-      setSelectedSnapshot(snapshot);
+      // Check replay snapshots first if enabled
+      if (useReplayedSnapshots && replayedSnapshots && replayedSnapshots.has(snapshotVehicleId)) {
+        setSelectedSnapshot(replayedSnapshots.get(snapshotVehicleId) || null);
+      } else {
+        // Fall back to live snapshots
+        const snapshot = getSnapshot(snapshotVehicleId);
+        setSelectedSnapshot(snapshot);
+      }
     } else {
       setSelectedSnapshot(null);
     }
-  }, [snapshotVehicleId]);
+  }, [snapshotVehicleId, useReplayedSnapshots, replayedSnapshots]);
+
+  // DEV-only: Listen for replay events from console API (window.__deStoreReplayAll, window.__deStoreReplayVehicle)
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    const handleReplayEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.mode === 'all') {
+        // Replay all events
+        try {
+          const snapshots = replayAllToSnapshotMap();
+          setReplayedSnapshots(snapshots);
+          setUseReplayedSnapshots(true);
+          console.debug('[DataEngine] DEV: Replay All triggered from console:', {
+            snapshotCount: snapshots.size,
+            vehicleIds: Array.from(snapshots.keys()).slice(0, 5),
+          });
+        } catch (err) {
+          console.error('[DataEngine] DEV: Replay All failed:', err);
+        }
+      } else if (customEvent.detail?.mode === 'vehicle') {
+        // Replay vehicle-specific events
+        const vehicleId = customEvent.detail.vehicleId;
+        try {
+          const snapshots = replayVehicleToSnapshotMap(vehicleId);
+          setReplayedSnapshots(snapshots);
+          setUseReplayedSnapshots(true);
+          console.debug('[DataEngine] DEV: Replay Vehicle triggered from console:', {
+            vehicleId,
+            snapshotCount: snapshots.size,
+          });
+        } catch (err) {
+          console.error('[DataEngine] DEV: Replay Vehicle failed:', err);
+        }
+      }
+    };
+
+    window.addEventListener('DE_STORE_REPLAY', handleReplayEvent);
+    return () => {
+      window.removeEventListener('DE_STORE_REPLAY', handleReplayEvent);
+    };
+  }, []);
 
   // Load Insurance Domain data
   React.useEffect(() => {
@@ -2062,6 +2120,169 @@ export const DataEngine: React.FC = () => {
                 </table>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Local Event Store (DEV-only, Phase 6.9) */}
+      {import.meta.env.DEV && (
+        <div className="mt-8">
+          <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-xl border border-yellow-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Database size={18} className="text-amber-600" />
+                  Local Event Store (DEV)
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Append-only PII-safe event persistence + deterministic replay
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-amber-700">{storeStats.count}</div>
+                <div className="text-xs text-slate-600">events stored (max 500)</div>
+              </div>
+            </div>
+
+            {/* Store Stats */}
+            {storeStats.count > 0 && (
+              <div className="bg-white rounded-lg border border-yellow-100 p-3 mb-4 text-sm space-y-2">
+                {storeStats.lastEventId && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Last Event ID:</span>
+                    <span className="font-mono text-slate-900">{storeStats.lastEventId.substring(0, 20)}...</span>
+                  </div>
+                )}
+                {storeStats.lastOccurredAt && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Last Occurred:</span>
+                    <span className="font-mono text-slate-900">{new Date(storeStats.lastOccurredAt).toLocaleTimeString('tr-TR')}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Store Empty State */}
+            {storeStats.count === 0 && (
+              <div className="bg-white rounded-lg border border-yellow-100 p-4 mb-4 text-center text-slate-500 text-sm">
+                <AlertTriangle size={16} className="mx-auto mb-2 text-yellow-600" />
+                <p>No events stored yet. Generate mock events to populate.</p>
+              </div>
+            )}
+
+            {/* Replay Controls */}
+            <div className="space-y-3">
+              {/* Replay All */}
+              <button
+                onClick={() => {
+                  setReplayLoading(true);
+                  try {
+                    const snapshots = replayAllToSnapshotMap();
+                    setReplayedSnapshots(snapshots);
+                    setUseReplayedSnapshots(true);
+                    if (import.meta.env.DEV) {
+                      console.debug('[DataEngine] Replay All complete:', { 
+                        snapshotCount: snapshots.size,
+                        vehicleIds: Array.from(snapshots.keys()).slice(0, 5)
+                      });
+                    }
+                  } catch (err) {
+                    console.error('[DataEngine] Replay failed:', err);
+                  } finally {
+                    setReplayLoading(false);
+                  }
+                }}
+                disabled={storeStats.count === 0 || replayLoading}
+                className="w-full px-4 py-2 bg-amber-600 text-white hover:bg-amber-700 disabled:bg-slate-300 rounded-lg font-medium transition text-sm flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={14} className={replayLoading ? 'animate-spin' : ''} />
+                {replayLoading ? 'Replaying...' : 'Replay (All Events)'}
+              </button>
+
+              {/* Replay by Vehicle ID */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Vehicle ID (optional)"
+                  value={replayVehicleIdInput}
+                  onChange={(e) => setReplayVehicleIdInput(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-yellow-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+                <button
+                  onClick={() => {
+                    if (!replayVehicleIdInput.trim()) {
+                      return;
+                    }
+                    setReplayLoading(true);
+                    try {
+                      const snapshots = replayVehicleToSnapshotMap(replayVehicleIdInput);
+                      setReplayedSnapshots(snapshots);
+                      setUseReplayedSnapshots(true);
+                      if (import.meta.env.DEV) {
+                        console.debug('[DataEngine] Replay Vehicle complete:', { 
+                          vehicleId: replayVehicleIdInput,
+                          snapshotCount: snapshots.size
+                        });
+                      }
+                    } catch (err) {
+                      console.error('[DataEngine] Replay failed:', err);
+                    } finally {
+                      setReplayLoading(false);
+                    }
+                  }}
+                  disabled={storeStats.count === 0 || replayLoading}
+                  className="px-4 py-2 bg-amber-600 text-white hover:bg-amber-700 disabled:bg-slate-300 rounded-lg font-medium transition text-sm"
+                >
+                  {replayLoading ? 'Replaying...' : 'Replay (Filter)'}
+                </button>
+              </div>
+
+              {/* Clear Store */}
+              <button
+                onClick={() => {
+                  if (confirm('Store temizlenecek. Devam et?')) {
+                    clearStoredEvents();
+                    setStoreStats({ count: 0 });
+                    setUseReplayedSnapshots(false);
+                    setReplayedSnapshots(null);
+                  }
+                }}
+                className="w-full px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg font-medium transition text-sm"
+              >
+                Clear Store
+              </button>
+
+              {/* Replay Status */}
+              {useReplayedSnapshots && replayedSnapshots && replayedSnapshots.size > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700 space-y-2">
+                  <div className="flex items-center font-semibold">
+                    <CheckCircle size={14} className="mr-2" />
+                    Replay Active: {replayedSnapshots.size} snapshot(s) loaded
+                  </div>
+                  <div className="text-xs text-green-600 pl-6">
+                    Vehicle IDs: {Array.from(replayedSnapshots.keys()).slice(0, 5).join(', ')}
+                    {replayedSnapshots.size > 5 && ` (+${replayedSnapshots.size - 5} more)`}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* JSON Inspector */}
+            {storeStats.count > 0 && (
+              <details className="mt-4 bg-white border border-yellow-100 rounded-lg p-3 cursor-pointer">
+                <summary className="font-semibold text-slate-700 text-sm hover:text-slate-900">
+                  Last Event JSON (Inspector)
+                </summary>
+                {showStoreJson && (
+                  <div className="mt-2 overflow-x-auto max-h-40 bg-slate-900 text-slate-100 p-2 rounded text-xs font-mono whitespace-pre-wrap break-all">
+                    {(() => {
+                      const lastEvent = getLastStoredEvent();
+                      return lastEvent ? JSON.stringify(lastEvent, null, 2) : 'No event';
+                    })()}
+                  </div>
+                )}
+              </details>
+            )}
           </div>
         </div>
       )}

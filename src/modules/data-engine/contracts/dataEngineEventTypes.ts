@@ -25,6 +25,7 @@ export type DataEngineEventSource =
 export type DataEngineEventType =
   | "RISK_INDICES_UPDATED"      // Risk metrics computed
   | "INSURANCE_INDICES_UPDATED" // Insurance metrics computed
+  | "PART_INDICES_UPDATED"      // Part metrics computed
   | "RECOMMENDATIONS_GENERATED" // Risk recommendations created
   | "VEHICLE_HISTORY_UPDATED";  // Vehicle timeline modified
 
@@ -70,10 +71,25 @@ export interface VehicleHistoryUpdatedPayload {
 }
 
 /**
+ * Generic indices payload (PII-safe)
+ * Used for PART_INDICES_UPDATED and similar domain events
+ * Contains ONLY key, value, confidence, updatedAt (no meta)
+ */
+export interface IndicesUpdatedPayload {
+  indices: Array<{
+    key: string;                // e.g., "supplyStressIndex", "priceVolatility"
+    value: number;              // 0-100 normalized
+    confidence?: number;         // 0-100, data quality signal
+    updatedAt?: string;          // ISO 8601
+  }>;
+}
+
+/**
  * Union type for all payload shapes
  */
 export type DataEngineEventPayload =
   | RiskIndicesUpdatedPayload
+  | IndicesUpdatedPayload
   | RecommendationsGeneratedPayload
   | VehicleHistoryUpdatedPayload
   | Record<string, any>;        // Fallback for custom payloads
@@ -81,6 +97,7 @@ export type DataEngineEventPayload =
 /**
  * Standard envelope for all data engine events
  * PII-safe by design: No vehicle identifiers beyond vehicleId
+ * SaaS-ready: Multi-tenant, idempotency, event sourcing support
  */
 export interface DataEngineEventEnvelope<TPayload = DataEngineEventPayload> {
   // Identification
@@ -90,6 +107,11 @@ export interface DataEngineEventEnvelope<TPayload = DataEngineEventPayload> {
 
   // Context (vehicleId only, no VIN/plate)
   vehicleId: string;                   // Primary vehicle identifier (safe)
+
+  // SaaS & Event Sourcing (new)
+  tenantId?: string;                   // Multi-tenant partition (default: "dev")
+  streamKey?: string;                  // Event stream key (default: `${tenantId}:${vehicleId}`)
+  idempotencyKey?: string;             // Deduplication key (default: eventId)
 
   // Timing
   occurredAt: string;                  // ISO 8601 timestamp when event occurred
@@ -136,6 +158,22 @@ export function generateEventId(): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 9);
   return `${timestamp}-${random}`;
+}
+
+/**
+ * Enrich envelope with SaaS defaults if not already set
+ * Ensures tenantId, idempotencyKey, and streamKey are populated
+ */
+export function enrichEnvelopeWithDefaults<T extends DataEngineEventEnvelope>(
+  envelope: T
+): T {
+  const tenantId = envelope.tenantId || 'dev';
+  return {
+    ...envelope,
+    tenantId,
+    idempotencyKey: envelope.idempotencyKey || envelope.eventId,
+    streamKey: envelope.streamKey || `${tenantId}:${envelope.vehicleId}`,
+  };
 }
 
 /**

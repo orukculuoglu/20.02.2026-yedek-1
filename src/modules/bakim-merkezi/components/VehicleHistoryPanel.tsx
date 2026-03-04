@@ -72,7 +72,15 @@ export const VehicleHistoryPanel: React.FC<VehicleHistoryPanelProps> = ({ onclos
         setError('Bu araç için öykü kaydı bulunamadı.');
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      // Safely extract error message from various error types
+      let errorMsg = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMsg = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        errorMsg = err;
+      }
       console.error('[VehicleHistory] Error:', errorMsg);
       setError(`Yükleme hatası: ${errorMsg}`);
     } finally {

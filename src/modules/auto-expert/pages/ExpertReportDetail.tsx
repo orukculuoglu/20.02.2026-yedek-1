@@ -142,7 +142,16 @@ export function ExpertReportDetail({ reportId, onBack }: ExpertReportDetailProps
       }
     } catch (error) {
       setRiskSyncStatus('failed');
-      setRiskSyncError(error instanceof Error ? error.message : 'Beklenmeyen hata');
+      // Safely extract error message from various error types
+      let errorMsg = 'Beklenmeyen hata';
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMsg = String((error as Record<string, any>).message);
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      }
+      setRiskSyncError(errorMsg);
       console.error('[UI] Finalize error:', error);
     } finally {
       setIsSaving(false);

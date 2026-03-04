@@ -26,7 +26,7 @@ import { getOrBuild } from '../src/modules/vehicle-intelligence/vehicleStore';
 import { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } from '../src/modules/data-engine/indicesDomainEngine';
 import { sendDataEngineEvent } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
 import { generateEventId } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
-import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
+import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload, IndicesUpdatedPayload } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
 
 export interface PartIndex {
   partMasterId: string;
@@ -577,6 +577,47 @@ async function emitInsuranceIndicesEvent(
 }
 
 /**
+ * Emit PART_INDICES_UPDATED event to Data Engine event pipeline
+ * Fire-and-forget (non-blocking): Does not block index generation or UI
+ * PII-safe: Only vehicleId + indices (no meta, no VIN/plate)
+ */
+function emitPartIndicesEvent(
+  vehicleId: string,
+  indices: DataEngineIndex[]
+): void {
+  if (indices.length === 0) {
+    return;
+  }
+
+  const partEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
+    eventId: generateEventId(),
+    eventType: "PART_INDICES_UPDATED",
+    source: "DATA_ENGINE",
+    vehicleId,
+    occurredAt: new Date().toISOString(),
+    schemaVersion: "1.0",
+    payload: {
+      indices: indices.map((idx) => ({
+        key: idx.key,
+        value: idx.value,
+        confidence: idx.confidence,
+        updatedAt: idx.updatedAt,
+        // PII-safe: meta excluded from payload
+      })),
+    },
+    piiSafe: true,
+  };
+
+  // Fire-and-forget: Non-blocking emission with graceful error handling
+  void sendDataEngineEvent(partEvent).catch((error) => {
+    if (import.meta.env.DEV) {
+      console.warn("[DataEngineIndices] Part event emission failed (non-blocking):", error);
+    }
+    // Silent failure: Event already ingested locally as fallback
+  });
+}
+
+/**
  * Get Data Engine Indices - Multi-domain entry point
  * Primary: VIO for risk domain with full explainability
  * Fallback: VehicleAggregate for numeric-only risk indices
@@ -628,9 +669,59 @@ export async function getDataEngineIndices(params: {
       throw err;
     }
   } else if (domain === 'part') {
-    // Part domain: keep existing behavior (backward compatible)
-    console.log(`[DataEngineIndices] Part domain not yet implemented in getIndices`);
-    return [];
+    // Part domain: Mock part indices for fleet management
+    if (!vehicleId) {
+      throw new Error('[DataEngineIndices] Part domain requires: vehicleId');
+    }
+    try {
+      // Generate mock part indices (4 items)
+      const mockPartIndices: DataEngineIndex[] = [
+        {
+          key: 'criticalPartsCount',
+          value: Math.floor(Math.random() * 5) + 1,
+          confidence: 85,
+          updatedAt: new Date().toISOString(),
+          domain: 'part',
+          meta: { reason: 'Parts needing urgent replacement' },
+        },
+        {
+          key: 'supplyStressIndex',
+          value: Math.floor(Math.random() * 40) + 40,
+          confidence: 78,
+          updatedAt: new Date().toISOString(),
+          domain: 'part',
+          meta: { reason: 'Lead time + stock pressure' },
+        },
+        {
+          key: 'priceVolatilityIndex',
+          value: Math.floor(Math.random() * 35) + 25,
+          confidence: 72,
+          updatedAt: new Date().toISOString(),
+          domain: 'part',
+          meta: { reason: 'Market price fluctuation risk' },
+        },
+        {
+          key: 'estimatedMaintenanceCost',
+          value: Math.floor(Math.random() * 8000) + 2000,
+          confidence: 81,
+          updatedAt: new Date().toISOString(),
+          domain: 'part',
+          meta: { reason: 'Next 6-month maintenance forecast (₺)' },
+        },
+      ];
+
+      if (import.meta.env.DEV) {
+        console.log(`[DataEngineIndices] ✓ Part domain mock generated for ${vehicleId}`);
+      }
+
+      // Fire-and-forget: Event emission non-blocking, does not affect return
+      emitPartIndicesEvent(vehicleId, mockPartIndices);
+
+      return mockPartIndices;
+    } catch (err) {
+      console.error(`[DataEngineIndices] Error fetching part indices for ${vehicleId}:`, err);
+      throw err;
+    }
   } else if (domain === 'insurance') {
     // Insurance domain: Mock event generation (Phase 8.1)
     if (!vehicleId) {

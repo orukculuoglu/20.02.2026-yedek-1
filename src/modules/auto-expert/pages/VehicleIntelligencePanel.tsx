@@ -9,10 +9,9 @@ import { vehicleIntelligenceStore, generateStatusBadge, generateSummaryLine } fr
 import { rebuildVehicleAggregate } from '../../vehicle-intelligence/vehicleAggregator';
 import { vioStore } from '../intelligence/vioStore';
 import { generateAndStoreVIO, getLastGenerationStatus } from '../intelligence/vioOrchestrator';
-import { getDataEngineIndices } from '../../../../services/dataService';
+import { getVehicleStateSnapshot, getAllIndices, getExpertiseFindings } from '../../vehicle-state/snapshotAccessor';
 import type { VehicleAggregate } from '../../vehicle-intelligence/types';
 import type { VehicleIntelligenceOutput } from '../intelligence/vioTypes';
-import type { DataEngineIndex } from '../../data-engine/indicesDomainEngine';
 
 interface VehicleIntelligencePanelProps {
   onBack?: () => void;
@@ -37,10 +36,10 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
   } | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
   
-  // Risk Indices from Data Engine
+  // Risk Indices from Vehicle State Snapshot
   const [riskLoading, setRiskLoading] = useState(false);
   const [riskError, setRiskError] = useState<string | null>(null);
-  const [riskIndices, setRiskIndices] = useState<DataEngineIndex[] | null>(null);
+  const [riskIndices, setRiskIndices] = useState<Array<{ key: string; value: number; confidence?: number }> | null>(null);
   const [showRiskJson, setShowRiskJson] = useState(false);
   
   // UI polish: Evidence toggle and copy feedback
@@ -80,7 +79,15 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       // VIO generation happens in useEffect when aggregate changes
       console.log('[VehicleIntelligencePanel] ✓ Vehicle aggregate loaded:', result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      // Safely extract error message from various error types
+      let message = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        message = err;
+      }
       setError(`Araç yüklenirken hata: ${message}`);
       setAggregate(null);
       setVio(null);
@@ -93,25 +100,56 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
   /**
    * Load Risk Indices from Data Engine
    */
+  /**
+   * Load Risk Indices from Vehicle State Snapshot
+   * Single Source of Truth: Always read from snapshots, never direct events
+   */
   const loadRiskIndicesForExpertise = async (vehicleId: string, vin: string, plate: string) => {
     try {
-      console.log('[AUTO-EXPERT][RISK] request', { vehicleId, vin, plate });
+      console.log('[AUTO-EXPERT][RISK] Loading from snapshot:', { vehicleId, vin, plate });
       setRiskLoading(true);
       setRiskError(null);
       setRiskIndices(null);
 
-      const indices = await getDataEngineIndices({
-        domain: 'risk',
+      // Get snapshot (Single Source of Truth)
+      const snapshot = getVehicleStateSnapshot(vehicleId);
+      
+      if (!snapshot) {
+        setRiskError(`Araç ${vehicleId} için veri bulunamadı. Lütfen veri motorunu çalıştırın.`);
+        setRiskLoading(false);
+        return;
+      }
+
+      // Get all indices from snapshot  
+      const allIndices = getAllIndices(vehicleId);
+      const combined = [
+        ...(allIndices.risk || []),
+        ...(allIndices.insurance || []),
+        ...(allIndices.part || []),
+      ];
+
+      console.log('[AUTO-EXPERT][RISK] Snapshot loaded:', {
         vehicleId,
-        vin,
-        plate
+        riskCount: allIndices.risk.length,
+        insuranceCount: allIndices.insurance.length,
+        partCount: allIndices.part.length,
+        total: combined.length,
+        updatedAt: snapshot.updatedAt,
       });
 
-      setRiskIndices(indices);
-      console.log('[AUTO-EXPERT][RISK] success', indices);
+      setRiskIndices(combined);
+      setRiskError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
-      console.error('[AUTO-EXPERT][RISK] error', message);
+      // Safely extract error message from various error types
+      let message = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        message = err;
+      }
+      console.error('[AUTO-EXPERT][RISK] Snapshot load error:', message);
       setRiskError(`Risk verisi alınamadı: ${message}`);
       setRiskIndices(null);
     } finally {
@@ -176,7 +214,15 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
 
       console.log('[VehicleIntelligencePanel] ✓ Intelligence recalculation triggered');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      // Safely extract error message from various error types
+      let message = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        message = err;
+      }
       console.error('[VehicleIntelligencePanel] Error recalculating:', message);
       setError(`Yeniden hesaplama hatası: ${message}`);
     } finally {
@@ -803,16 +849,6 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
                             </p>
                             <p className="text-2xl font-bold text-gray-900">{idx.value}</p>
                             <p className="text-xs text-gray-600 mt-1">Güven: {idx.confidence}%</p>
-                            {idx.meta?.reasonCodes && idx.meta.reasonCodes.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-gray-300">
-                                <p className="text-xs font-medium text-gray-700 mb-1">Sebepler:</p>
-                                <ul className="text-xs text-gray-600 space-y-0.5">
-                                  {idx.meta.reasonCodes.map((code: string, i: number) => (
-                                    <li key={i}>• {code}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
                           </div>
                         ))}
                     </div>
@@ -830,9 +866,6 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
                                   <p className="text-sm font-medium text-gray-900">
                                     {idx.key.replace(/([A-Z])/g, ' $1').trim()}
                                   </p>
-                                  {idx.meta?.reasonCodes && idx.meta.reasonCodes.length > 0 && (
-                                    <p className="text-xs text-gray-600">{idx.meta.reasonCodes.join(', ')}</p>
-                                  )}
                                 </div>
                                 <div className="text-right">
                                   <span className="text-lg font-bold text-gray-900">{idx.value}</span>

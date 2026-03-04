@@ -161,7 +161,15 @@ export const WorkOrderVehicleHistorySection: React.FC<WorkOrderVehicleHistorySec
       devLog('Loaded vehicle history events:', { count: result.length });
       setEvents(result);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      // Safely extract error message from various error types
+      let errorMsg = 'Bilinmeyen hata';
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMsg = String((err as Record<string, any>).message);
+      } else if (typeof err === 'string') {
+        errorMsg = err;
+      }
       devLog('Error loading vehicle history:', { error: errorMsg });
       setError(errorMsg);
     } finally {

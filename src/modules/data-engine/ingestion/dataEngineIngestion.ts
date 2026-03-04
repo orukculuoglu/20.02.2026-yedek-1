@@ -24,6 +24,7 @@ import type {
 import { isPiiSafeEvent } from "../contracts/dataEngineEventTypes";
 import { pushUnifiedDataEngineEventLog } from "../eventLogger";
 import { applyDataEngineEventToSnapshot } from "../../vehicle-state/vehicleStateReducer";
+import { ingestWithOutbox } from "./eventOutbox";
 
 /**
  * Maximum number of events to keep in memory (circular buffer)
@@ -100,11 +101,13 @@ function persistEventBuffer(): void {
  * Process:
  * 1. Validate PII-safety
  * 2. Add ingestedAt timestamp
- * 3. Push to circular buffer (drop oldest if full)
- * 4. Persist to localStorage (DEV only)
- * 5. Log event (DEV only)
+ * 3. Ingest through outbox (idempotency + storage)
+ * 4. Push to circular buffer (drop oldest if full)
+ * 5. Persist to localStorage (DEV only)
+ * 
+ * Note: Outbox handles event log + snapshot reduction internally
  */
-export function ingestDataEngineEvent(evt: DataEngineEventEnvelope): void {
+export async function ingestDataEngineEvent(evt: DataEngineEventEnvelope): Promise<void> {
   // Validate PII-safety
   if (!isPiiSafeEvent(evt)) {
     if (import.meta.env.DEV) {
@@ -126,42 +129,35 @@ export function ingestDataEngineEvent(evt: DataEngineEventEnvelope): void {
     ingestedAt: new Date().toISOString(),
   };
 
-  // Maintain circular buffer (FIFO)
-  eventBuffer.push(eventWithIngestionTime);
-  if (eventBuffer.length > EVENT_BUFFER_LIMIT) {
-    eventBuffer.shift();
-  }
-
-  // Log to unified event log (for UI visibility)
+  // Ingest through outbox (handles idempotency, storage, event log, snapshots)
   try {
-    pushUnifiedDataEngineEventLog(evt);
+    const appended = await ingestWithOutbox(eventWithIngestionTime);
+
+    // Maintain circular buffer for backward compatibility
+    eventBuffer.push(eventWithIngestionTime);
+    if (eventBuffer.length > EVENT_BUFFER_LIMIT) {
+      eventBuffer.shift();
+    }
+
+    // Persist to storage
+    persistEventBuffer();
+
+    // Log in DEV mode
+    if (import.meta.env.DEV) {
+      console.debug("[DataEngineIngestion] Event ingested:", {
+        eventId: evt.eventId,
+        eventType: evt.eventType,
+        source: evt.source,
+        vehicleId: evt.vehicleId,
+        tenantId: evt.tenantId || 'dev',
+        appended,
+        bufferSize: eventBuffer.length,
+      });
+    }
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.warn("[DataEngineIngestion] Failed to log unified event:", error);
+      console.error("[DataEngineIngestion] Failed to ingest event:", error);
     }
-  }
-
-  // Update vehicle state snapshot (read-model for UI)
-  try {
-    applyDataEngineEventToSnapshot(evt);
-  } catch (error) {
-    if (import.meta.env.DEV) {
-      console.warn("[DataEngineIngestion] Failed to apply event to snapshot:", error);
-    }
-  }
-
-  // Persist to storage
-  persistEventBuffer();
-
-  // Log in DEV mode
-  if (import.meta.env.DEV) {
-    console.debug("[DataEngineIngestion] Event ingested:", {
-      eventId: evt.eventId,
-      eventType: evt.eventType,
-      source: evt.source,
-      vehicleId: evt.vehicleId,
-      bufferSize: eventBuffer.length,
-    });
   }
 }
 

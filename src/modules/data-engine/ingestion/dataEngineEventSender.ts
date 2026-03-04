@@ -41,7 +41,7 @@ export async function sendDataEngineEvent(
 
   // MOCK mode: Always use local ingestion
   if (!useRealApi) {
-    ingestDataEngineEvent(evt);
+    await ingestDataEngineEvent(evt);
 
     if (import.meta.env.DEV) {
       console.debug("[DataEngineEventSender] MOCK mode", {
@@ -105,7 +105,7 @@ export async function sendDataEngineEvent(
     enqueueEvent({ ...evt });
 
     // Also ingest locally for immediate appearance in Event Stream
-    ingestDataEngineEvent(evt);
+    await ingestDataEngineEvent(evt);
 
     return {
       ok: false,
