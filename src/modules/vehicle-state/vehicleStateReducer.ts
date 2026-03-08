@@ -133,6 +133,25 @@ export function applyDataEngineEventToSnapshot(
       lastDtcAt: payload?.lastDtcAt,
       lastUpdatedAt: domainTimestamp,
     };
+  } else if (eventType.includes("VEHICLE_INTELLIGENCE_AGGREGATED")) {
+    // Phase 9.1+: Store lightweight intelligence summary from aggregation event
+    // Includes composite scores, domain indices, and risk metrics
+    partialUpdate.vehicleIntelligenceSummary = {
+      compositeScore: typeof payload?.compositeScore === 'number' ? payload.compositeScore : undefined,
+      compositeLevel: payload?.compositeLevel || undefined,
+      trustIndex: typeof payload?.trustIndex === 'number' ? payload.trustIndex : undefined,
+      reliabilityIndex: typeof payload?.reliabilityIndex === 'number' ? payload.reliabilityIndex : undefined,
+      maintenanceDiscipline: typeof payload?.maintenanceDiscipline === 'number' ? payload.maintenanceDiscipline : undefined,
+      structuralRisk: typeof payload?.structuralRisk === 'number' ? payload.structuralRisk : undefined,
+      mechanicalRisk: typeof payload?.mechanicalRisk === 'number' ? payload.mechanicalRisk : undefined,
+      insuranceRisk: typeof payload?.insuranceRisk === 'number' ? payload.insuranceRisk : undefined,
+      serviceGapScore: typeof payload?.serviceGapScore === 'number' ? payload.serviceGapScore : undefined,
+      confidence: typeof payload?.confidence === 'number' ? payload.confidence : undefined,
+      dataSourceCount: typeof payload?.dataSourceCount === 'number' ? payload.dataSourceCount : undefined,
+      analysisTimestamp: payload?.analysisTimestamp || undefined,
+      lastAggregatedEventId: eventId,
+      lastUpdatedAt: domainTimestamp,
+    };
   }
 
   // Upsert into store and return updated snapshot

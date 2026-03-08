@@ -72,6 +72,23 @@ export function getExpertiseFindings(vehicleId: string) {
 }
 
 /**
+ * Phase 9.2: Get vehicle intelligence summary from snapshot
+ * Safe accessor that returns null if summary not available
+ * 
+ * Returns aggregated intelligence metrics computed from:
+ * - Risk indices (trustIndex, reliabilityIndex, maintenanceDiscipline)
+ * - Composite score (0-100)
+ * - Data quality metrics (dataSourceCount, confidence, analysisTimestamp)
+ * 
+ * @param vehicleId - Vehicle identifier
+ * @returns vehicleIntelligenceSummary or null if not available
+ */
+export function getVehicleIntelligenceSummary(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  return snapshot?.vehicleIntelligenceSummary || null;
+}
+
+/**
  * Get all indices across all domains
  * @returns { risk, insurance, part } all as arrays
  */

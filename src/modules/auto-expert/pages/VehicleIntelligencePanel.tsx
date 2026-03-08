@@ -10,6 +10,7 @@ import { vehicleIntelligenceStore, generateStatusBadge, generateSummaryLine } fr
 import { rebuildVehicleAggregate, emitRecalculationEvents } from '../../vehicle-intelligence/vehicleAggregator';
 import { vioStore } from '../intelligence/vioStore';
 import { generateAndStoreVIO, getLastGenerationStatus } from '../intelligence/vioOrchestrator';
+import { generateAndStoreVehicleRecommendations } from '../../vehicle-state/recommendationOrchestrator';
 import { getVehicleStateSnapshot, getAllIndices, getExpertiseFindings, getKpiMetrics, getRiskMetrics, getDataSourcesCount, getCompositeScore, getExplainabilityDrivers, getRecentEvents, formatTimelineTimestamp, getDataSourcesSummary, getStatusFromSnapshot, getSummaryFromSnapshot, getCompositeVehicleScore } from '../../vehicle-state/snapshotAccessor';
 import { generatePredictiveSignals } from '../../data-engine/signals/predictiveSignalsEngine';
 import { explainCompositeScore, type ScoreExplainabilityResult } from '../../data-engine/scoring/scoreExplainability';
@@ -197,6 +198,13 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       // Phase 8.6: Emit vehicle intelligence analyzed event
       emitVehicleIntelligenceAnalyzedEvent(vehicleId.trim());
       
+      console.log('[handleLoadVehicle] Step 6: Generating and storing vehicle recommendations (Phase 9.6)');
+      // Phase 9.6: Generate recommendations asynchronously after analysis completes
+      // Fire-and-forget: Does not block UI, no event emission, stores in snapshot only
+      generateAndStoreVehicleRecommendations(vehicleId.trim()).catch(err => {
+        console.error('[handleLoadVehicle] Recommendation generation error (non-fatal):', err);
+      });
+      
       console.log('[handleLoadVehicle] ✓ Complete - waiting 500ms for event persistence');
       // VIO generation happens in useEffect when aggregate changes
       console.log('[VehicleIntelligencePanel] ✓ Vehicle aggregate loaded:', result);
@@ -349,6 +357,13 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       console.log('[handleRecalculateIntelligence] Step 3: About to emit VEHICLE_INTELLIGENCE_ANALYZED event');
       // Phase 8.6: Emit event after recalculation
       emitVehicleIntelligenceAnalyzedEvent(aggregate.vehicleId);
+
+      console.log('[handleRecalculateIntelligence] Step 4: Generating and storing vehicle recommendations (Phase 9.6)');
+      // Phase 9.6: Generate recommendations asynchronously after analysis completes
+      // Fire-and-forget: Does not block UI, no event emission, stores in snapshot only
+      generateAndStoreVehicleRecommendations(aggregate.vehicleId).catch(err => {
+        console.error('[handleRecalculateIntelligence] Recommendation generation error (non-fatal):', err);
+      });
 
       console.log('[handleRecalculateIntelligence] ✓ Intelligence recalculation triggered');
     } catch (err) {

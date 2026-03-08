@@ -27,7 +27,7 @@ import {
 } from './kmIntelligence';
 import { generateInsight } from './insightGenerator';
 import { sendDataEngineEvent } from '../data-engine/ingestion/dataEngineEventSender';
-import type { DataEngineEventEnvelope, IndicesUpdatedPayload } from '../data-engine/contracts/dataEngineEventTypes';
+import type { DataEngineEventEnvelope, IndicesUpdatedPayload, VehicleIntelligenceAggregatedPayload } from '../data-engine/contracts/dataEngineEventTypes';
 
 /**
  * Build a complete VehicleAggregate from a vehicle ID
@@ -189,6 +189,12 @@ export async function buildVehicleAggregate(
     };
 
     console.log(`[VehicleAggregator] ✓ Aggregate complete for ${plate}`);
+
+    // PHASE 9.1: Emit VEHICLE_INTELLIGENCE_AGGREGATED event (lightweight, non-blocking)
+    // This summary will be stored in snapshot by reducer
+    emitVehicleIntelligenceAggregatedEvent(aggregate).catch((err) => {
+      console.error('[VehicleAggregator] Failed to emit VEHICLE_INTELLIGENCE_AGGREGATED:', err);
+    });
 
     return aggregate;
   } catch (error) {
@@ -368,5 +374,90 @@ export async function emitRecalculationEvents(aggregate: VehicleAggregate): Prom
     }
   } catch (error) {
     throw error; // Will be caught by caller's .catch()
+  }
+}
+
+/**
+ * PHASE 9.1: Emit VEHICLE_INTELLIGENCE_AGGREGATED event
+ * Lightweight summary of vehicle intelligence analysis
+ * Emitted after aggregate build completes
+ * 
+ * This event:
+ * - Contains composite scores and domain-specific risk metrics
+ * - Is stored in snapshot.vehicleIntelligenceSummary by reducer
+ * - Does NOT block event ingestion or UI rendering
+ * - Fire-and-forget: Failures are logged but don't propagate
+ * 
+ * @param aggregate - Completed VehicleAggregate with all calculations
+ */
+async function emitVehicleIntelligenceAggregatedEvent(aggregate: VehicleAggregate): Promise<void> {
+  const now = new Date().toISOString();
+  const { vehicleId } = aggregate;
+  
+  // Calculate composite score from indices
+  const compositeScore = Math.round(
+    (aggregate.indexes.trustIndex +
+     aggregate.indexes.reliabilityIndex +
+     aggregate.indexes.maintenanceDiscipline) / 3
+  );
+  
+  // Determine composite level
+  let compositeLevel = 'low-risk';
+  if (compositeScore >= 70) {
+    compositeLevel = 'high-risk';
+  } else if (compositeScore >= 50) {
+    compositeLevel = 'medium-risk';
+  }
+  
+  // Count data sources
+  const dataSourceCount = Object.values(aggregate.dataSources).reduce(
+    (total, arr) => total + (Array.isArray(arr) ? arr.length : 0),
+    0
+  );
+  
+  // Build lightweight payload
+  const payload: VehicleIntelligenceAggregatedPayload = {
+    compositeScore,
+    compositeLevel,
+    trustIndex: aggregate.indexes.trustIndex,
+    reliabilityIndex: aggregate.indexes.reliabilityIndex,
+    maintenanceDiscipline: aggregate.indexes.maintenanceDiscipline,
+    structuralRisk: aggregate.derived.structuralRisk,
+    mechanicalRisk: aggregate.derived.mechanicalRisk,
+    insuranceRisk: aggregate.derived.insuranceRisk,
+    serviceGapScore: aggregate.derived.serviceGapScore,
+    dataSourceCount,
+    confidence: 75, // Default confidence from aggregate calculations
+    analysisTimestamp: aggregate.timestamp,
+    aggregatedAt: now,
+  };
+  
+  // Create event envelope
+  const event: DataEngineEventEnvelope<VehicleIntelligenceAggregatedPayload> = {
+    eventId: `evt-agg-${vehicleId}-${Date.now()}`,
+    eventType: 'VEHICLE_INTELLIGENCE_AGGREGATED',
+    source: 'AUTO_EKSPERTIZ',
+    vehicleId,
+    occurredAt: now,
+    tenantId: 'dev',
+    schemaVersion: '1.0',
+    piiSafe: true,
+    payload,
+  };
+  
+  // Emit event (fire-and-forget)
+  try {
+    await sendDataEngineEvent(event);
+    
+    if (import.meta.env.DEV) {
+      console.debug('[VehicleAggregator] ✓ VEHICLE_INTELLIGENCE_AGGREGATED event emitted', {
+        vehicleId,
+        compositeScore,
+        compositeLevel,
+        dataSourceCount,
+      });
+    }
+  } catch (error) {
+    console.error('[VehicleAggregator] Failed to emit VEHICLE_INTELLIGENCE_AGGREGATED:', error);
   }
 }

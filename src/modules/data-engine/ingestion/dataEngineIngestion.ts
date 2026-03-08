@@ -149,6 +149,7 @@ export async function ingestDataEngineEvent(evt: DataEngineEventEnvelope): Promi
       'RISK_INDICES_UPDATED': 'risk',
       'INSURANCE_INDICES_UPDATED': 'insurance',
       'PART_INDICES_UPDATED': 'part',
+      'VEHICLE_INTELLIGENCE_AGGREGATED': 'intelligence',
     };
     
     const domain = domainMap[evt.eventType];
@@ -157,6 +158,7 @@ export async function ingestDataEngineEvent(evt: DataEngineEventEnvelope): Promi
         'risk': 'Risk indeksleri güncellendi',
         'insurance': 'Sigorta indeksleri güncellendi',
         'part': 'Parça indeksleri güncellendi',
+        'intelligence': 'Araç zekası toplandı',
       };
       addEventToTimeline(
         evt.vehicleId,

@@ -356,6 +356,7 @@ function queryDataEngineEventsByVehicleId(vehicleId: string): VehicleEvent[] {
 function generateEventDescription(eventType: string, domain?: string): string {
   const descriptions: Record<string, string> = {
     VEHICLE_INTELLIGENCE_ANALYZED: 'Araç zekası analizi çalıştırıldı',
+    VEHICLE_INTELLIGENCE_AGGREGATED: 'Araç zekası toplandı',
     RISK_INDICES_UPDATED: 'Risk indeksleri güncellendi',
     INSURANCE_INDICES_UPDATED: 'Sigorta indeksleri güncellendi',
     PART_INDICES_UPDATED: 'Parça indeksleri güncellendi',
@@ -379,6 +380,7 @@ export function getEventTypeLabel(eventType: string | undefined): string {
   const translations: Record<string, string> = {
     // Phase 8.6: Vehicle Intelligence Analysis Events
     VEHICLE_INTELLIGENCE_ANALYZED: 'Araç Zekası Analizi',
+    VEHICLE_INTELLIGENCE_AGGREGATED: 'Araç Zekası Toplandı',
     RISK_INDICES_UPDATED: 'Risk Indeksleri Güncellendi',
     INSURANCE_INDICES_UPDATED: 'Sigorta İndeksleri Güncellendi',
     PART_INDICES_UPDATED: 'Parça İndeksleri Güncellendi',

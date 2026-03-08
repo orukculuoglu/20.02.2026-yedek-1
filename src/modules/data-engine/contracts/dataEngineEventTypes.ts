@@ -23,11 +23,12 @@ export type DataEngineEventSource =
  * Event type classification
  */
 export type DataEngineEventType =
-  | "RISK_INDICES_UPDATED"      // Risk metrics computed
-  | "INSURANCE_INDICES_UPDATED" // Insurance metrics computed
-  | "PART_INDICES_UPDATED"      // Part metrics computed
-  | "RECOMMENDATIONS_GENERATED" // Risk recommendations created
-  | "VEHICLE_HISTORY_UPDATED";  // Vehicle timeline modified
+  | "RISK_INDICES_UPDATED"           // Risk metrics computed
+  | "INSURANCE_INDICES_UPDATED"      // Insurance metrics computed
+  | "PART_INDICES_UPDATED"           // Part metrics computed
+  | "RECOMMENDATIONS_GENERATED"      // Risk recommendations created
+  | "VEHICLE_HISTORY_UPDATED"        // Vehicle timeline modified
+  | "VEHICLE_INTELLIGENCE_AGGREGATED"; // Vehicle intelligence summary aggregated
 
 /**
  * Typed payload for RISK_INDICES_UPDATED events
@@ -71,6 +72,37 @@ export interface VehicleHistoryUpdatedPayload {
 }
 
 /**
+ * Phase 9.1: VEHICLE_INTELLIGENCE_AGGREGATED event payload
+ * Lightweight intelligence summary after aggregate calculation
+ * Stored in snapshot for UI consumption
+ * PII-safe: No raw data, only computed scores and counts
+ */
+export interface VehicleIntelligenceAggregatedPayload {
+  // Composite score and level
+  compositeScore: number;              // 0-100, unified intelligence score
+  compositeLevel: string;              // "low-risk", "medium-risk", "high-risk"
+  
+  // Domain-specific indices
+  trustIndex: number;                  // 0-100, data trustworthiness
+  reliabilityIndex: number;            // 0-100, mechanical reliability
+  maintenanceDiscipline: number;       // 0-100, service history quality
+  
+  // Risk components from aggregate
+  structuralRisk: number;              // 0-100, damage/wear risk
+  mechanicalRisk: number;              // 0-100, OBD/fault code risk
+  insuranceRisk: number;               // 0-100, claims/correlation risk
+  serviceGapScore: number;             // 0-100, maintenance gaps
+  
+  // Data quality metrics
+  dataSourceCount: number;             // Number of data sources used
+  confidence: number;                  // 0-100, analysis confidence
+  
+  // Timing
+  analysisTimestamp: string;           // ISO 8601, when analysis was performed
+  aggregatedAt?: string;               // ISO 8601, when event was created
+}
+
+/**
  * Generic indices payload (PII-safe)
  * Used for PART_INDICES_UPDATED and similar domain events
  * Contains ONLY key, value, confidence, updatedAt (no meta)
@@ -92,6 +124,7 @@ export type DataEngineEventPayload =
   | IndicesUpdatedPayload
   | RecommendationsGeneratedPayload
   | VehicleHistoryUpdatedPayload
+  | VehicleIntelligenceAggregatedPayload
   | Record<string, any>;        // Fallback for custom payloads
 
 /**
