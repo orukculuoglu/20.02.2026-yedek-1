@@ -8,7 +8,7 @@
  * - claimFrequency: Claim activity level
  */
 
-import type { DataEngineIndex } from "../data-engine/indicesDomainEngine";
+import type { DataEngineIndex } from "../data-engine/indexing";
 import type { InsuranceDomainAggregate } from "./types";
 
 /**

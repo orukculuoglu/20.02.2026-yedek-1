@@ -40,9 +40,10 @@ async function emitRiskIndicesEvent(
   const riskEvent: DataEngineEventEnvelope<RiskIndicesUpdatedPayload> = {
     eventId: generateEventId(),
     eventType: "RISK_INDICES_UPDATED",
-    source: "DATA_ENGINE",
+    source: "VEHICLE_INTELLIGENCE",
     vehicleId: req.vehicleId,
     occurredAt: new Date().toISOString(),
+    tenantId: "dev",
     schemaVersion: "1.0",
     payload: {
       indices: indices.map((idx) => ({

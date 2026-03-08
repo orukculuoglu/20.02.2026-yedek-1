@@ -26,6 +26,8 @@ import {
   calculateAvgDailyKm,
 } from './kmIntelligence';
 import { generateInsight } from './insightGenerator';
+import { sendDataEngineEvent } from '../data-engine/ingestion/dataEngineEventSender';
+import type { DataEngineEventEnvelope, IndicesUpdatedPayload } from '../data-engine/contracts/dataEngineEventTypes';
 
 /**
  * Build a complete VehicleAggregate from a vehicle ID
@@ -259,9 +261,112 @@ export async function buildVehicleAggregate(
 
 /**
  * Rebuild an existing aggregate (refresh its calculations)
+ * After recalculation, emits domain indices events to update snapshot via pipeline
  */
 export async function rebuildVehicleAggregate(
   aggregate: VehicleAggregate
 ): Promise<VehicleAggregate> {
-  return buildVehicleAggregate(aggregate.vehicleId, aggregate.vin, aggregate.plate);
+  // Step 1: Calculate new aggregate
+  const refreshed = await buildVehicleAggregate(aggregate.vehicleId, aggregate.vin, aggregate.plate);
+  
+  // Step 2: Emit domain indices events to trigger snapshot update
+  // Fire-and-forget: Does not block UI update
+  emitRecalculationEvents(refreshed).catch(err => {
+    if (import.meta.env.DEV) {
+      console.error('[VehicleAggregator] Failed to emit recalculation events:', err);
+    }
+  });
+  
+  return refreshed;
+}
+
+/**
+ * Emit RISK_INDICES_UPDATED, INSURANCE_INDICES_UPDATED, and PART_INDICES_UPDATED events
+ * Called after aggregate recalculation to trigger snapshot pipeline update
+ * 
+ * These events route through:
+ * sendDataEngineEvent() → ingestDataEngineEvent() → vehicleStateReducer → snapshot updated
+ * 
+ * @param aggregate - Recalculated VehicleAggregate with new indices
+ */
+export async function emitRecalculationEvents(aggregate: VehicleAggregate): Promise<void> {
+  const now = new Date().toISOString();
+  const { vehicleId } = aggregate;
+  
+  // Event 1: RISK_INDICES_UPDATED
+  // Maps: trustIndex, reliabilityIndex, maintenanceDiscipline, structuralRisk, mechanicalRisk, serviceGapScore
+  const riskIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
+    eventId: `evt-risk-${vehicleId}-${Date.now()}`,
+    eventType: 'RISK_INDICES_UPDATED',
+    source: 'VEHICLE_INTELLIGENCE',
+    vehicleId,
+    occurredAt: now,
+    tenantId: 'dev',
+    schemaVersion: '1.0',
+    piiSafe: true,
+    payload: {
+      indices: [
+        { key: 'trustIndex', value: aggregate.indexes.trustIndex, confidence: 75, updatedAt: now },
+        { key: 'reliabilityIndex', value: aggregate.indexes.reliabilityIndex, confidence: 75, updatedAt: now },
+        { key: 'maintenanceDiscipline', value: aggregate.indexes.maintenanceDiscipline, confidence: 75, updatedAt: now },
+        { key: 'structuralRisk', value: aggregate.derived.structuralRisk, confidence: 75, updatedAt: now },
+        { key: 'mechanicalRisk', value: aggregate.derived.mechanicalRisk, confidence: 75, updatedAt: now },
+        { key: 'serviceGapScore', value: aggregate.derived.serviceGapScore, confidence: 75, updatedAt: now },
+      ],
+    },
+  };
+  
+  // Event 2: INSURANCE_INDICES_UPDATED
+  // Maps: insuranceRisk, correlationScore
+  const insuranceIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
+    eventId: `evt-insurance-${vehicleId}-${Date.now()}`,
+    eventType: 'INSURANCE_INDICES_UPDATED',
+    source: 'VEHICLE_INTELLIGENCE',
+    vehicleId,
+    occurredAt: now,
+    tenantId: 'dev',
+    schemaVersion: '1.0',
+    piiSafe: true,
+    payload: {
+      indices: [
+        { key: 'insuranceRisk', value: aggregate.derived.insuranceRisk, confidence: 75, updatedAt: now },
+        { key: 'claimFrequencyIndex', value: aggregate.derived.insuranceDamageCorrelation.correlationScore, confidence: 75, updatedAt: now },
+      ],
+    },
+  };
+  
+  // Event 3: PART_INDICES_UPDATED
+  // Note: Part domain logic is currently fragmented (in services/dataEngineIndices.ts)
+  // Emitting placeholder for now - will be populated once part domain is modularized
+  const partIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
+    eventId: `evt-part-${vehicleId}-${Date.now()}`,
+    eventType: 'PART_INDICES_UPDATED',
+    source: 'VEHICLE_INTELLIGENCE',
+    vehicleId,
+    occurredAt: now,
+    tenantId: 'dev',
+    schemaVersion: '1.0',
+    piiSafe: true,
+    payload: {
+      indices: [
+        // Placeholder indices - to be filled when part domain engine is reconstructed
+        { key: 'partAvailability', value: 50, confidence: 50, updatedAt: now },
+      ],
+    },
+  };
+  
+  // Send all three events in parallel (fire-and-forget)
+  try {
+    await Promise.all([
+      sendDataEngineEvent(riskIndicesEvent),
+      sendDataEngineEvent(insuranceIndicesEvent),
+      sendDataEngineEvent(partIndicesEvent),
+    ]);
+    
+    if (import.meta.env.DEV) {
+      console.debug('[VehicleAggregator] ✓ Recalculation events emitted (RISK, INSURANCE, PART indices updated)');
+    }
+  } catch (error) {
+    throw error; // Will be caught by caller's .catch()
+  }
 }

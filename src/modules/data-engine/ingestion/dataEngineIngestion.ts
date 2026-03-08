@@ -24,6 +24,7 @@ import type {
 import { isPiiSafeEvent } from "../contracts/dataEngineEventTypes";
 import { pushUnifiedDataEngineEventLog } from "../eventLogger";
 import { applyDataEngineEventToSnapshot } from "../../vehicle-state/vehicleStateReducer";
+import { addEventToTimeline } from "../../vehicle-state/snapshotAccessor";
 import { ingestWithOutbox } from "./eventOutbox";
 
 /**
@@ -141,6 +142,29 @@ export async function ingestDataEngineEvent(evt: DataEngineEventEnvelope): Promi
 
     // Persist to storage
     persistEventBuffer();
+
+    // Add to timeline visualization store (for UI refresh)
+    // Maps index update events to human-readable timeline entries
+    const domainMap: Record<string, string> = {
+      'RISK_INDICES_UPDATED': 'risk',
+      'INSURANCE_INDICES_UPDATED': 'insurance',
+      'PART_INDICES_UPDATED': 'part',
+    };
+    
+    const domain = domainMap[evt.eventType];
+    if (domain) {
+      const descriptions: Record<string, string> = {
+        'risk': 'Risk indeksleri güncellendi',
+        'insurance': 'Sigorta indeksleri güncellendi',
+        'part': 'Parça indeksleri güncellendi',
+      };
+      addEventToTimeline(
+        evt.vehicleId,
+        evt.eventType,
+        domain,
+        descriptions[domain]
+      );
+    }
 
     // Log in DEV mode
     if (import.meta.env.DEV) {

@@ -6,7 +6,7 @@
  * TRY values are stored in meta as raw data, with normalized index
  */
 
-import type { DataEngineIndex } from "../data-engine/indicesDomainEngine";
+import type { DataEngineIndex } from "../data-engine/indexing";
 import type { MarketValuationAggregate } from "./types";
 import { normalizeTRYToIndex } from "./marketValuationEngine";
 

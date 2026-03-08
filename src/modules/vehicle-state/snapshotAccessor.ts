@@ -13,6 +13,11 @@
  */
 
 import { getSnapshot, VehicleStateSnapshot } from './vehicleStateSnapshotStore';
+import { computeCompositeVehicleScore as computeCompositeScore, type CompositeVehicleScoreResult } from '../data-engine/scoring/compositeVehicleScore';
+import { generatePredictiveSignals, type PredictiveSignal } from '../data-engine/signals/predictiveSignalsEngine';
+
+export type { CompositeVehicleScoreResult, PredictiveSignal };
+export { generatePredictiveSignals };
 
 /**
  * Get the latest vehicle state snapshot
@@ -154,4 +159,462 @@ export function clearAllSnapshots() {
 
   const { clearSnapshots } = require('./vehicleStateSnapshotStore');
   clearSnapshots();
+}
+
+/**
+ * PHASE 8.2: Snapshot-based KPI metrics extraction
+ * 
+ * All UI metrics (KPI Cards, Risk Badges) derive from snapshot, not aggregate.
+ * These helpers provide type-safe access to computed metrics.
+ */
+
+/**
+ * Extract a specific index value from snapshot by key
+ * @param vehicleId - Vehicle ID
+ * @param indexKey - Index key name (e.g., 'trustIndex', 'structuralRisk')
+ * @param domain - Which domain to search: 'risk' | 'insurance' | 'part'
+ * @returns { value, confidence } or null if not found
+ */
+function extractIndexFromSnapshot(
+  snapshot: VehicleStateSnapshot | null,
+  indexKey: string,
+  domain: 'risk' | 'insurance' | 'part' = 'risk'
+) {
+  if (!snapshot) return null;
+
+  const domainData = snapshot[domain];
+  if (!domainData || !domainData.indices) return null;
+
+  const index = domainData.indices.find((idx) => idx.key === indexKey);
+  return index ? { value: index.value, confidence: index.confidence } : null;
+}
+
+/**
+ * Get KPI metrics from snapshot (for KPI Cards)
+ * @returns { trustIndex, reliabilityIndex, maintenanceDiscipline } or null
+ */
+export function getKpiMetrics(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return null;
+
+  return {
+    trustIndex: extractIndexFromSnapshot(snapshot, 'trustIndex')?.value || 0,
+    reliabilityIndex: extractIndexFromSnapshot(snapshot, 'reliabilityIndex')?.value || 0,
+    maintenanceDiscipline: extractIndexFromSnapshot(snapshot, 'maintenanceDiscipline')?.value || 0,
+  };
+}
+
+/**
+ * Get Risk badges from snapshot (for Risk Metrics section)
+ * @returns { structuralRisk, mechanicalRisk, serviceGapScore, insuranceRisk, odometerAnomaly }
+ */
+export function getRiskMetrics(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return null;
+
+  return {
+    structuralRisk: extractIndexFromSnapshot(snapshot, 'structuralRisk')?.value || 0,
+    mechanicalRisk: extractIndexFromSnapshot(snapshot, 'mechanicalRisk')?.value || 0,
+    serviceGapScore: extractIndexFromSnapshot(snapshot, 'serviceGapScore')?.value || 0,
+    insuranceRisk: extractIndexFromSnapshot(snapshot, 'insuranceRisk')?.value || 0,
+    odometerAnomaly: snapshot.odometer?.status === 'anomaly' ? true : false,
+  };
+}
+
+/**
+ * Get data sources count from snapshot indices
+ * Counts how many indices are present in each domain
+ * @returns Array of { name, label, count, color }
+ */
+export function getDataSourcesFromSnapshot(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return [];
+
+  return [
+    {
+      name: 'kmHistory',
+      label: 'KM Geçmişi',
+      count: snapshot.odometer?.historyCount || 0,
+      color: 'blue',
+    },
+    {
+      name: 'obdRecords',
+      label: 'OBD Kodları',
+      count: snapshot.diagnostics?.obdCount || 0,
+      color: 'purple',
+    },
+    {
+      name: 'insuranceRecords',
+      label: 'Sigorta Kayıtları',
+      count: snapshot.insurance?.indices?.length || 0,
+      color: 'orange',
+    },
+    {
+      name: 'damageRecords',
+      label: 'Hasar Kayıtları',
+      count:
+        snapshot.risk?.indices?.filter((idx) => idx.key === 'structuralRisk')[0]?.value === 0
+          ? 0
+          : 1, // Simplified: if structuralRisk exists, assume damage records exist
+      color: 'red',
+    },
+    {
+      name: 'serviceRecords',
+      label: 'Hizmet Kayıtları',
+      count: snapshot.service?.recordsCount || 0,
+      color: 'green',
+    },
+  ];
+}
+
+/**
+ * Get total data sources count
+ * @returns Count of domains that have at least one index/record
+ */
+export function getDataSourcesCount(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return 0;
+
+  let count = 0;
+  if (snapshot.risk?.indices?.length) count++;
+  if (snapshot.insurance?.indices?.length) count++;
+  if (snapshot.part?.indices?.length) count++;
+  if (snapshot.service?.recordsCount) count++;
+  if (snapshot.odometer?.historyCount) count++;
+  if (snapshot.diagnostics?.obdCount) count++;
+  if (snapshot.expertise?.findings?.length) count++;
+
+  return count;
+}
+
+/**
+ * PHASE 8.2: Get comprehensive data sources with snapshot values
+ * Returns array of data source info for UI display
+ * All values read directly from snapshot (Single Source of Truth)
+ */
+export function getDataSourcesSummary(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return null;
+
+  return {
+    kmHistory: snapshot.odometer?.historyCount || 0,
+    obdRecords: snapshot.diagnostics?.obdCount || 0,
+    insuranceRecords: snapshot.insurance?.indices?.length || 0,
+    damageRecords: snapshot.risk?.indices?.filter((idx) => idx.key === 'structuralRisk')[0]?.value ? 1 : 0,
+    serviceRecords: snapshot.service?.recordsCount || 0,
+  };
+}
+
+/**
+ * PHASE 8.2: Derive status badge from trustIndex
+ * Returns status label and visual style
+ * 0-30: High Risk, 31-60: Medium Risk, 61-100: Low Risk
+ */
+export function getStatusFromSnapshot(vehicleId: string): {
+  label: string;
+  badge: string;
+  icon: string;
+} {
+  const kpiMetrics = getKpiMetrics(vehicleId);
+  if (!kpiMetrics) {
+    return { label: 'Bilinmiyor', badge: 'unknown', icon: 'questionmark' };
+  }
+
+  const trustIndex = kpiMetrics.trustIndex;
+  if (trustIndex >= 61) {
+    return { label: '✓ Düşük Risk', badge: 'low-risk', icon: 'check' };
+  } else if (trustIndex >= 31) {
+    return { label: '⚠️ Orta Risk', badge: 'medium-risk', icon: 'warning' };
+  } else {
+    return { label: '✗ Yüksek Risk', badge: 'high-risk', icon: 'error' };
+  }
+}
+
+/**
+ * PHASE 8.2: Generate summary line from snapshot metrics
+ * Derives explanatory text from KPI metrics
+ */
+export function getSummaryFromSnapshot(vehicleId: string): string {
+  const kpiMetrics = getKpiMetrics(vehicleId);
+  if (!kpiMetrics) return '';
+
+  const reliability = kpiMetrics.reliabilityIndex;
+  const parts: string[] = [];
+
+  if (reliability >= 70) parts.push('Güvenilir');
+  else if (reliability >= 50) parts.push('Orta güvenilirlik');
+  else parts.push('Düşük güvenilirlik');
+
+  return parts.join(', ');
+}
+
+/**
+ * PHASE 8.3: Composite Score Calculation
+ * 
+ * Unified vehicle intelligence score based on domain indices
+ * 
+ * Formula:
+ * CompositeScore = (RiskScore * 0.4) + (InsuranceScore * 0.3) + (PartScore * 0.3)
+ * 
+ * Where:
+ * - RiskScore = average(structuralRisk, mechanicalRisk, serviceGapScore)
+ * - InsuranceScore = average(policyContinuityIndex, claimFrequencyIndex, coverageAdequacyIndex)
+ * - PartScore = average(partsAvailabilityIndex, supplierStabilityIndex)
+ */
+
+/**
+ * Helper: Extract and average multiple indices from domain
+ * @param indices Array of indices from snapshot domain
+ * @param keys Array of index keys to average
+ * @returns Average value (0-100) or 0 if not found
+ */
+function averageIndices(
+  indices: Array<{ key: string; value: number }> | undefined,
+  keys: string[]
+): number {
+  if (!indices || indices.length === 0) return 0;
+
+  const values = keys
+    .map((key) => indices.find((idx) => idx.key === key)?.value)
+    .filter((val) => typeof val === 'number') as number[];
+
+  if (values.length === 0) return 0;
+  return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100;
+}
+
+/**
+ * Get Composite Score from snapshot
+ * @returns { score, riskScore, insuranceScore, partScore } or null if snapshot missing
+ */
+export function getCompositeScore(vehicleId: string) {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return null;
+
+  // Risk Score: average of structural risk, mechanical risk, and service gap
+  const riskScore = averageIndices(snapshot.risk?.indices, [
+    'structuralRisk',
+    'mechanicalRisk',
+    'serviceGapScore',
+  ]);
+
+  // Insurance Score: average of policy continuity, claim frequency, coverage adequacy
+  const insuranceScore = averageIndices(snapshot.insurance?.indices, [
+    'policyContinuityIndex',
+    'claimFrequencyIndex',
+    'coverageAdequacyIndex',
+  ]);
+
+  // Part Score: average of parts availability and supplier stability
+  const partScore = averageIndices(snapshot.part?.indices, [
+    'partsAvailabilityIndex',
+    'supplierStabilityIndex',
+  ]);
+
+  // Weighted composite score
+  const score = Math.round(
+    (riskScore * 0.4 + insuranceScore * 0.3 + partScore * 0.3) * 100
+  ) / 100;
+
+  return {
+    score,
+    riskScore,
+    insuranceScore,
+    partScore,
+  };
+}
+
+/**
+ * PHASE 8.4: Explainability - Dominant Score Drivers
+ * 
+ * Identifies which metrics most significantly affect the composite score.
+ * Analyzes all indices from all domains and returns 3-5 dominant drivers.
+ * 
+ * Examples of drivers:
+ * - Structural Risk ↑ (magnitude: 35) - high risk pushes score down
+ * - Maintenance Discipline ↓ (magnitude: 25) - low discipline affects score
+ * - Insurance Continuity ↑ (magnitude: 20) - positive factor
+ */
+
+interface ScoreDriver {
+  key: string;
+  label: string;
+  domain: string;
+  value: number;
+  effect: 'up' | 'down'; // 'up' for high/positive, 'down' for low/negative
+  magnitude: number; // absolute deviation from neutral (50)
+}
+
+/**
+ * Get explainability drivers affecting composite score
+ * @returns Array of 3-5 dominant drivers, most impactful first
+ */
+export function getExplainabilityDrivers(vehicleId: string): ScoreDriver[] {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot) return [];
+
+  const drivers: ScoreDriver[] = [];
+
+  // Helper to process indices from a domain
+  const processIndices = (
+    indices: Array<{ key: string; value: number }> | undefined,
+    domain: string,
+    labels: Record<string, string>
+  ) => {
+    if (!indices) return;
+
+    indices.forEach((idx) => {
+      const neutralPoint = 50;
+      const deviation = Math.abs(idx.value - neutralPoint);
+
+      // Only include significant deviations (>20 points from neutral)
+      if (deviation > 20) {
+        drivers.push({
+          key: idx.key,
+          label: labels[idx.key] || idx.key,
+          domain,
+          value: idx.value,
+          effect: idx.value > 65 ? 'up' : 'down',
+          magnitude: Math.round(deviation * 100) / 100,
+        });
+      }
+    });
+  };
+
+  // Process all domains
+  const riskLabels: Record<string, string> = {
+    structuralRisk: 'Yapısal Risk',
+    mechanicalRisk: 'Mekanik Risk',
+    serviceGapScore: 'Bakım Açığı',
+  };
+  processIndices(snapshot.risk?.indices, 'risk', riskLabels);
+
+  const insuranceLabels: Record<string, string> = {
+    policyContinuityIndex: 'Sigorta Sürekliliği',
+    claimFrequencyIndex: 'Talep Sıklığı',
+    coverageAdequacyIndex: 'Kapsama Yeterliliği',
+  };
+  processIndices(snapshot.insurance?.indices, 'insurance', insuranceLabels);
+
+  const partLabels: Record<string, string> = {
+    partsAvailabilityIndex: 'Parça Kullanılabilirliği',
+    supplierStabilityIndex: 'Tedarikçi Stabiliyesi',
+  };
+  processIndices(snapshot.part?.indices, 'part', partLabels);
+
+  const diagnosticsLabels: Record<string, string> = {
+    obdFatalityIndex: 'OBD Kritikalliği',
+    dtcTrendIndex: 'DTC Trendi',
+  };
+  // For diagnostics, create a synthetic index if we have obdCount
+  if (snapshot.diagnostics?.obdCount && snapshot.diagnostics.obdCount > 5) {
+    drivers.push({
+      key: 'obdSeverity',
+      label: 'OBD Alarmları',
+      domain: 'diagnostics',
+      value: Math.min(100, 40 + snapshot.diagnostics.obdCount * 5),
+      effect: 'down',
+      magnitude: Math.min(50, snapshot.diagnostics.obdCount * 5),
+    });
+  }
+
+  // Sort by magnitude (most impactful first) and return top 5
+  return drivers.sort((a, b) => b.magnitude - a.magnitude).slice(0, 5);
+}
+
+/**
+ * Simple in-memory event timeline store
+ * Tracks recent snapshot updates for timeline display
+ */
+const eventTimeline: Array<{
+  vehicleId: string;
+  eventType: string;
+  domain: string;
+  timestamp: string;
+  description: string;
+}> = [];
+
+/**
+ * Add event to timeline (called when snapshot updates)
+ * @internal Used by snapshot update functions
+ */
+export function addEventToTimeline(
+  vehicleId: string,
+  eventType: string,
+  domain: string,
+  description: string
+) {
+  eventTimeline.push({
+    vehicleId,
+    eventType,
+    domain,
+    timestamp: new Date().toISOString(),
+    description,
+  });
+
+  // Keep only last 100 events total
+  if (eventTimeline.length > 100) {
+    eventTimeline.shift();
+  }
+}
+
+/**
+ * Get recent events from timeline for a vehicle
+ * @param vehicleId Vehicle ID
+ * @param maxCount Maximum number of events to return (default 10)
+ * @returns Array of recent events
+ */
+export function getRecentEvents(vehicleId: string, maxCount: number = 10) {
+  return eventTimeline
+    .filter((evt) => evt.vehicleId === vehicleId)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, maxCount);
+}
+
+/**
+ * PHASE 8.7: Safe timestamp formatter for timeline events
+ * 
+ * Handles invalid/missing timestamps with fallback chain:
+ * occurredAt || timestamp || current date
+ * 
+ * @param timestamp - Can be string or undefined
+ * @returns Formatted Turkish locale string or 'Bilinmiyor' if invalid
+ */
+export function formatTimelineTimestamp(timestamp?: string | null): string {
+  try {
+    // Handle null/undefined
+    if (!timestamp) {
+      if (import.meta.env.DEV) {
+        console.warn('[formatTimelineTimestamp] No timestamp provided, using current time');
+      }
+      return new Date().toLocaleString('tr-TR');
+    }
+
+    const dateObj = new Date(timestamp);
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) {
+      if (import.meta.env.DEV) {
+        console.warn('[formatTimelineTimestamp] Invalid timestamp:', { timestamp });
+      }
+      return 'Bilinmiyor';
+    }
+    
+    return dateObj.toLocaleString('tr-TR');
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[formatTimelineTimestamp] Error formatting timestamp:', { timestamp, error });
+    }
+    return 'Bilinmiyor';
+  }
+}
+
+/**
+ * PHASE 8.3: Get composite vehicle score from snapshot
+ * Unifies risk, insurance, and part domain metrics into single authoritative score
+ * @param vehicleId Vehicle ID
+ * @returns CompositeVehicleScoreResult or null if snapshot not available
+ */
+export function getCompositeVehicleScore(vehicleId: string): CompositeVehicleScoreResult | null {
+  const snapshot = getSnapshot(vehicleId);
+  return computeCompositeScore(snapshot);
 }

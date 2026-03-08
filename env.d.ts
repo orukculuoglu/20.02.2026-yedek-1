@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_TENANT_ID: string;
   readonly VITE_AUTH_ENABLED: string;
   readonly MODE: string;
+  readonly DEV: boolean;
+  readonly PROD: boolean;
 }
 
 interface ImportMeta {

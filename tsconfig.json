@@ -28,5 +28,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": ["env.d.ts", "src", "index.tsx", "index.html"]
 }

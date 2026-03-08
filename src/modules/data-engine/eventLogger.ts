@@ -4,7 +4,7 @@
  * Tenant isolated, ring buffer support (demo uses localStorage)
  */
 
-import type { DataEngineIndex } from './indicesDomainEngine';
+import type { DataEngineIndex } from './indexing';
 import { appendEvent } from './store/localEventStore';
 
 /**

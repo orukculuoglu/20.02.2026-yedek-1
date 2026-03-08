@@ -23,7 +23,7 @@ import {
 } from '../types/partMaster';
 import { getVIO } from '../src/modules/auto-expert/intelligence/vioStore';
 import { getOrBuild } from '../src/modules/vehicle-intelligence/vehicleStore';
-import { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } from '../src/modules/data-engine/indicesDomainEngine';
+import { buildRiskDomainIndicesFromVIO, buildRiskDomainIndices } from '../src/modules/data-engine/indexing';
 import { sendDataEngineEvent } from '../src/modules/data-engine/ingestion/dataEngineEventSender';
 import { generateEventId } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
 import type { DataEngineEventEnvelope, RiskIndicesUpdatedPayload, IndicesUpdatedPayload } from '../src/modules/data-engine/contracts/dataEngineEventTypes';
@@ -549,9 +549,10 @@ async function emitInsuranceIndicesEvent(
   const insuranceEvent: DataEngineEventEnvelope<RiskIndicesUpdatedPayload> = {
     eventId: generateEventId(),
     eventType: "INSURANCE_INDICES_UPDATED",
-    source: "DATA_ENGINE",
+    source: "VEHICLE_INTELLIGENCE",
     vehicleId,
     occurredAt: new Date().toISOString(),
+    tenantId: "dev",
     schemaVersion: "1.0",
     payload: {
       indices: indices.map((idx) => ({
@@ -592,9 +593,10 @@ function emitPartIndicesEvent(
   const partEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
     eventId: generateEventId(),
     eventType: "PART_INDICES_UPDATED",
-    source: "DATA_ENGINE",
+    source: "VEHICLE_INTELLIGENCE",
     vehicleId,
     occurredAt: new Date().toISOString(),
+    tenantId: "dev",
     schemaVersion: "1.0",
     payload: {
       indices: indices.map((idx) => ({

@@ -6,7 +6,7 @@
  */
 
 import type { RiskRecommendation } from "../../types/RiskRecommendation";
-import type { DataEngineIndex } from "./indicesDomainEngine";
+import type { DataEngineIndex } from "./indexing";
 
 /**
  * Statistics for a single fired recommendation rule
