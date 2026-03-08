@@ -7,17 +7,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { RefreshCw, AlertCircle, CheckCircle, Clock, Copy, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 import { vehicleIntelligenceStore, generateStatusBadge, generateSummaryLine } from '../../vehicle-intelligence';
-import { rebuildVehicleAggregate, emitRecalculationEvents } from '../../vehicle-intelligence/vehicleAggregator';
+import { rebuildVehicleAggregate, emitRecalculationEvents, emitVehicleIntelligenceAggregatedEvent } from '../../vehicle-intelligence/vehicleAggregator';
 import { vioStore } from '../intelligence/vioStore';
 import { generateAndStoreVIO, getLastGenerationStatus } from '../intelligence/vioOrchestrator';
 import { generateAndStoreVehicleRecommendations } from '../../vehicle-state/recommendationOrchestrator';
-import { getVehicleStateSnapshot, getAllIndices, getExpertiseFindings, getKpiMetrics, getRiskMetrics, getDataSourcesCount, getCompositeScore, getExplainabilityDrivers, getRecentEvents, formatTimelineTimestamp, getDataSourcesSummary, getStatusFromSnapshot, getSummaryFromSnapshot, getCompositeVehicleScore } from '../../vehicle-state/snapshotAccessor';
+import { getVehicleStateSnapshot, getAllIndices, getExpertiseFindings, getKpiMetrics, getRiskMetrics, getDataSourcesCount, getCompositeScore, getExplainabilityDrivers, getRecentEvents, formatTimelineTimestamp, getDataSourcesSummary, getStatusFromSnapshot, getSummaryFromSnapshot, getCompositeVehicleScore, getVehicleIntelligenceRecommendations, getVehicleIntelligenceSummary } from '../../vehicle-state/snapshotAccessor';
 import { generatePredictiveSignals } from '../../data-engine/signals/predictiveSignalsEngine';
 import { explainCompositeScore, type ScoreExplainabilityResult } from '../../data-engine/scoring/scoreExplainability';
 import { getVehicleTimeline, formatTimelineEventForDisplay, hasVehicleTimeline, formatTimelineTimestamp as formatTimelineTs } from '../../data-engine/timeline/vehicleTimeline';
 import { sendDataEngineEvent } from '../../data-engine/ingestion/dataEngineEventSender';
 import { VehicleEventTimeline } from '../components/VehicleEventTimeline';
 import { PredictiveSignalsPanel } from '../../vehicle-intelligence/components/PredictiveSignalsPanel';
+import { VehicleRecommendationsPanel } from '../../vehicle-intelligence/components/VehicleRecommendationsPanel';
 import type { VehicleAggregate } from '../../vehicle-intelligence/types';
 import type { VehicleIntelligenceOutput } from '../intelligence/vioTypes';
 
@@ -57,6 +58,9 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
   // PHASE 8.4: Explainability and timeline expansion state
   const [expandedExplainability, setExpandedExplainability] = useState(false);
   const [expandedTimeline, setExpandedTimeline] = useState(false);
+  
+  // Phase 9.7.2: Recommendations reactivity bridge - triggers re-render when orchestrator completes storage
+  const [recommendationsVersion, setRecommendationsVersion] = useState(0);
 
   // Debug flag for Machine Output tab visibility (?debug=1 in URL)
   const debugEnabled = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('debug') === '1' : false;
@@ -152,6 +156,19 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
     }
   };
 
+  /**
+   * Phase 9.7.2: Callback handler for recommendation storage completion
+   * Triggered when orchestrator finishes storing recommendations to snapshot
+   * Updates recommendationsVersion to trigger React re-render
+   * State update causes IIFE in render to read fresh recommendations from snapshot
+   */
+  const handleRecommendationsStored = () => {
+    if (import.meta.env.DEV) {
+      console.debug('[VehicleIntelligencePanel] 📝 Recommendations stored - triggering re-render');
+    }
+    setRecommendationsVersion(prev => prev + 1);
+  };
+
   const handleLoadVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!vehicleId.trim() || !plate.trim()) {
@@ -187,6 +204,14 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
         console.error('[handleLoadVehicle] Error emitting initial events:', err);
       });
 
+      console.log('[handleLoadVehicle] Step 3b: Emitting aggregated intelligence summary (Phase 9.7.3)');
+      // Phase 9.7.3: Guarantee vehicleIntelligenceSummary is populated before recommendations
+      // This ensures first load matches recalculate path: both emit VEHICLE_INTELLIGENCE_AGGREGATED
+      // getOrBuild() may return cached aggregate without re-emitting, so we emit here explicitly
+      emitVehicleIntelligenceAggregatedEvent(result).catch(err => {
+        console.error('[handleLoadVehicle] Error emitting aggregated event:', err);
+      });
+
       // Small delay to allow events to propagate through reducer pipeline
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -201,7 +226,8 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       console.log('[handleLoadVehicle] Step 6: Generating and storing vehicle recommendations (Phase 9.6)');
       // Phase 9.6: Generate recommendations asynchronously after analysis completes
       // Fire-and-forget: Does not block UI, no event emission, stores in snapshot only
-      generateAndStoreVehicleRecommendations(vehicleId.trim()).catch(err => {
+      // Phase 9.7.2: Pass callback to trigger re-render when storage completes
+      generateAndStoreVehicleRecommendations(vehicleId.trim(), handleRecommendationsStored).catch(err => {
         console.error('[handleLoadVehicle] Recommendation generation error (non-fatal):', err);
       });
       
@@ -361,7 +387,8 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       console.log('[handleRecalculateIntelligence] Step 4: Generating and storing vehicle recommendations (Phase 9.6)');
       // Phase 9.6: Generate recommendations asynchronously after analysis completes
       // Fire-and-forget: Does not block UI, no event emission, stores in snapshot only
-      generateAndStoreVehicleRecommendations(aggregate.vehicleId).catch(err => {
+      // Phase 9.7.2: Pass callback to trigger re-render when storage completes
+      generateAndStoreVehicleRecommendations(aggregate.vehicleId, handleRecommendationsStored).catch(err => {
         console.error('[handleRecalculateIntelligence] Recommendation generation error (non-fatal):', err);
       });
 
@@ -989,6 +1016,23 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
             // Filter out filtered signals to show only above-threshold signals
             const visibleSignals = signals.filter(s => !s.filtered);
             return <PredictiveSignalsPanel signals={visibleSignals} />;
+          })()}
+
+          {/* PHASE 9.7: Vehicle Recommendations Section */}
+          {(() => {
+            const recommendations = getVehicleIntelligenceRecommendations(vehicleId);
+            const summary = getVehicleIntelligenceSummary(vehicleId);
+            return (
+              <VehicleRecommendationsPanel
+                vehicleId={vehicleId}
+                recommendations={recommendations}
+                metadata={{
+                  recommendationCount: summary?.recommendationCount,
+                  highSeverityRecommendationCount: summary?.highSeverityRecommendationCount,
+                  lastRecommendationsUpdatedAt: summary?.lastRecommendationsUpdatedAt,
+                }}
+              />
+            );
           })()}
 
           {/* PHASE 8.4: Enhanced Timeline Section */}

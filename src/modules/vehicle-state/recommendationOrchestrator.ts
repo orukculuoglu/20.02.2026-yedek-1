@@ -1,11 +1,13 @@
 /**
  * Recommendation Orchestrator
  * Phase 9.4: Async recommendation generation and snapshot storage
+ * Phase 9.7.2: Added optional callback for React reactivity bridge
  *
  * Design:
  * - Pure function wrapper: Calls pure recommendation engine
  * - Async-safe: Can be called from any context without blocking
  * - Snapshot mutation: Updates snapshot with generated recommendations
+ * - Optional callback: Notifies caller when storage completes (for UI re-render)
  * - NO event emission: Just stores in snapshot
  * - NO reducer integration: Direct snapshot write
  * - Dormant by default: No automatic wiring
@@ -13,6 +15,7 @@
  * Usage:
  * - Called manually by UI components (Phase 9.5)
  * - Called from async recommendation orchestration (Phase 9.4+)
+ * - Pass optional onStored callback for React re-render trigger
  * - NOT called by reducer, aggregator, or ingestion
  */
 
@@ -28,15 +31,21 @@ import { getSnapshot, upsertSnapshot } from './vehicleStateSnapshotStore';
  * 2. Check if snapshot has sufficient data
  * 3. Call pure recommendation engine
  * 4. Store generated recommendations in snapshot.vehicleIntelligenceRecommendations
- * 5. Return safely (no exceptions thrown)
+ * 5. Notify caller via optional callback (Phase 9.7.2: for React re-render trigger)
+ * 6. Return safely (no exceptions thrown)
  *
  * @param vehicleId - Vehicle ID to generate recommendations for
+ * @param onStored - Optional callback fired after recommendations are stored (Phase 9.7.2)
  * @returns Promise<void> - Always resolves, never rejects
  */
-export async function generateAndStoreVehicleRecommendations(vehicleId: string): Promise<void> {
+export async function generateAndStoreVehicleRecommendations(
+  vehicleId: string,
+  onStored?: () => void
+): Promise<void> {
   try {
-    // Step 1: Get current snapshot
-    const snapshot = getSnapshot(vehicleId);
+    // Step 1: Get snapshot and wait for vehicleIntelligenceSummary to be available
+    // Phase 9.7.1: Retry logic to handle race condition with event ingestion
+    let snapshot = getSnapshot(vehicleId);
     
     if (!snapshot) {
       if (import.meta.env.DEV) {
@@ -45,7 +54,52 @@ export async function generateAndStoreVehicleRecommendations(vehicleId: string):
       return;
     }
 
-    // Step 2: Check if snapshot has sufficient data for recommendations
+    // Step 2: Wait for vehicleIntelligenceSummary to be populated by reducer
+    // (event ingestion is async, so summary may not exist yet on first call)
+    // Retry up to 10 times with 50ms delay between retries (500ms total max wait)
+    let retries = 0;
+    const MAX_RETRIES = 10;
+    const RETRY_DELAY_MS = 50;
+
+    while ((!snapshot.vehicleIntelligenceSummary) && retries < MAX_RETRIES) {
+      if (import.meta.env.DEV && retries === 0) {
+        console.debug('[RecommendationOrchestrator] Waiting for vehicleIntelligenceSummary...', {
+          vehicleId,
+          maxRetries: MAX_RETRIES,
+          retryDelayMs: RETRY_DELAY_MS,
+        });
+      }
+
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      
+      // Re-read snapshot
+      snapshot = getSnapshot(vehicleId);
+      retries++;
+    }
+
+    // If summary still not available after retries, exit safely
+    if (!snapshot.vehicleIntelligenceSummary) {
+      if (import.meta.env.DEV) {
+        console.debug('[RecommendationOrchestrator] Summary not available after retries', {
+          vehicleId,
+          retriesUsed: retries,
+          totalWaitMs: retries * RETRY_DELAY_MS,
+        });
+      }
+      return;
+    }
+
+    if (import.meta.env.DEV && retries > 0) {
+      console.debug('[RecommendationOrchestrator] ✓ Summary became available', {
+        vehicleId,
+        retriesNeeded: retries,
+        totalWaitMs: retries * RETRY_DELAY_MS,
+        hasCompositeScore: !!snapshot.vehicleIntelligenceSummary.compositeScore,
+      });
+    }
+
+    // Step 3: Check if snapshot has sufficient data for recommendations
     if (!isSnapshotSufficientForRecommendations(snapshot)) {
       if (import.meta.env.DEV) {
         console.debug('[RecommendationOrchestrator] Insufficient data for recommendations', { vehicleId });
@@ -53,7 +107,7 @@ export async function generateAndStoreVehicleRecommendations(vehicleId: string):
       return;
     }
 
-    // Step 3: Generate recommendations using pure function
+    // Step 4: Generate recommendations using pure function
     // This is completely safe - no side effects, pure calculation
     const recommendations = generateVehicleIntelligenceRecommendations(snapshot);
 
@@ -64,7 +118,7 @@ export async function generateAndStoreVehicleRecommendations(vehicleId: string):
       return;
     }
 
-    // Step 4: Store recommendations and metadata in snapshot
+    // Step 5: Store recommendations and metadata in snapshot
     // Direct snapshot update - NOT through reducer, NO event emission
     const now = new Date().toISOString();
     const highSeverityCount = recommendations.filter(r => r.severity === 'high').length;
@@ -92,6 +146,15 @@ export async function generateAndStoreVehicleRecommendations(vehicleId: string):
         timestamp: now,
       });
     }
+
+    // Phase 9.7.2: Notify caller (typically React component) that storage is complete
+    // This allows UI to trigger re-render without modifying snapshot structure
+    if (onStored) {
+      if (import.meta.env.DEV) {
+        console.debug('[RecommendationOrchestrator] Calling onStored callback', { vehicleId });
+      }
+      onStored();
+    }
   } catch (error) {
     // Never throw - just log
     console.error('[RecommendationOrchestrator] Error generating/storing recommendations:', error);
@@ -103,9 +166,13 @@ export async function generateAndStoreVehicleRecommendations(vehicleId: string):
  * Useful for bulk operations or admin panels
  *
  * @param vehicleIds - Array of vehicle IDs
+ * @param onEachStored - Optional callback fired after each vehicle is processed
  * @returns Promise that resolves after all vehicles processed
  */
-export async function generateAndStoreRecommendationsForBatch(vehicleIds: string[]): Promise<void> {
+export async function generateAndStoreRecommendationsForBatch(
+  vehicleIds: string[],
+  onEachStored?: () => void
+): Promise<void> {
   if (!Array.isArray(vehicleIds) || vehicleIds.length === 0) {
     return;
   }
@@ -117,7 +184,7 @@ export async function generateAndStoreRecommendationsForBatch(vehicleIds: string
   // Process sequentially to avoid thundering herd
   // Each call is independent and safe
   for (const vehicleId of vehicleIds) {
-    await generateAndStoreVehicleRecommendations(vehicleId);
+    await generateAndStoreVehicleRecommendations(vehicleId, onEachStored);
   }
 
   if (import.meta.env.DEV) {

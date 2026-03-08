@@ -388,9 +388,13 @@ export async function emitRecalculationEvents(aggregate: VehicleAggregate): Prom
  * - Does NOT block event ingestion or UI rendering
  * - Fire-and-forget: Failures are logged but don't propagate
  * 
+ * PHASE 9.7.3: Exported for manual emission in handleLoadVehicle
+ * to guarantee vehicleIntelligenceSummary availability on first load
+ * (when buildVehicleAggregate may have been called earlier and not re-emitted)
+ * 
  * @param aggregate - Completed VehicleAggregate with all calculations
  */
-async function emitVehicleIntelligenceAggregatedEvent(aggregate: VehicleAggregate): Promise<void> {
+export async function emitVehicleIntelligenceAggregatedEvent(aggregate: VehicleAggregate): Promise<void> {
   const now = new Date().toISOString();
   const { vehicleId } = aggregate;
   
