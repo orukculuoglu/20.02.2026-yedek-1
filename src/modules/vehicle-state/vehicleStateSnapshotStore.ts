@@ -163,6 +163,7 @@ export type VehicleStateSnapshot = {
     priority: 'high' | 'medium' | 'low';  // From recommendation severity
     sourceRecommendationKey?: string; // Links back to original recommendation
     group?: 'maintenance' | 'risk' | 'insurance' | 'data-quality';  // Category
+    status?: 'NEW' | 'SEEN' | 'READY' | 'EXECUTED' | 'DISMISSED';  // Phase 11.4: Action lifecycle status
   }>;
 
   // Data sources present in this snapshot
