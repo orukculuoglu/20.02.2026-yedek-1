@@ -12,7 +12,7 @@
  * NEVER call event sources directly - use this accessor instead.
  */
 
-import { getSnapshot, VehicleStateSnapshot } from './vehicleStateSnapshotStore';
+import { getSnapshot, VehicleStateSnapshot, upsertSnapshot } from './vehicleStateSnapshotStore';
 import { computeCompositeVehicleScore as computeCompositeScore, type CompositeVehicleScoreResult } from '../data-engine/scoring/compositeVehicleScore';
 import { generatePredictiveSignals, type PredictiveSignal } from '../data-engine/signals/predictiveSignalsEngine';
 
@@ -649,4 +649,121 @@ export function formatTimelineTimestamp(timestamp?: string | null): string {
 export function getCompositeVehicleScore(vehicleId: string): CompositeVehicleScoreResult | null {
   const snapshot = getSnapshot(vehicleId);
   return computeCompositeScore(snapshot);
+}
+
+/**
+ * PHASE 10.2: Mark recommendation as SEEN
+ * Updates the recommendation status in snapshot to 'SEEN'
+ * Does not emit events - purely snapshot storage
+ * 
+ * @param vehicleId - Vehicle ID
+ * @param recommendationKey - Unique key of recommendation (e.g., 'mechanical-inspection-urgent')
+ * @returns true if recommendation found and updated, false if not found
+ */
+export function markRecommendationSeen(vehicleId: string, recommendationKey: string): boolean {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot || !snapshot.vehicleIntelligenceRecommendations?.length) {
+    return false;
+  }
+
+  // Find and update the recommendation
+  const updated = snapshot.vehicleIntelligenceRecommendations.map((rec) => {
+    if (rec.key === recommendationKey && rec.status !== 'SEEN') {
+      return { ...rec, status: 'SEEN' as const };
+    }
+    return rec;
+  });
+
+  // Check if any change was made
+  const changed = updated.some(
+    (rec, idx) => rec !== snapshot.vehicleIntelligenceRecommendations![idx]
+  );
+
+  if (changed) {
+    upsertSnapshot(vehicleId, { vehicleIntelligenceRecommendations: updated });
+    if (import.meta.env.DEV) {
+      console.debug(`[SnapshotAccessor] ✓ Marked recommendation SEEN: ${recommendationKey}`);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * PHASE 10.2: Mark recommendation as APPLIED
+ * Updates the recommendation status in snapshot to 'APPLIED'
+ * Does not emit events - purely snapshot storage
+ * 
+ * @param vehicleId - Vehicle ID
+ * @param recommendationKey - Unique key of recommendation
+ * @returns true if recommendation found and updated, false if not found
+ */
+export function markRecommendationApplied(vehicleId: string, recommendationKey: string): boolean {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot || !snapshot.vehicleIntelligenceRecommendations?.length) {
+    return false;
+  }
+
+  // Find and update the recommendation
+  const updated = snapshot.vehicleIntelligenceRecommendations.map((rec) => {
+    if (rec.key === recommendationKey && rec.status !== 'APPLIED') {
+      return { ...rec, status: 'APPLIED' as const };
+    }
+    return rec;
+  });
+
+  // Check if any change was made
+  const changed = updated.some(
+    (rec, idx) => rec !== snapshot.vehicleIntelligenceRecommendations![idx]
+  );
+
+  if (changed) {
+    upsertSnapshot(vehicleId, { vehicleIntelligenceRecommendations: updated });
+    if (import.meta.env.DEV) {
+      console.debug(`[SnapshotAccessor] ✓ Marked recommendation APPLIED: ${recommendationKey}`);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * PHASE 10.2: Mark recommendation as DISMISSED
+ * Updates the recommendation status in snapshot to 'DISMISSED'
+ * Does not emit events - purely snapshot storage
+ * 
+ * @param vehicleId - Vehicle ID
+ * @param recommendationKey - Unique key of recommendation
+ * @returns true if recommendation found and updated, false if not found
+ */
+export function markRecommendationDismissed(vehicleId: string, recommendationKey: string): boolean {
+  const snapshot = getSnapshot(vehicleId);
+  if (!snapshot || !snapshot.vehicleIntelligenceRecommendations?.length) {
+    return false;
+  }
+
+  // Find and update the recommendation
+  const updated = snapshot.vehicleIntelligenceRecommendations.map((rec) => {
+    if (rec.key === recommendationKey && rec.status !== 'DISMISSED') {
+      return { ...rec, status: 'DISMISSED' as const };
+    }
+    return rec;
+  });
+
+  // Check if any change was made
+  const changed = updated.some(
+    (rec, idx) => rec !== snapshot.vehicleIntelligenceRecommendations![idx]
+  );
+
+  if (changed) {
+    upsertSnapshot(vehicleId, { vehicleIntelligenceRecommendations: updated });
+    if (import.meta.env.DEV) {
+      console.debug(`[SnapshotAccessor] ✓ Marked recommendation DISMISSED: ${recommendationKey}`);
+    }
+    return true;
+  }
+
+  return false;
 }
