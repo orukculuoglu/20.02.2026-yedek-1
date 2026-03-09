@@ -19,6 +19,7 @@ import { sendDataEngineEvent } from '../../data-engine/ingestion/dataEngineEvent
 import { VehicleEventTimeline } from '../components/VehicleEventTimeline';
 import { PredictiveSignalsPanel } from '../../vehicle-intelligence/components/PredictiveSignalsPanel';
 import { VehicleRecommendationsPanel } from '../../vehicle-intelligence/components/VehicleRecommendationsPanel';
+import { VehicleActionsPanel } from '../../vehicle-intelligence/components/VehicleActionsPanel';
 import type { VehicleAggregate } from '../../vehicle-intelligence/types';
 import type { VehicleIntelligenceOutput } from '../intelligence/vioTypes';
 
@@ -1034,6 +1035,9 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
               />
             );
           })()}
+
+          {/* PHASE 11.3: Vehicle Actions Section */}
+          <VehicleActionsPanel vehicleId={vehicleId} />
 
           {/* PHASE 8.4: Enhanced Timeline Section */}
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">

@@ -2,11 +2,12 @@
  * Recommendation Orchestrator
  * Phase 9.4: Async recommendation generation and snapshot storage
  * Phase 9.7.2: Added optional callback for React reactivity bridge
+ * Phase 11.2: Extended to generate vehicle actions from recommendations
  *
  * Design:
- * - Pure function wrapper: Calls pure recommendation engine
+ * - Pure function wrapper: Calls pure recommendation/action engines
  * - Async-safe: Can be called from any context without blocking
- * - Snapshot mutation: Updates snapshot with generated recommendations
+ * - Snapshot mutation: Updates snapshot with generated recommendations and actions
  * - Optional callback: Notifies caller when storage completes (for UI re-render)
  * - NO event emission: Just stores in snapshot
  * - NO reducer integration: Direct snapshot write
@@ -20,22 +21,25 @@
  */
 
 import { generateVehicleIntelligenceRecommendations, isSnapshotSufficientForRecommendations } from '../data-engine/recommendations/recommendationEngine';
+import { generateVehicleActionsFromRecommendations } from '../data-engine/actions/actionEngine';
 import { getSnapshot, upsertSnapshot } from './vehicleStateSnapshotStore';
 
 /**
  * Generate vehicle intelligence recommendations and store in snapshot
+ * Phase 11.2: Extended to also generate and store vehicle actions from recommendations
  * Completely harmless async operation - no side effects outside snapshot
  *
  * Process:
  * 1. Retrieve snapshot for vehicleId
  * 2. Check if snapshot has sufficient data
  * 3. Call pure recommendation engine
- * 4. Store generated recommendations in snapshot.vehicleIntelligenceRecommendations
- * 5. Notify caller via optional callback (Phase 9.7.2: for React re-render trigger)
- * 6. Return safely (no exceptions thrown)
+ * 4. Call pure action engine to convert recommendations to actions (Phase 11.2)
+ * 5. Store generated recommendations AND actions in snapshot
+ * 6. Notify caller via optional callback (Phase 9.7.2: for React re-render trigger)
+ * 7. Return safely (no exceptions thrown)
  *
  * @param vehicleId - Vehicle ID to generate recommendations for
- * @param onStored - Optional callback fired after recommendations are stored (Phase 9.7.2)
+ * @param onStored - Optional callback fired after recommendations/actions are stored (Phase 9.7.2)
  * @returns Promise<void> - Always resolves, never rejects
  */
 export async function generateAndStoreVehicleRecommendations(
@@ -118,13 +122,26 @@ export async function generateAndStoreVehicleRecommendations(
       return;
     }
 
-    // Step 5: Store recommendations and metadata in snapshot
+    // Step 5: Generate vehicle actions from recommendations
+    // Phase 11.2: Convert recommendations to structured operational tasks
+    const actions = generateVehicleActionsFromRecommendations(recommendations);
+
+    if (import.meta.env.DEV) {
+      console.debug('[RecommendationOrchestrator] ✓ Actions generated from recommendations', {
+        vehicleId,
+        recommendationCount: recommendations.length,
+        actionCount: actions.length,
+      });
+    }
+
+    // Step 6: Store recommendations and actions in snapshot
     // Direct snapshot update - NOT through reducer, NO event emission
     const now = new Date().toISOString();
     const highSeverityCount = recommendations.filter(r => r.severity === 'high').length;
     
     upsertSnapshot(vehicleId, {
       vehicleIntelligenceRecommendations: recommendations,
+      vehicleIntelligenceActions: actions,  // Phase 11.2: Store generated actions
       vehicleIntelligenceSummary: {
         ...(snapshot.vehicleIntelligenceSummary || {}),
         recommendationCount: recommendations.length,
@@ -135,14 +152,16 @@ export async function generateAndStoreVehicleRecommendations(
     });
 
     if (import.meta.env.DEV) {
-      console.debug('[RecommendationOrchestrator] ✓ Recommendations stored in snapshot', {
+      console.debug('[RecommendationOrchestrator] ✓ Recommendations and actions stored in snapshot', {
         vehicleId,
-        count: recommendations.length,
+        recommendationCount: recommendations.length,
+        actionCount: actions.length,
         severities: {
           high: recommendations.filter(r => r.severity === 'high').length,
           medium: recommendations.filter(r => r.severity === 'medium').length,
           low: recommendations.filter(r => r.severity === 'low').length,
         },
+        actionTypes: Array.from(new Set(actions.map(a => a.actionType))),
         timestamp: now,
       });
     }
