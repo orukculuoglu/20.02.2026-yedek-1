@@ -14,7 +14,8 @@
       "node",
       "vite/client",
       "react",
-      "react-dom"
+      "react-dom",
+      "jest"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
