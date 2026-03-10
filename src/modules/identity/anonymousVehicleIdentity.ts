@@ -110,6 +110,11 @@ import {
   validateAnonymousVehicleIdentityFederation,
 } from './identity.phase8';
 
+// Phase 9 implementation (orchestrator)
+import {
+  createFederatedVehicleIdentity,
+} from './identity.phase9';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -187,6 +192,11 @@ export {
   buildAnonymousVehicleIdentityFederationMetadata,
   buildAnonymousVehicleIdentityFederationEnvelope,
   validateAnonymousVehicleIdentityFederation,
+};
+
+// Phase 9 re-exports (orchestrator)
+export {
+  createFederatedVehicleIdentity,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
