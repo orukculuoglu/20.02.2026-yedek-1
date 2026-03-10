@@ -81,6 +81,12 @@ import {
   buildAnonymousVehicleIdentityEnvelopeFingerprint,
 } from './identity.phase2';
 
+// Phase 3 implementation
+import {
+  buildAnonymousVehicleIdentityAttestation,
+  buildAnonymousVehicleIdentityAttestedEnvelope,
+} from './identity.phase3';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -129,6 +135,12 @@ export {
   buildAnonymousVehicleIdentityScopeMetadata,
   buildAnonymousVehicleIdentityEnvelope,
   buildAnonymousVehicleIdentityEnvelopeFingerprint,
+};
+
+// Phase 3 re-exports
+export {
+  buildAnonymousVehicleIdentityAttestation,
+  buildAnonymousVehicleIdentityAttestedEnvelope,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1257,95 +1269,6 @@ export function validateAnonymousVehicleIdentityFederation(
   };
 
   return result;
-}
-
-/**
- * Build anonymous vehicle identity attestation
- * Pure function: Creates issuer assertion/attestation for an identity envelope
- *
- * @param identity - AnonymousVehicleIdentity
- * @param scopeMetadata - AnonymousVehicleIdentityScopeMetadata
- * @param input - AttestationInput with issuer info
- * @returns AnonymousVehicleIdentityAttestation
- */
-export function buildAnonymousVehicleIdentityAttestation(
-  identity: AnonymousVehicleIdentity,
-  scopeMetadata: AnonymousVehicleIdentityScopeMetadata,
-  input: AnonymousVehicleIdentityAttestationInput
-): AnonymousVehicleIdentityAttestation {
-  // Validate inputs
-  if (!input.issuerId) {
-    throw new Error('Missing required attestation field: issuerId');
-  }
-
-  // Build attestation ID (deterministic from identity + scope + issuer)
-  const attestationIdInput = `${identity.anonymousVehicleId}|${input.issuerId}|${input.timestamp}`;
-  const attestationIdSuffix = generateDeterministicHash(attestationIdInput).substring(0, 16);
-  const attestationId = `attest_${attestationIdSuffix}`;
-
-  // Generate envelope fingerprint
-  const attestationVersionValue = input.attestationVersion || '1.0';
-  const envelopeFingerprint = buildAnonymousVehicleIdentityEnvelopeFingerprint(
-    identity,
-    scopeMetadata,
-    attestationVersionValue
-  );
-
-  // Build attestation
-  const attestation: AnonymousVehicleIdentityAttestation = {
-    attestationId,
-    attestationVersion: attestationVersionValue,
-    issuerId: input.issuerId,
-    issuedAt: input.timestamp || new Date().toISOString(),
-    protocolVersion: identity.protocolVersion,
-    attestationType: input.attestationType || 'SELF_ASSERTED',
-    attestationStatus: input.attestationStatus || 'ISSUED',
-    envelopeFingerprint,
-  };
-
-  return attestation;
-}
-
-/**
- * Build anonymous vehicle identity attested envelope
- * Pure function: Combines identity, scope, and attestation into final package
- *
- * @param identity - AnonymousVehicleIdentity
- * @param scopeMetadata - AnonymousVehicleIdentityScopeMetadata
- * @param attestation - AnonymousVehicleIdentityAttestation
- * @returns AnonymousVehicleIdentityAttestedEnvelope
- */
-export function buildAnonymousVehicleIdentityAttestedEnvelope(
-  identity: AnonymousVehicleIdentity,
-  scopeMetadata: AnonymousVehicleIdentityScopeMetadata,
-  attestation: AnonymousVehicleIdentityAttestation
-): AnonymousVehicleIdentityAttestedEnvelope {
-  // Validate inputs
-  if (!identity?.anonymousVehicleId) {
-    throw new Error('Invalid identity: missing anonymousVehicleId');
-  }
-
-  if (!scopeMetadata?.issuerId) {
-    throw new Error('Invalid scope metadata: missing issuerId');
-  }
-
-  if (!attestation?.attestationId) {
-    throw new Error('Invalid attestation: missing attestationId');
-  }
-
-  // Verify attestation references match
-  if (attestation.issuerId !== scopeMetadata.issuerId) {
-    throw new Error('Mismatch: attestation issuerId does not match scope metadata issuerId');
-  }
-
-  // Build attested envelope
-  const attestedEnvelope: AnonymousVehicleIdentityAttestedEnvelope = {
-    identity,
-    scopeMetadata,
-    attestation,
-  };
-
-  return attestedEnvelope;
 }
 
 /**
