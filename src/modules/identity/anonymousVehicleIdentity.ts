@@ -1128,6 +1128,294 @@ export function validateAnonymousVehicleIdentityTemporal(
   return result;
 }
 
+/**
+ * PHASE 7: ANONYMOUS VEHICLE IDENTITY PROOF LAYER
+ * 
+ * PURPOSE
+ * ───────
+ * Add a protocol-level proof structure to attested envelopes.
+ * This phase creates the standardized proof framework that enables
+ * future phases (Phase 8+) to add cryptographic validation,
+ * distributed proof strategies, and advanced trust mechanisms.
+ * 
+ * Does NOT validate:
+ * - Cryptographic signatures
+ * - Certificate chains
+ * - External authorities
+ * - Proof-of-origin
+ * 
+ * This is a pure structural proof layer.
+ */
+
+/**
+ * Proof status for an Anonymous Vehicle Identity Proof
+ * 
+ * CREATED: Proof structure created, not yet bound to attestation
+ * BOUND: Proof successfully bound to attestation via fingerprints
+ * INVALID: Proof structure is invalid (malformed fields)
+ * UNAVAILABLE: Proof cannot be generated (missing data)
+ */
+export type AnonymousVehicleIdentityProofStatus = 'CREATED' | 'BOUND' | 'INVALID' | 'UNAVAILABLE';
+
+/**
+ * Proof object for an Anonymous Vehicle Identity Attested Envelope
+ * 
+ * Creates a protocol-level proof structure that encapsulates:
+ * - Identity of the prover (issuerId)
+ * - Type of proof (STRUCTURAL_PROOF for Phase 7)
+ * - Status of proof binding
+ * - Fingerprints for envelope and proof integrity
+ * - Reference to binding relationship
+ * 
+ * Does NOT include:
+ * - Cryptographic signatures
+ * - Certificate chains
+ * - External validation references
+ * - VIN or sensitive data
+ */
+export interface AnonymousVehicleIdentityProof {
+  proofId: string;
+  proofVersion: string;
+  proofType: 'STRUCTURAL_PROOF' | 'BINDING_PROOF' | 'TEMPORAL_PROOF';
+  proofStatus: AnonymousVehicleIdentityProofStatus;
+  issuerId: string;
+  protocolVersion: string;
+  createdAt: string;
+  envelopeFingerprint: string;
+  proofFingerprint: string;
+  proofBindingRef: string;
+}
+
+/**
+ * Input parameters for building a proof
+ * 
+ * FIELDS:
+ * - proofId (optional): If provided, use this ID; otherwise generate
+ * - proofVersion (optional): Proof version (default: '1.0')
+ * - proofType (optional): Type of proof (default: 'STRUCTURAL_PROOF')
+ * - proofBindingRef (optional): Reference for proof binding relationship
+ * - timestamp (optional): When proof was created (default: now)
+ */
+export interface AnonymousVehicleIdentityProofInput {
+  proofId?: string;
+  proofVersion?: string;
+  proofType?: 'STRUCTURAL_PROOF' | 'BINDING_PROOF' | 'TEMPORAL_PROOF';
+  proofBindingRef?: string;
+  timestamp?: string;
+}
+
+/**
+ * Proof envelope for an Anonymous Vehicle Identity
+ * 
+ * Combines identity, scope metadata, attestation, AND proof
+ * into a complete, sealed package with proof references.
+ * 
+ * FIELDS:
+ * - identity: AnonymousVehicleIdentity (Phase 1)
+ * - scopeMetadata: Scope context (Phase 2)
+ * - attestation: Issuer assertion (Phase 3/4)
+ * - proof: Proof structure (Phase 7)
+ */
+export interface AnonymousVehicleIdentityProofEnvelope {
+  identity: AnonymousVehicleIdentity;
+  scopeMetadata: AnonymousVehicleIdentityScopeMetadata;
+  attestation: AnonymousVehicleIdentityAttestation;
+  proof: AnonymousVehicleIdentityProof;
+}
+
+/**
+ * Build proof fingerprint for an Anonymous Vehicle Identity Attested Envelope
+ * 
+ * Pure function: Creates deterministic hash representing proof identity
+ * Does NOT include VIN, does NOT validate externally, does NOT use cryptography
+ * 
+ * INPUTS:
+ * - envelope: AnonymousVehicleIdentityAttestedEnvelope (from Phase 3-6)
+ * - input: Proof input (optional fields for customization)
+ * 
+ * COMPUTATION:
+ * - Hash envelope fingerprint + proof metadata
+ * - Ensures unique identifiers for each proof
+ * - Enables future binding verification
+ * 
+ * @param envelope - Attested envelope with Phase 1-6 data
+ * @param input - Optional proof input parameters
+ * @returns 32-character hex proof fingerprint
+ */
+export function buildAnonymousVehicleIdentityProofFingerprint(
+  envelope: AnonymousVehicleIdentityAttestedEnvelope,
+  input: AnonymousVehicleIdentityProofInput
+): string {
+  // Extract proof metadata
+  const proofType = input.proofType || 'STRUCTURAL_PROOF';
+  const proofVersion = input.proofVersion || '1.0';
+  const timestamp = input.timestamp || new Date().toISOString();
+  const proofBindingRef = input.proofBindingRef || 'default';
+
+  // Create deterministic input from proof + envelope fields
+  // Order is critical for consistency
+  const fingerprintInput = [
+    envelope.attestation.envelopeFingerprint,
+    envelope.attestation.issuerId,
+    envelope.attestation.attestationId,
+    proofType,
+    proofVersion,
+    timestamp,
+    proofBindingRef,
+    envelope.attestation.protocolVersion,
+  ].join('|');
+
+  // Generate deterministic hash
+  return generateDeterministicHash(fingerprintInput);
+}
+
+/**
+ * Build an Anonymous Vehicle Identity Proof
+ * 
+ * Pure function: Creates proof structure for an attested envelope
+ * Does NOT validate cryptographically, does NOT check external authorities
+ * 
+ * INPUTS:
+ * - envelope: AnonymousVehicleIdentityAttestedEnvelope (from Phase 1-6)
+ * - input: Proof build input with optional customization
+ * 
+ * DEFAULTS:
+ * - proofVersion: '1.0'
+ * - proofType: 'STRUCTURAL_PROOF'
+ * - proofStatus: 'CREATED' (not yet bound)
+ * - timestamp: current ISO time
+ * 
+ * OUTPUTS:
+ * Creates AnonymousVehicleIdentityProof with:
+ * - Unique proofId (deterministic from envelope + timestamp)
+ * - Proof fingerprint (integrity hash)
+ * - Envelope fingerprint (binding reference)
+ * - Status set to CREATED
+ * 
+ * @param envelope - Attested envelope from Phases 1-6
+ * @param input - Optional proof input parameters
+ * @returns AnonymousVehicleIdentityProof
+ */
+export function buildAnonymousVehicleIdentityProof(
+  envelope: AnonymousVehicleIdentityAttestedEnvelope,
+  input: AnonymousVehicleIdentityProofInput
+): AnonymousVehicleIdentityProof {
+  // Validate inputs
+  if (!envelope?.attestation) {
+    throw new Error('Invalid envelope: missing attestation');
+  }
+
+  if (!envelope.attestation.envelopeFingerprint) {
+    throw new Error('Invalid attestation: missing envelopeFingerprint');
+  }
+
+  // Extract proof parameters with defaults
+  const proofVersion = input?.proofVersion || '1.0';
+  const proofType = input?.proofType || 'STRUCTURAL_PROOF';
+  const timestamp = input?.timestamp || new Date().toISOString();
+  const proofBindingRef = input?.proofBindingRef || envelope.attestation.envelopeFingerprint;
+
+  // Build proof ID (deterministic from envelope + timestamp)
+  const proofIdInput = `${envelope.attestation.envelopeFingerprint}|${timestamp}|${proofType}`;
+  const proofIdSuffix = generateDeterministicHash(proofIdInput).substring(0, 16);
+  const proofId = input?.proofId || `proof_${proofIdSuffix}`;
+
+  // Build proof fingerprint
+  const proofFingerprint = buildAnonymousVehicleIdentityProofFingerprint(envelope, {
+    proofVersion,
+    proofType,
+    timestamp,
+    proofBindingRef,
+  });
+
+  // Create proof object
+  const proof: AnonymousVehicleIdentityProof = {
+    proofId,
+    proofVersion,
+    proofType,
+    proofStatus: 'CREATED',
+    issuerId: envelope.attestation.issuerId,
+    protocolVersion: envelope.attestation.protocolVersion,
+    createdAt: timestamp,
+    envelopeFingerprint: envelope.attestation.envelopeFingerprint,
+    proofFingerprint,
+    proofBindingRef,
+  };
+
+  return proof;
+}
+
+/**
+ * Build an Anonymous Vehicle Identity Proof Envelope
+ * 
+ * Pure function: Combines attested envelope with proof into final package
+ * 
+ * INPUT:
+ * - envelope: AnonymousVehicleIdentityAttestedEnvelope (from Phase 1-5)
+ * - proof: AnonymousVehicleIdentityProof (from Phase 7)
+ * 
+ * OUTPUT:
+ * AnonymousVehicleIdentityProofEnvelope containing:
+ * - All Phase 1-5 data (identity, scope, attestation)
+ * - Phase 7 proof structure
+ * 
+ * VALIDATION:
+ * - Verifies envelope has all required fields
+ * - Verifies proof has all required fields
+ * - Ensures consistency between envelope and proof issuerId
+ * 
+ * @param envelope - Attested envelope from Phases 1-6
+ * @param proof - Proof object from Phase 7
+ * @returns AnonymousVehicleIdentityProofEnvelope
+ */
+export function buildAnonymousVehicleIdentityProofEnvelope(
+  envelope: AnonymousVehicleIdentityAttestedEnvelope,
+  proof: AnonymousVehicleIdentityProof
+): AnonymousVehicleIdentityProofEnvelope {
+  // Validate attested envelope
+  if (!envelope?.identity?.anonymousVehicleId) {
+    throw new Error('Invalid envelope: missing identity');
+  }
+
+  if (!envelope?.scopeMetadata?.issuerId) {
+    throw new Error('Invalid envelope: missing scope metadata');
+  }
+
+  if (!envelope?.attestation?.attestationId) {
+    throw new Error('Invalid envelope: missing attestation');
+  }
+
+  // Validate proof
+  if (!proof?.proofId) {
+    throw new Error('Invalid proof: missing proofId');
+  }
+
+  if (!proof?.envelopeFingerprint) {
+    throw new Error('Invalid proof: missing envelopeFingerprint');
+  }
+
+  // Verify consistency between envelope and proof
+  if (proof.envelopeFingerprint !== envelope.attestation.envelopeFingerprint) {
+    throw new Error(
+      'Mismatch: proof envelopeFingerprint does not match attestation envelopeFingerprint'
+    );
+  }
+
+  if (proof.issuerId !== envelope.attestation.issuerId) {
+    throw new Error('Mismatch: proof issuerId does not match attestation issuerId');
+  }
+
+  // Build final proof envelope
+  const proofEnvelope: AnonymousVehicleIdentityProofEnvelope = {
+    identity: envelope.identity,
+    scopeMetadata: envelope.scopeMetadata,
+    attestation: envelope.attestation,
+    proof,
+  };
+
+  return proofEnvelope;
+}
+
 export function issueAnonymousVehicleIdentity(
   request: AnonymousVehicleIdentityRequest
 ): AnonymousVehicleIdentity {
