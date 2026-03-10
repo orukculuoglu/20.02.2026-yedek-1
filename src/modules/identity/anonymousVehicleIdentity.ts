@@ -74,6 +74,13 @@ import {
   generateDeterministicHash,
 } from './identity.phase1';
 
+// Phase 2 implementation
+import {
+  buildAnonymousVehicleIdentityScopeMetadata,
+  buildAnonymousVehicleIdentityEnvelope,
+  buildAnonymousVehicleIdentityEnvelopeFingerprint,
+} from './identity.phase2';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -115,6 +122,13 @@ export type {
 export {
   issueAnonymousVehicleIdentity,
   generateDeterministicHash,
+};
+
+// Phase 2 re-exports
+export {
+  buildAnonymousVehicleIdentityScopeMetadata,
+  buildAnonymousVehicleIdentityEnvelope,
+  buildAnonymousVehicleIdentityEnvelopeFingerprint,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1243,128 +1257,6 @@ export function validateAnonymousVehicleIdentityFederation(
   };
 
   return result;
-}
-
-/**
- * Build anonymous vehicle identity scope metadata
- * Pure function: Creates standardized scope context for an identity
- *
- * @param input - Scope metadata input
- * @returns AnonymousVehicleIdentityScopeMetadata
- */
-export function buildAnonymousVehicleIdentityScopeMetadata(
-  input: AnonymousVehicleIdentityScopeMetadataInput
-): AnonymousVehicleIdentityScopeMetadata {
-  // Validate input
-  if (!input.issuerId || !input.domain || !input.contextClass) {
-    throw new Error('Missing required scope metadata fields: issuerId, domain, contextClass');
-  }
-
-  // Determine epoch based on epochType
-  let epoch: string;
-  if (input.epochType === 'MONTHLY') {
-    const now = new Date();
-    epoch = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  } else if (input.epochType === 'QUARTERLY') {
-    const now = new Date();
-    const quarter = Math.ceil((now.getMonth() + 1) / 3);
-    epoch = `${now.getFullYear()}-Q${quarter}`;
-  } else if (input.epochType === 'ANNUAL') {
-    epoch = String(new Date().getFullYear());
-  } else {
-    // VERSION
-    epoch = input.customEpoch || 'v1.0';
-  }
-
-  // Build scope metadata
-  const scopeMetadata: AnonymousVehicleIdentityScopeMetadata = {
-    issuerId: input.issuerId,
-    issuerType: input.issuerType,
-    domain: input.domain,
-    subDomain: input.subDomain,
-    contextClass: input.contextClass,
-    usagePolicy: input.usagePolicy,
-    epoch,
-    epochType: input.epochType,
-    protocolVersion: input.protocolVersion,
-    scopeVersion: input.scopeVersion,
-  };
-
-  return scopeMetadata;
-}
-
-/**
- * Build anonymous vehicle identity envelope
- * Pure function: Combines identity and scope metadata into standard envelope
- *
- * @param identity - AnonymousVehicleIdentity from Phase 1
- * @param scopeMetadata - AnonymousVehicleIdentityScopeMetadata from Phase 2
- * @returns AnonymousVehicleIdentityEnvelope
- */
-export function buildAnonymousVehicleIdentityEnvelope(
-  identity: AnonymousVehicleIdentity,
-  scopeMetadata: AnonymousVehicleIdentityScopeMetadata
-): AnonymousVehicleIdentityEnvelope {
-  // Validate inputs
-  if (!identity?.anonymousVehicleId) {
-    throw new Error('Invalid identity: missing anonymousVehicleId');
-  }
-
-  if (!scopeMetadata?.issuerId) {
-    throw new Error('Invalid scope metadata: missing issuerId');
-  }
-
-  // Build envelope
-  const envelope: AnonymousVehicleIdentityEnvelope = {
-    identity,
-    scopeMetadata,
-  };
-
-  return envelope;
-}
-
-/**
- * Build anonymous vehicle identity envelope fingerprint
- * Pure function: Creates deterministic hash of identity + scope metadata
- *
- * The fingerprint is derived ONLY from identity and scope fields.
- * It does NOT include VIN or any verification data.
- * It enables integrity checking in future phases (but no verification in Phase 3).
- *
- * @param identity - AnonymousVehicleIdentity
- * @param scopeMetadata - AnonymousVehicleIdentityScopeMetadata
- * @param attestationVersion - Version for fingerprintgeneration (for future evolution)
- * @returns 32-character hex fingerprint
- */
-export function buildAnonymousVehicleIdentityEnvelopeFingerprint(
-  identity: AnonymousVehicleIdentity,
-  scopeMetadata: AnonymousVehicleIdentityScopeMetadata,
-  attestationVersion: string = '1.0'
-): string {
-  // Create deterministic input from identity + scope fields
-  // Order is critical for consistency across calls
-  const fingerprintInput = [
-    identity.anonymousVehicleId,
-    identity.issuerId,
-    identity.domain,
-    identity.contextClass,
-    identity.epoch,
-    identity.protocolVersion,
-    scopeMetadata.issuerId,
-    scopeMetadata.issuerType,
-    scopeMetadata.domain,
-    scopeMetadata.subDomain || '',
-    scopeMetadata.contextClass,
-    scopeMetadata.usagePolicy,
-    scopeMetadata.epoch,
-    scopeMetadata.epochType,
-    scopeMetadata.protocolVersion,
-    scopeMetadata.scopeVersion,
-    attestationVersion,
-  ].join('|');
-
-  // Generate deterministic hash
-  return generateDeterministicHash(fingerprintInput);
 }
 
 /**
