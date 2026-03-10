@@ -366,13 +366,531 @@ export interface AnonymousVehicleIdentityAttestationInput {
 }
 
 /**
- * Issue an anonymous vehicle identity
- * Pure function: Hashes VIN + metadata to generate anonymous ID
- * VIN is used only for computation and is never stored
- * 
- * @param request - AnonymousVehicleIdentityRequest containing VIN
- * @returns AnonymousVehicleIdentity with deterministically generated ID
+ * Anonymous Vehicle Identity Verification Status
+ * Phase 4: Protocol verification status enumeration
+ *
+ * Represents the result of verifying an attested envelope's consistency.
+ * Status values indicate which verification rules passed or failed.
  */
+export type AnonymousVehicleIdentityVerificationStatus =
+  | 'VALID'
+  | 'INVALID'
+  | 'EXPIRED'
+  | 'WRONG_SCOPE'
+  | 'UNAUTHORIZED_ISSUER'
+  | 'PROTOCOL_MISMATCH';
+
+/**
+ * Anonymous Vehicle Identity Verification Result
+ * Phase 4: Result of envelope verification
+ *
+ * Contains detailed information about what was verified and the outcome.
+ * Does NOT include VIN or any sensitive information.
+ */
+export interface AnonymousVehicleIdentityVerificationResult {
+  /**
+   * Unique verification identifier
+   * Format: 'verify_' + UUID or deterministic ID
+   * Enables tracking and audit trails
+   */
+  verificationId: string;
+
+  /**
+   * ISO 8601 timestamp when verification was performed
+   */
+  verifiedAt: string;
+
+  /**
+   * Current verification status
+   * VALID: All checks passed
+   * INVALID: Required fields missing or fingerprint mismatch
+   * WRONG_SCOPE: Expected domain or context doesn't match
+   * UNAUTHORIZED_ISSUER: Expected issuer ID doesn't match
+   * PROTOCOL_MISMATCH: Protocol versions don't match
+   * EXPIRED: Reserved for future epoch expiry implementation
+   */
+  status: AnonymousVehicleIdentityVerificationStatus;
+
+  /**
+   * Protocol version that generated the identity
+   */
+  protocolVersion: string;
+
+  /**
+   * Verification format version
+   * Enables evolution of verification result structure
+   */
+  verificationVersion: string;
+
+  /**
+   * Verified issuer ID
+   */
+  issuerId: string;
+
+  /**
+   * Envelope fingerprint from attestation
+   * Used to detect tampering or modifications
+   */
+  envelopeFingerprint: string;
+
+  /**
+   * Detailed reasons for verification status
+   * Array of strings explaining specific checks
+   */
+  reasons: string[];
+}
+
+/**
+ * Anonymous Vehicle Identity Verification Input
+ * Phase 4: Input contract for envelope verification
+ *
+ * Allows callers to optionally specify expected values.
+ * Verification will check against actual values if provided.
+ */
+export interface AnonymousVehicleIdentityVerificationInput {
+  /**
+   * Expected issuer ID
+   * If provided, actual issuer must match
+   * Optional - verification succeeds without this check if omitted
+   */
+  expectedIssuerId?: string;
+
+  /**
+   * Expected domain
+   * If provided, identity domain must match
+   * Optional - verification succeeds without this check if omitted
+   */
+  expectedDomain?: string;
+
+  /**
+   * Expected context class
+   * If provided, identity context class must match
+   * Optional - verification succeeds without this check if omitted
+   */
+  expectedContextClass?: string;
+
+  /**
+   * Expected protocol version
+   * If provided, all protocol versions must match this
+   * Optional - verification succeeds without this check if omitted
+   */
+  expectedProtocolVersion?: string;
+
+  /**
+   * Verification version
+   * Required - identifies version of verification rules used
+   */
+  verificationVersion: string;
+}
+
+/**
+ * Verify anonymous vehicle identity attested envelope
+ * Pure function: Validates envelope structure and consistency
+ *
+ * This verification checks:
+ * - All required fields are present
+ * - Issuer ID consistency across layers
+ * - Protocol version consistency
+ * - Fingerprint integrity
+ * - Optional expected values (if provided)
+ *
+ * This does NOT:
+ * - Use VIN
+ * - Verify VIN matches ID
+ * - Validate issuer authority
+ * - Check cryptographic signatures
+ * - Implement proof-of-origin
+ *
+ * @param envelope - AnonymousVehicleIdentityAttestedEnvelope to verify
+ * @param input - AnonymousVehicleIdentityVerificationInput with expected values
+ * @returns AnonymousVehicleIdentityVerificationResult with status and details
+ */
+export function verifyAnonymousVehicleIdentityEnvelope(
+  envelope: AnonymousVehicleIdentityAttestedEnvelope,
+  input: AnonymousVehicleIdentityVerificationInput
+): AnonymousVehicleIdentityVerificationResult {
+  const reasons: string[] = [];
+  let status: AnonymousVehicleIdentityVerificationStatus = 'VALID';
+  const verifiedAt = new Date().toISOString();
+
+  // Generate verification ID (deterministic)
+  const verificationIdInput = `${envelope.identity.anonymousVehicleId}|${envelope.attestation.attestationId}|${verifiedAt}`;
+  const verificationIdSuffix = generateDeterministicHash(verificationIdInput).substring(0, 16);
+  const verificationId = `verify_${verificationIdSuffix}`;
+
+  // Check 1: Required identity fields
+  if (!envelope.identity?.anonymousVehicleId) {
+    reasons.push('Identity missing anonymousVehicleId');
+    status = 'INVALID';
+  }
+
+  // Check 2: Required scope metadata fields
+  if (!envelope.scopeMetadata?.issuerId) {
+    reasons.push('Scope metadata missing issuerId');
+    status = 'INVALID';
+  }
+
+  // Check 3: Required attestation fields
+  if (!envelope.attestation?.attestationId) {
+    reasons.push('Attestation missing attestationId');
+    status = 'INVALID';
+  }
+
+  // Check 4: Issuer consistency
+  if (envelope.attestation.issuerId !== envelope.scopeMetadata.issuerId) {
+    reasons.push(
+      `Attestation issuerId (${envelope.attestation.issuerId}) does not match scope issuerId (${envelope.scopeMetadata.issuerId})`
+    );
+    status = 'INVALID';
+  }
+
+  // Check 5: Identity and scope protocol version consistency
+  if (envelope.identity.protocolVersion !== envelope.scopeMetadata.protocolVersion) {
+    reasons.push(
+      `Identity protocol version (${envelope.identity.protocolVersion}) does not match scope protocol version (${envelope.scopeMetadata.protocolVersion})`
+    );
+    status = 'PROTOCOL_MISMATCH';
+  }
+
+  // Check 6: Attestation and identity protocol version consistency
+  if (envelope.attestation.protocolVersion !== envelope.identity.protocolVersion) {
+    reasons.push(
+      `Attestation protocol version (${envelope.attestation.protocolVersion}) does not match identity protocol version (${envelope.identity.protocolVersion})`
+    );
+    status = 'PROTOCOL_MISMATCH';
+  }
+
+  // Check 7: Recompute fingerprint and validate
+  const recomputedFingerprint = buildAnonymousVehicleIdentityEnvelopeFingerprint(
+    envelope.identity,
+    envelope.scopeMetadata,
+    envelope.attestation.attestationVersion
+  );
+
+  if (recomputedFingerprint !== envelope.attestation.envelopeFingerprint) {
+    reasons.push(
+      `Envelope fingerprint mismatch: expected ${envelope.attestation.envelopeFingerprint}, computed ${recomputedFingerprint}`
+    );
+    status = 'INVALID';
+  }
+
+  // Check 8: Optional expected issuer ID
+  if (input.expectedIssuerId && envelope.scopeMetadata.issuerId !== input.expectedIssuerId) {
+    reasons.push(
+      `Expected issuerId (${input.expectedIssuerId}) does not match actual issuerId (${envelope.scopeMetadata.issuerId})`
+    );
+    status = 'UNAUTHORIZED_ISSUER';
+  }
+
+  // Check 9: Optional expected domain
+  if (input.expectedDomain && envelope.identity.domain !== input.expectedDomain) {
+    reasons.push(
+      `Expected domain (${input.expectedDomain}) does not match actual domain (${envelope.identity.domain})`
+    );
+    status = 'WRONG_SCOPE';
+  }
+
+  // Check 10: Optional expected context class
+  if (input.expectedContextClass && envelope.identity.contextClass !== input.expectedContextClass) {
+    reasons.push(
+      `Expected context class (${input.expectedContextClass}) does not match actual context class (${envelope.identity.contextClass})`
+    );
+    status = 'WRONG_SCOPE';
+  }
+
+  // Check 11: Optional expected protocol version
+  if (input.expectedProtocolVersion && envelope.identity.protocolVersion !== input.expectedProtocolVersion) {
+    reasons.push(
+      `Expected protocol version (${input.expectedProtocolVersion}) does not match actual protocol version (${envelope.identity.protocolVersion})`
+    );
+    status = 'PROTOCOL_MISMATCH';
+  }
+
+  // Build result
+  const result: AnonymousVehicleIdentityVerificationResult = {
+    verificationId,
+    verifiedAt,
+    status,
+    protocolVersion: envelope.identity.protocolVersion,
+    verificationVersion: input.verificationVersion,
+    issuerId: envelope.scopeMetadata.issuerId,
+    envelopeFingerprint: envelope.attestation.envelopeFingerprint,
+    reasons,
+  };
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 5: LOCAL ISSUER TRUST REGISTRY & TRUST VALIDATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Trust status values for issuer trust validation
+ * 
+ * - TRUSTED: Issuer is authenticated and authorized
+ * - UNTRUSTED: Issuer exists but is not authorized
+ * - REVOKED: Issuer was previously trusted but is now revoked
+ */
+export type AnonymousVehicleIdentityTrustStatus = 'TRUSTED' | 'UNTRUSTED' | 'REVOKED';
+
+/**
+ * Trust level for authenticated issuers
+ * 
+ * - HIGH: Fully authenticated and authorized (default for TRUSTED)
+ * - MEDIUM: Partially authenticated or limited scope
+ * - LOW: Minimal authentication, highest caution required
+ * - REVOKED: Previously trusted but now revoked
+ */
+export type AnonymousVehicleIdentityTrustLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'REVOKED';
+
+/**
+ * Trusted Issuer definition in the local registry
+ * 
+ * Represents an issuer that is authorized to create anonymous vehicle identities
+ * for specific domains and context classes. The registry is maintained locally
+ * and does not require external validation or network access.
+ */
+export interface AnonymousVehicleTrustedIssuer {
+  /**
+   * Unique identifier for this issuer
+   * Examples: 'EXPERTISE', 'INSURANCE', 'SERVICE_PARTNER'
+   */
+  issuerId: string;
+
+  /**
+   * Type of issuer
+   * Examples: 'INTERNAL', 'PARTNER', 'AFFILIATE', 'THIRD_PARTY'
+   */
+  issuerType: string;
+
+  /**
+   * Human-readable name of the issuer
+   * Examples: 'Expertise Auto Services', 'Insurance Company ABC'
+   */
+  issuerName: string;
+
+  /**
+   * List of domains this issuer is authorized for
+   * Empty array means authorized for all domains
+   * Examples: ['maintenance', 'insurance', 'fleet-management']
+   */
+  domains: string[];
+
+  /**
+   * List of context classes this issuer is authorized for
+   * Empty array means authorized for all context classes
+   * Examples: ['commercial-vehicle', 'personal', 'rental']
+   */
+  contextClasses: string[];
+
+  /**
+   * Current trust status of this issuer
+   */
+  trustStatus: AnonymousVehicleIdentityTrustStatus;
+
+  /**
+   * Trust level indicating degree of authentication
+   */
+  trustLevel: AnonymousVehicleIdentityTrustLevel;
+
+  /**
+   * When this issuer was added to the registry (ISO 8601)
+   */
+  createdAt: string;
+
+  /**
+   * When this issuer entry was last updated (ISO 8601)
+   */
+  updatedAt: string;
+
+  /**
+   * Version of registry format this issuer record uses
+   */
+  registryVersion: string;
+}
+
+/**
+ * Local Issuer Registry
+ * 
+ * Centralized repository of trusted issuers and their authorization scopes.
+ * This registry is maintained locally and enables trust validation without
+ * external network calls or cryptographic operations.
+ */
+export interface AnonymousVehicleIssuerRegistry {
+  /**
+   * Version of the registry schema
+   * Enables evolution of registry structure
+   */
+  registryVersion: string;
+
+  /**
+   * Map of issuerId → AnonymousVehicleTrustedIssuer
+   * Index for O(1) lookup of issuer information
+   */
+  issuers: Record<string, AnonymousVehicleTrustedIssuer>;
+}
+
+/**
+ * Result of trust validation for an attested envelope
+ * 
+ * Contains detailed information about whether the issuer of an envelope
+ * is trusted according to the local registry.
+ */
+export interface AnonymousVehicleIdentityTrustValidationResult {
+  /**
+   * Unique identifier for this validation
+   * Format: trust_[timestamp]_[hash]
+   */
+  trustId: string;
+
+  /**
+   * When this validation was performed (ISO 8601)
+   */
+  validatedAt: string;
+
+  /**
+   * Issuer ID being validated
+   */
+  issuerId: string;
+
+  /**
+   * Trust status of the issuer
+   */
+  trustStatus: AnonymousVehicleIdentityTrustStatus;
+
+  /**
+   * Trust level of the issuer
+   */
+  trustLevel: AnonymousVehicleIdentityTrustLevel;
+
+  /**
+   * Version of registry used for this validation
+   */
+  registryVersion: string;
+
+  /**
+   * Detailed reasons for trust decision
+   * Empty array if trustStatus is TRUSTED
+   * Contains explanations if UNTRUSTED or REVOKED
+   */
+  reasons: string[];
+}
+
+/**
+ * Validate issuer trust for an Anonymous Vehicle Identity envelope
+ * 
+ * Phase 5 Trust Validation: Verifies that the issuer of an attested envelope
+ * is in the local trusted issuer registry and is authorized for the envelope's
+ * domain and context class.
+ * 
+ * This is a pure function that:
+ * - Checks issuer existence in registry
+ * - Validates trust status (TRUSTED required)
+ * - Verifies domain authorization
+ * - Verifies context class authorization
+ * - Returns detailed validation result
+ * 
+ * Does NOT:
+ * - Contact external systems
+ * - Validate cryptographic signatures
+ * - Check issuer credentials or certificates
+ * - Perform expiration validation (Phase 6)
+ * - Verify proof-of-origin (Phase 7)
+ * 
+ * @param envelope - Attested envelope to validate (from Phase 3)
+ * @param registry - Local trusted issuer registry
+ * @returns Trust validation result with status and detailed reasons
+ */
+export function validateAnonymousVehicleIssuerTrust(
+  envelope: AnonymousVehicleIdentityAttestedEnvelope,
+  registry: AnonymousVehicleIssuerRegistry
+): AnonymousVehicleIdentityTrustValidationResult {
+  // Generate trust validation ID
+  const timestamp = new Date().toISOString();
+  const trustIdHash = generateDeterministicHash(`${timestamp}|${envelope.attestation.issuerId}`).substring(0, 8);
+  const trustId = `trust_${timestamp}_${trustIdHash}`;
+
+  // Extract issuer from envelope
+  const issuerId = envelope.attestation.issuerId;
+
+  // Result container
+  const reasons: string[] = [];
+  let trustStatus: AnonymousVehicleIdentityTrustStatus = 'UNTRUSTED';
+  let trustLevel: AnonymousVehicleIdentityTrustLevel = 'LOW';
+
+  // Check 1: Issuer must exist in registry
+  const registryIssuer = registry.issuers[issuerId];
+  if (!registryIssuer) {
+    reasons.push(`Issuer '${issuerId}' not found in trusted issuer registry`);
+    const result: AnonymousVehicleIdentityTrustValidationResult = {
+      trustId,
+      validatedAt: timestamp,
+      issuerId,
+      trustStatus,
+      trustLevel,
+      registryVersion: registry.registryVersion,
+      reasons,
+    };
+    return result;
+  }
+
+  // Check 2: Issuer trust status must be TRUSTED
+  if (registryIssuer.trustStatus !== 'TRUSTED') {
+    reasons.push(`Issuer '${issuerId}' has trust status '${registryIssuer.trustStatus}' (required: TRUSTED)`);
+    trustStatus = registryIssuer.trustStatus;
+    trustLevel = registryIssuer.trustLevel;
+    const result: AnonymousVehicleIdentityTrustValidationResult = {
+      trustId,
+      validatedAt: timestamp,
+      issuerId,
+      trustStatus,
+      trustLevel,
+      registryVersion: registry.registryVersion,
+      reasons,
+    };
+    return result;
+  }
+
+  // Check 3: Issuer must be authorized for envelope domain (if domain list not empty)
+  const envelopeDomain = envelope.scopeMetadata.domain;
+  if (registryIssuer.domains.length > 0 && !registryIssuer.domains.includes(envelopeDomain)) {
+    reasons.push(
+      `Issuer '${issuerId}' is not authorized for domain '${envelopeDomain}'. Authorized domains: ${registryIssuer.domains.join(', ')}`
+    );
+  }
+
+  // Check 4: Issuer must be authorized for envelope context class (if context class list not empty)
+  const envelopeContextClass = envelope.scopeMetadata.contextClass;
+  if (registryIssuer.contextClasses.length > 0 && !registryIssuer.contextClasses.includes(envelopeContextClass)) {
+    reasons.push(
+      `Issuer '${issuerId}' is not authorized for context class '${envelopeContextClass}'. Authorized classes: ${registryIssuer.contextClasses.join(', ')}`
+    );
+  }
+
+  // Determine final trust status based on checks
+  if (reasons.length === 0) {
+    trustStatus = 'TRUSTED';
+    trustLevel = registryIssuer.trustLevel;
+  } else {
+    trustStatus = 'UNTRUSTED';
+    trustLevel = 'LOW';
+  }
+
+  // Build result
+  const result: AnonymousVehicleIdentityTrustValidationResult = {
+    trustId,
+    validatedAt: timestamp,
+    issuerId,
+    trustStatus,
+    trustLevel,
+    registryVersion: registry.registryVersion,
+    reasons,
+  };
+
+  return result;
+}
+
 export function issueAnonymousVehicleIdentity(
   request: AnonymousVehicleIdentityRequest
 ): AnonymousVehicleIdentity {
