@@ -207,3 +207,34 @@ export {
   GuardLayerError,
   GuardLayerErrorCode,
 } from './identity.phase10';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 11: FEED / EXCHANGE LAYER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export {
+  buildAnonymousVehicleIdentityExchangeRecord,
+  buildAnonymousVehicleIdentityExchangePayload,
+} from './identity.phase11';
+
+export type {
+  AnonymousVehicleIdentityExchangeStatus,
+  AnonymousVehicleIdentityExchangeRecord,
+  AnonymousVehicleIdentityExchangePayload,
+} from './identity.phase11';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 12: EVENT LAYER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export {
+  buildAnonymousVehicleIdentityEvent,
+  buildAnonymousVehicleIdentityEventBundle,
+  buildAnonymousVehicleIdentityEventBundleExtended,
+} from './identity.phase12';
+
+export type {
+  AnonymousVehicleIdentityEventType,
+  AnonymousVehicleIdentityEvent,
+  AnonymousVehicleIdentityEventBundle,
+} from './identity.phase12';

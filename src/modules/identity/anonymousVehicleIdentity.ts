@@ -122,6 +122,19 @@ import {
   GuardLayerErrorCode,
 } from './identity.phase10';
 
+// Phase 11 implementation (feed/exchange layer)
+import {
+  buildAnonymousVehicleIdentityExchangeRecord,
+  buildAnonymousVehicleIdentityExchangePayload,
+} from './identity.phase11';
+
+// Phase 12 implementation (event layer)
+import {
+  buildAnonymousVehicleIdentityEvent,
+  buildAnonymousVehicleIdentityEventBundle,
+  buildAnonymousVehicleIdentityEventBundleExtended,
+} from './identity.phase12';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -211,6 +224,19 @@ export {
   createFederatedVehicleIdentityGuarded,
   GuardLayerError,
   GuardLayerErrorCode,
+};
+
+// Phase 11 re-exports (feed/exchange layer)
+export {
+  buildAnonymousVehicleIdentityExchangeRecord,
+  buildAnonymousVehicleIdentityExchangePayload,
+};
+
+// Phase 12 re-exports (event layer)
+export {
+  buildAnonymousVehicleIdentityEvent,
+  buildAnonymousVehicleIdentityEventBundle,
+  buildAnonymousVehicleIdentityEventBundleExtended,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
