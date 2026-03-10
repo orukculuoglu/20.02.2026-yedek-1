@@ -68,6 +68,12 @@ import {
   AnonymousVehicleIdentityFederationValidationResult,
 } from './identity.types';
 
+// Phase 1 implementation
+import {
+  issueAnonymousVehicleIdentity,
+  generateDeterministicHash,
+} from './identity.phase1';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -103,6 +109,12 @@ export type {
   AnonymousVehicleIdentityFederationEnvelope,
   AnonymousVehicleIdentityFederationValidationInput,
   AnonymousVehicleIdentityFederationValidationResult,
+};
+
+// Phase 1 re-exports
+export {
+  issueAnonymousVehicleIdentity,
+  generateDeterministicHash,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1231,85 +1243,6 @@ export function validateAnonymousVehicleIdentityFederation(
   };
 
   return result;
-}
-
-export function issueAnonymousVehicleIdentity(
-  request: AnonymousVehicleIdentityRequest
-): AnonymousVehicleIdentity {
-  // Validate input
-  if (!request.vin || !request.issuerId || !request.domain) {
-    throw new Error('Missing required fields: vin, issuerId, domain');
-  }
-
-  // Step 1: Determine epoch based on epochType
-  let epoch: string;
-  if (request.epochType === 'CURRENT_MONTH') {
-    const now = new Date();
-    epoch = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  } else if (request.epochType === 'CURRENT_YEAR') {
-    epoch = String(new Date().getFullYear());
-  } else if (request.epochType === 'CUSTOM') {
-    epoch = request.customEpoch || 'undefined';
-  } else {
-    // Default: version-based
-    epoch = request.epochType;
-  }
-
-  // Step 2: Create deterministic input for hashing
-  // Order is critical for consistency
-  const hashInput = [
-    request.vin,                          // VIN (temporary, will be discarded)
-    request.issuerId,
-    request.domain,
-    request.contextClass,
-    epoch,
-    request.protocolVersion,
-  ].join('|');
-
-  // Step 3: Generate deterministic hash using Web Crypto API
-  // This ensures same inputs always produce same output
-  const anonymousVehicleId = generateDeterministicHash(hashInput);
-
-  // Step 4: Create identity object (VIN is NOT included)
-  const identity: AnonymousVehicleIdentity = {
-    anonymousVehicleId: `anon_${anonymousVehicleId}`,
-    issuerId: request.issuerId,
-    domain: request.domain,
-    contextClass: request.contextClass,
-    epoch,
-    issuedAt: request.timestamp,
-    protocolVersion: request.protocolVersion,
-  };
-
-  // VIN exists only in this function scope and is discarded after hashing
-  return identity;
-}
-
-/**
- * Generate deterministic hash from input string
- * Uses SHA-256 to ensure cryptographic consistency
- * Returns 32-character hex string
- * 
- * @param input - String to hash (may contain VIN temporarily)
- * @returns 32-character hex hash
- */
-function generateDeterministicHash(input: string): string {
-  // Simple deterministic hash using string character codes
-  // For production, consider crypto.subtle.digest('SHA-256', ...) in modern browsers
-  
-  let hash = 0;
-  let char: number;
-  
-  // Process each character to create initial hash
-  for (let i = 0; i < input.length; i++) {
-    char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-
-  // Convert to 32-character hex string
-  const hashHex = Math.abs(hash).toString(16).padStart(32, '0');
-  return hashHex.substring(0, 32);
 }
 
 /**
