@@ -197,3 +197,13 @@ export {
 export type {
   CreateFederatedVehicleIdentityOptions,
 } from './identity.phase9';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 10: GUARD LAYER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export {
+  createFederatedVehicleIdentityGuarded,
+  GuardLayerError,
+  GuardLayerErrorCode,
+} from './identity.phase10';

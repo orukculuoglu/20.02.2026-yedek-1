@@ -115,6 +115,13 @@ import {
   createFederatedVehicleIdentity,
 } from './identity.phase9';
 
+// Phase 10 implementation (guard layer)
+import {
+  createFederatedVehicleIdentityGuarded,
+  GuardLayerError,
+  GuardLayerErrorCode,
+} from './identity.phase10';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RE-EXPORTS - For backward compatibility with existing imports
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -197,6 +204,13 @@ export {
 // Phase 9 re-exports (orchestrator)
 export {
   createFederatedVehicleIdentity,
+};
+
+// Phase 10 re-exports (guard layer)
+export {
+  createFederatedVehicleIdentityGuarded,
+  GuardLayerError,
+  GuardLayerErrorCode,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
