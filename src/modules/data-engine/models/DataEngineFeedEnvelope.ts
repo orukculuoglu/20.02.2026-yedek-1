@@ -12,7 +12,7 @@
  */
 
 import type { DataSourceType } from '../types/DataSourceType';
-import type { DataEngineTimestampModel } from '../types/DataEngineTimestampModel';
+import type { DataEngineTimestampModel } from './DataEngineTimestampModel';
 import type { FeedMetadataStructure } from '../metadata/FeedMetadataStructure';
 
 /**

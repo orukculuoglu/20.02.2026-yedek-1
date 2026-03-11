@@ -4,8 +4,8 @@
  * Unified export point for all Phase 1 core object model definitions.
  *
  * Folder Organization:
- * - models/ : Canonical entity structures (DataEngineEntity, DataEngineFeedEnvelope)
- * - types/ : Type definitions and unions (DataSourceType, DataEngineTimestampModel)
+ * - models/ : Canonical entity structures (DataEngineEntity, DataEngineFeedEnvelope, DataEngineTimestampModel)
+ * - types/ : Type definitions and unions (DataSourceType, DataEngineEntityType)
  * - metadata/ : Metadata structures (FeedMetadataStructure)
  * - examples/ : Realistic example objects and documentation
  */
@@ -15,7 +15,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type { DataSourceType } from './types/DataSourceType';
-export type { DataEngineTimestampModel } from './types/DataEngineTimestampModel';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // METADATA EXPORTS
@@ -27,7 +26,8 @@ export type { FeedMetadataStructure } from './metadata/FeedMetadataStructure';
 // MODEL EXPORTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type { DataEngineEntity } from './models/DataEngineEntity';
+export type { DataEngineTimestampModel } from './models/DataEngineTimestampModel';
+export type { DataEngineEntity, DataEngineEntityType } from './models/DataEngineEntity';
 export type { DataEngineFeedEnvelope } from './models/DataEngineFeedEnvelope';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -39,4 +39,4 @@ export {
   exampleInsuranceClaimFeed,
   exampleTelematicsDiagnosticFeed,
   exampleMaintenanceEntity,
-} from './examples/feedExamples';
+} from './examples/exampleFeedObjects';

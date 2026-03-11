@@ -9,13 +9,32 @@
  *
  * Central Principle:
  * - identityId is the exclusive vehicle linkage key
- * - payload contains normalized intelligence
+ * - normalizedAttributes contains canonical intelligence data
  * - metadata provides full traceability back to source feeds
  * - timestamps enable temporal analysis and causality tracking
  */
 
-import type { DataEngineTimestampModel } from '../types/DataEngineTimestampModel';
+import type { DataEngineTimestampModel } from './DataEngineTimestampModel';
 import type { FeedMetadataStructure } from '../metadata/FeedMetadataStructure';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTITY TYPE DEFINITION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Data Engine Entity Type Classification.
+ *
+ * Constrained set of entity types that can be produced by the Data Engine.
+ * Supports normalization readiness and downstream graph/index preparation.
+ */
+export type DataEngineEntityType =
+  | 'MAINTENANCE_EVENT'
+  | 'REPAIR_EVENT'
+  | 'DAMAGE_EVENT'
+  | 'DIAGNOSTIC_EVENT'
+  | 'PART_EVENT'
+  | 'USAGE_EVENT'
+  | 'OTHER';
 
 /**
  * Data Engine Entity.
@@ -28,14 +47,14 @@ import type { FeedMetadataStructure } from '../metadata/FeedMetadataStructure';
  *
  * Central Principle:
  * - identityId is the exclusive vehicle linkage key
- * - payload contains source-specific or normalized intelligence
+ * - normalizedAttributes contains normalized intelligence data
  * - metadata provides full traceability back to source feeds
  * - timestamps enable temporal analysis and causality tracking
  */
 export interface DataEngineEntity {
   /**
    * Unique identifier for this entity instance.
-   * Deterministically generated from identityId + entityType + payload signature.
+   * Deterministically generated from identityId + entityType + normalizedAttributes signature.
    *
    * Enables: deduplication, idempotency, audit trail linking
    *
@@ -61,14 +80,13 @@ export interface DataEngineEntity {
 
   /**
    * Entity type classification.
-   * Broad categorization of what this intelligence object represents.
+   * Constrained set of canonical entity types supported by the Data Engine.
    *
-   * Examples: 'maintenance_event', 'repair_record', 'diagnostic_report',
-   *           'recommendation_set', 'incident_alert', 'parts_usage'
+   * Examples: MAINTENANCE_EVENT, REPAIR_EVENT, DIAGNOSTIC_EVENT, DAMAGE_EVENT
    * 
    * Used for: filtering, routing, impact analysis graph construction
    */
-  readonly entityType: string;
+  readonly entityType: DataEngineEntityType;
 
   /**
    * Canonical category for this entity (optional).
@@ -82,7 +100,7 @@ export interface DataEngineEntity {
   readonly canonicalCategory?: string;
 
   /**
-   * Actual intelligence payload.
+   * Normalized intelligence attributes.
    * Source-specific or normalized data structure.
    *
    * Structure varies by entityType and source.
@@ -94,19 +112,19 @@ export interface DataEngineEntity {
    * Responsibility: Upstream system (Intelligence Engine) or
    * future normalization phase manages shape/evolution.
    */
-  readonly payload: Record<string, unknown>;
+  readonly normalizedAttributes: Record<string, unknown>;
 
   /**
-   * Feed metadata structure.
+   * Metadata structure.
    * Source traceability, schema version, confidence level, institutional context.
    */
-  readonly feedMetadata: FeedMetadataStructure;
+  readonly metadata: FeedMetadataStructure;
 
   /**
    * Timestamp envelope.
    * Event, observed, ingested, and possibly processed moments.
    */
-  readonly feedTimestamps: DataEngineTimestampModel;
+  readonly timestamps: DataEngineTimestampModel;
 
   /**
    * Entity lifecycle state (optional).
