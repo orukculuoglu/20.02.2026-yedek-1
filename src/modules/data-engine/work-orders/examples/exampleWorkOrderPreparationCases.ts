@@ -27,6 +27,7 @@ function createExampleExecutionResult(
       immediateCandidateCount: 0,
       criticalCandidateCount: 0,
     },
+    preparedAt: '2026-03-13T00:00:00Z',
   };
 }
 
