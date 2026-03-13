@@ -38,6 +38,7 @@ export function exampleScenario1_AllAccepted(): DataEngineTimelineCandidate {
       thresholdApplied: 'acceptedMax: 40',
       sourceScoreRefs: ['score-001-component'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-001-service',
@@ -50,6 +51,7 @@ export function exampleScenario1_AllAccepted(): DataEngineTimelineCandidate {
       thresholdApplied: 'acceptedMax: 35',
       sourceScoreRefs: ['score-001-service'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-001-composite',
@@ -62,6 +64,7 @@ export function exampleScenario1_AllAccepted(): DataEngineTimelineCandidate {
       thresholdApplied: 'acceptedMax: 38',
       sourceScoreRefs: ['score-001-composite'],
       evaluatedAt: timestamp,
+      properties: {},
     },
   ];
 
@@ -94,6 +97,7 @@ export function exampleScenario2_MixedWatchEscalate(): DataEngineTimelineCandida
       thresholdApplied: 'watchMax: 70',
       sourceScoreRefs: ['score-002-component'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-002-service',
@@ -106,6 +110,7 @@ export function exampleScenario2_MixedWatchEscalate(): DataEngineTimelineCandida
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-002-service'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-002-actor',
@@ -118,6 +123,7 @@ export function exampleScenario2_MixedWatchEscalate(): DataEngineTimelineCandida
       thresholdApplied: 'watchMax: 65',
       sourceScoreRefs: ['score-002-actor'],
       evaluatedAt: timestamp,
+      properties: {},
     },
   ];
 
@@ -150,6 +156,7 @@ export function exampleScenario3_SevereEscalateRejected(): DataEngineTimelineCan
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-003-composite'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-003-temporal',
@@ -162,6 +169,7 @@ export function exampleScenario3_SevereEscalateRejected(): DataEngineTimelineCan
       thresholdApplied: 'escalateMax: 85',
       sourceScoreRefs: ['score-003-temporal'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-003-component',
@@ -174,6 +182,7 @@ export function exampleScenario3_SevereEscalateRejected(): DataEngineTimelineCan
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-003-component'],
       evaluatedAt: timestamp,
+      properties: {},
     },
   ];
 
@@ -206,6 +215,7 @@ export function exampleScenario4_CriticalConsensus(): DataEngineTimelineCandidat
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-004-component'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-004-service',
@@ -218,6 +228,7 @@ export function exampleScenario4_CriticalConsensus(): DataEngineTimelineCandidat
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-004-service'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-004-temporal',
@@ -230,6 +241,7 @@ export function exampleScenario4_CriticalConsensus(): DataEngineTimelineCandidat
       thresholdApplied: 'escalateMax: 85',
       sourceScoreRefs: ['score-004-temporal'],
       evaluatedAt: timestamp,
+      properties: {},
     },
     {
       evaluationId: 'eval-004-composite',
@@ -242,6 +254,7 @@ export function exampleScenario4_CriticalConsensus(): DataEngineTimelineCandidat
       thresholdApplied: 'escalateMax: 90',
       sourceScoreRefs: ['score-004-composite'],
       evaluatedAt: timestamp,
+      properties: {},
     },
   ];
 
