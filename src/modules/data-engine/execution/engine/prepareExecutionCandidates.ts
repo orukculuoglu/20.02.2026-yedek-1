@@ -15,7 +15,8 @@ import { createHash } from 'crypto';
 import type { DataEngineExecutionCandidateInput } from '../models/DataEngineExecutionCandidateInput';
 import type { DataEngineExecutionCandidateResult } from '../models/DataEngineExecutionCandidateResult';
 import type { DataEngineExecutionCandidate } from '../models/DataEngineExecutionCandidate';
-import { createExecutionCandidate, createExecutionResult } from '../models/DataEngineExecutionCandidateResult';
+import { createExecutionCandidate } from '../models/DataEngineExecutionCandidate';
+import { createExecutionResult } from '../models/DataEngineExecutionCandidateResult';
 import {
   MONITORING_TASK,
   INSPECTION_TASK,
