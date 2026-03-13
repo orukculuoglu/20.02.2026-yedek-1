@@ -18,8 +18,6 @@ function createExampleExecutionResult(
   executionCandidates: any[]
 ): DataEngineWorkOrderCandidateInput {
   return {
-    identityId,
-    sourceEntityRef,
     executionCandidates,
     summary: {
       totalCandidates: executionCandidates.length,
@@ -29,7 +27,6 @@ function createExampleExecutionResult(
       immediateCandidateCount: 0,
       criticalCandidateCount: 0,
     },
-    preparedAt: new Date().toISOString(),
   };
 }
 

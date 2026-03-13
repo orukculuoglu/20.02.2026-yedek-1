@@ -150,9 +150,9 @@ export function createWorkOrderCandidates(
 
     // Generate deterministic ID
     const workOrderCandidateId = generateWorkOrderCandidateId(
-      input.identityId,
+      executionCandidate.identityId,
       mapping.workOrderType,
-      input.sourceEntityRef,
+      executionCandidate.sourceEntityRef,
       executionCandidate.priority
     );
 
@@ -168,8 +168,8 @@ export function createWorkOrderCandidates(
       workOrderCandidateId,
       mapping.workOrderType,
       executionCandidate.priority,
-      input.identityId,
-      input.sourceEntityRef,
+      executionCandidate.identityId,
+      executionCandidate.sourceEntityRef,
       [executionCandidate.executionCandidateId], // Traceability to source execution candidate
       executionCandidate.suggestedWindow,
       rationale,
