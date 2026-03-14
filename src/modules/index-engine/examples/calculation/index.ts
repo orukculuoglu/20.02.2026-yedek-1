@@ -58,6 +58,20 @@ export {
   lowConfidenceOperationalResult,
 } from './operational-readiness-index-examples';
 
+// Data Quality Index Calculator Examples
+export {
+  highQualityDataRequest,
+  highQualityDataResult,
+} from './data-quality-index-examples';
+export {
+  degradedDataQualityRequest,
+  degradedDataQualityResult,
+} from './data-quality-index-examples';
+export {
+  lowConfidenceDataQualityRequest,
+  lowConfidenceDataQualityResult,
+} from './data-quality-index-examples';
+
 // Legacy Examples (Phase 3 Infrastructure Validation)
 export { reliabilityCalculationRequestExample, reliabilityCalculationResultExample } from './reliability-calculation-example';
 export { maintenanceCalculationRequestExample, maintenanceCalculationResultExample } from './maintenance-calculation-example';

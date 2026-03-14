@@ -102,6 +102,7 @@ export {
   MaintenanceIndexCalculator,
   InsuranceRiskIndexCalculator,
   OperationalReadinessIndexCalculator,
+  DataQualityIndexCalculator,
 } from './domain/calculation/calculators';
 
 // ============================================================================
@@ -172,4 +173,14 @@ export {
   degradedOperationalResult,
   lowConfidenceOperationalRequest,
   lowConfidenceOperationalResult,
+} from './examples';
+
+// Phase 4 Calculator Examples - Data Quality Index Scenarios
+export {
+  highQualityDataRequest,
+  highQualityDataResult,
+  degradedDataQualityRequest,
+  degradedDataQualityResult,
+  lowConfidenceDataQualityRequest,
+  lowConfidenceDataQualityResult,
 } from './examples';

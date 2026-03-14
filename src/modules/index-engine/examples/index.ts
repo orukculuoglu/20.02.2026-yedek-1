@@ -41,4 +41,11 @@ export {
   degradedOperationalResult,
   lowConfidenceOperationalRequest,
   lowConfidenceOperationalResult,
+  // Phase 4 Calculator Examples - Data Quality Index Scenarios
+  highQualityDataRequest,
+  highQualityDataResult,
+  degradedDataQualityRequest,
+  degradedDataQualityResult,
+  lowConfidenceDataQualityRequest,
+  lowConfidenceDataQualityResult,
 } from './calculation';
