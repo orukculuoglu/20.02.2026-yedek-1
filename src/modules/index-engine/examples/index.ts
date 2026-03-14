@@ -34,4 +34,11 @@ export {
   elevatedRiskInsuranceResult,
   lowConfidenceInsuranceRiskRequest,
   lowConfidenceInsuranceRiskResult,
+  // Phase 4 Calculator Examples - Operational Readiness Index Scenarios
+  readyOperationalRequest,
+  readyOperationalResult,
+  degradedOperationalRequest,
+  degradedOperationalResult,
+  lowConfidenceOperationalRequest,
+  lowConfidenceOperationalResult,
 } from './calculation';

@@ -101,6 +101,7 @@ export {
   ReliabilityIndexCalculator,
   MaintenanceIndexCalculator,
   InsuranceRiskIndexCalculator,
+  OperationalReadinessIndexCalculator,
 } from './domain/calculation/calculators';
 
 // ============================================================================
@@ -161,4 +162,14 @@ export {
   elevatedRiskInsuranceResult,
   lowConfidenceInsuranceRiskRequest,
   lowConfidenceInsuranceRiskResult,
+} from './examples';
+
+// Phase 4 Calculator Examples - Operational Readiness Index Scenarios
+export {
+  readyOperationalRequest,
+  readyOperationalResult,
+  degradedOperationalRequest,
+  degradedOperationalResult,
+  lowConfidenceOperationalRequest,
+  lowConfidenceOperationalResult,
 } from './examples';

@@ -44,6 +44,20 @@ export {
   lowConfidenceInsuranceRiskResult,
 } from './insurance-risk-index-examples';
 
+// Operational Readiness Index Calculator Examples
+export {
+  readyOperationalRequest,
+  readyOperationalResult,
+} from './operational-readiness-index-examples';
+export {
+  degradedOperationalRequest,
+  degradedOperationalResult,
+} from './operational-readiness-index-examples';
+export {
+  lowConfidenceOperationalRequest,
+  lowConfidenceOperationalResult,
+} from './operational-readiness-index-examples';
+
 // Legacy Examples (Phase 3 Infrastructure Validation)
 export { reliabilityCalculationRequestExample, reliabilityCalculationResultExample } from './reliability-calculation-example';
 export { maintenanceCalculationRequestExample, maintenanceCalculationResultExample } from './maintenance-calculation-example';
