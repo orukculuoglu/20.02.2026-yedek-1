@@ -184,3 +184,16 @@ export {
   lowConfidenceDataQualityRequest,
   lowConfidenceDataQualityResult,
 } from './examples';
+
+// ============================================================================
+// GRAPH → INDEX ADAPTER LAYER
+// ============================================================================
+
+// Graph → Index transformation classes
+export {
+  GraphIndexAdapter,
+  GraphIndexRefBuilder,
+  GraphIndexEvidenceBuilder,
+  GraphIndexSnapshotBuilder,
+  GraphIndexFeatureExtractor,
+} from './domain/adapter';
