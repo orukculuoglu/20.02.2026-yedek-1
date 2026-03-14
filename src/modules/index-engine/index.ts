@@ -197,3 +197,34 @@ export {
   GraphIndexSnapshotBuilder,
   GraphIndexFeatureExtractor,
 } from './domain/adapter';
+
+// ============================================================================
+// PHASE 5: RUNTIME EXECUTION & PUBLICATION PIPELINE
+// ============================================================================
+
+// Runtime Orchestration & Execution
+export { IndexRuntimeOrchestrator } from './runtime/index-runtime-orchestrator';
+export { IndexExecutionEngine } from './runtime/index-execution-engine';
+export { IndexCalculationRunner } from './runtime/index-calculation-runner';
+export { IndexRecordFactory } from './runtime/index-record-factory';
+export { IndexPublicationService } from './runtime/index-publication-service';
+
+// Runtime Contracts
+export type {
+  IndexExecutionResult,
+  IndexPublicationEnvelope,
+  IndexRuntimeContext,
+} from './runtime/contracts';
+
+// Runtime Validators
+export { IndexRuntimeValidators } from './runtime/index-runtime-validators';
+
+// Runtime Examples
+export {
+  exampleReliabilityExecution,
+  exampleMaintenanceExecution,
+  exampleInsuranceExecution,
+  exampleOperationalReadinessExecution,
+  exampleDataQualityExecution,
+  runAllExamples,
+} from './runtime/examples';
