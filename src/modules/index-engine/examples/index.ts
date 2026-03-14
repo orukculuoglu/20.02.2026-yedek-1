@@ -27,4 +27,11 @@ export {
   overdueMaintenanceResult,
   lowConfidenceMaintenanceRequest,
   lowConfidenceMaintenanceResult,
+  // Phase 4 Calculator Examples - Insurance Risk Index Scenarios
+  lowRiskInsuranceRequest,
+  lowRiskInsuranceResult,
+  elevatedRiskInsuranceRequest,
+  elevatedRiskInsuranceResult,
+  lowConfidenceInsuranceRiskRequest,
+  lowConfidenceInsuranceRiskResult,
 } from './calculation';

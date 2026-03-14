@@ -30,6 +30,20 @@ export {
   lowConfidenceMaintenanceResult,
 } from './maintenance-index-examples';
 
+// Insurance Risk Index Calculator Examples
+export {
+  lowRiskInsuranceRequest,
+  lowRiskInsuranceResult,
+} from './insurance-risk-index-examples';
+export {
+  elevatedRiskInsuranceRequest,
+  elevatedRiskInsuranceResult,
+} from './insurance-risk-index-examples';
+export {
+  lowConfidenceInsuranceRiskRequest,
+  lowConfidenceInsuranceRiskResult,
+} from './insurance-risk-index-examples';
+
 // Legacy Examples (Phase 3 Infrastructure Validation)
 export { reliabilityCalculationRequestExample, reliabilityCalculationResultExample } from './reliability-calculation-example';
 export { maintenanceCalculationRequestExample, maintenanceCalculationResultExample } from './maintenance-calculation-example';

@@ -5,3 +5,4 @@
 
 export { ReliabilityIndexCalculator } from './reliability-index-calculator';
 export { MaintenanceIndexCalculator } from './maintenance-index-calculator';
+export { InsuranceRiskIndexCalculator } from './insurance-risk-index-calculator';

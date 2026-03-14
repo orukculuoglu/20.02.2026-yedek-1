@@ -100,6 +100,7 @@ export type { IIndexCalculator } from './domain/calculation/index-calculator';
 export {
   ReliabilityIndexCalculator,
   MaintenanceIndexCalculator,
+  InsuranceRiskIndexCalculator,
 } from './domain/calculation/calculators';
 
 // ============================================================================
@@ -150,4 +151,14 @@ export {
   overdueMaintenanceResult,
   lowConfidenceMaintenanceRequest,
   lowConfidenceMaintenanceResult,
+} from './examples';
+
+// Phase 4 Calculator Examples - Insurance Risk Index Scenarios
+export {
+  lowRiskInsuranceRequest,
+  lowRiskInsuranceResult,
+  elevatedRiskInsuranceRequest,
+  elevatedRiskInsuranceResult,
+  lowConfidenceInsuranceRiskRequest,
+  lowConfidenceInsuranceRiskResult,
 } from './examples';
