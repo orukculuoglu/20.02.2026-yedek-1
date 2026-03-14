@@ -4,3 +4,4 @@
  */
 
 export { ReliabilityIndexCalculator } from './reliability-index-calculator';
+export { MaintenanceIndexCalculator } from './maintenance-index-calculator';

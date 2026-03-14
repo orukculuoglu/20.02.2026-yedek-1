@@ -20,4 +20,11 @@ export {
   degradedVehicleReliabilityResult,
   lowConfidenceVehicleReliabilityRequest,
   lowConfidenceVehicleReliabilityResult,
+  // Phase 4 Calculator Examples - Maintenance Index Scenarios
+  healthyMaintenanceRequest,
+  healthyMaintenanceResult,
+  overdueMaintenanceRequest,
+  overdueMaintenanceResult,
+  lowConfidenceMaintenanceRequest,
+  lowConfidenceMaintenanceResult,
 } from './calculation';

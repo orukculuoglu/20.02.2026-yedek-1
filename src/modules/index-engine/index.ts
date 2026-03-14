@@ -97,7 +97,10 @@ export {
 export type { IIndexCalculator } from './domain/calculation/index-calculator';
 
 // Individual Index Type Calculators
-export { ReliabilityIndexCalculator } from './domain/calculation/calculators';
+export {
+  ReliabilityIndexCalculator,
+  MaintenanceIndexCalculator,
+} from './domain/calculation/calculators';
 
 // ============================================================================
 // EXAMPLES
@@ -137,4 +140,14 @@ export {
   degradedVehicleReliabilityResult,
   lowConfidenceVehicleReliabilityRequest,
   lowConfidenceVehicleReliabilityResult,
+} from './examples';
+
+// Phase 4 Calculator Examples - Maintenance Index Scenarios
+export {
+  healthyMaintenanceRequest,
+  healthyMaintenanceResult,
+  overdueMaintenanceRequest,
+  overdueMaintenanceResult,
+  lowConfidenceMaintenanceRequest,
+  lowConfidenceMaintenanceResult,
 } from './examples';
