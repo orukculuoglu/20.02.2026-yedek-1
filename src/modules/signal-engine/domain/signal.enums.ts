@@ -1,0 +1,33 @@
+/**
+ * Signal Engine domain enumerations
+ */
+
+export enum SignalStatus {
+  ACTIVE = 'ACTIVE',
+  RESOLVED = 'RESOLVED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum SignalSeverity {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export enum SignalPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export enum SignalCategory {
+  PREDICTIVE_MAINTENANCE = 'PREDICTIVE_MAINTENANCE',
+  RISK_ESCALATION = 'RISK_ESCALATION',
+  INSURANCE_PRESSURE = 'INSURANCE_PRESSURE',
+  SERVICE_URGENCY = 'SERVICE_URGENCY',
+  DATA_QUALITY = 'DATA_QUALITY',
+  OPERATIONAL_ANOMALY = 'OPERATIONAL_ANOMALY',
+  FLEET_ALERT = 'FLEET_ALERT',
+}
