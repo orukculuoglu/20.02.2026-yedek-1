@@ -1,6 +1,7 @@
 /**
  * Execution / Dispatch Engine module
  * Layer 8: Converts work orders into enterprise-grade delivery execution structures
+ * Layer 9: Defines deterministic system behavior after execution outcomes occur
  *
  * This module provides:
  * - Foundational dispatch domain model
@@ -11,6 +12,7 @@
  * - Dispatch runtime core for deterministic execution preparation
  * - Dispatch tracking core for delivery lifecycle & acknowledgement model
  * - Dispatch audit core for snapshot, log & deterministic audit model
+ * - Behavior layer domain model for policy and disposition contracts
  * - Module facade providing grouped access to all capabilities
  * - Cross-layer reference traceability
  * - Deterministic dispatch intent and record entities
@@ -21,6 +23,7 @@
  * - Deterministic runtime execution-ready artifacts
  * - Deterministic tracking and acknowledgement artifacts
  * - Deterministic snapshot and audit trail artifacts
+ * - Deterministic behavior policy and profile artifacts
  * - Production-safe contracts for dispatch orchestration
  * - Production-safe module API surface
  */
@@ -33,4 +36,5 @@ export * from './engine';
 export * from './runtime';
 export * from './tracking';
 export * from './audit';
+export * from './behavior';
 export * from './dispatch-engine.facade';
