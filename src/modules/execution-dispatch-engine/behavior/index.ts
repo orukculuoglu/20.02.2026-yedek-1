@@ -142,3 +142,91 @@ export {
   type EscalationEligibilityCriteria,
   type EscalationEligibilityRecord,
 } from './dispatch-escalation-eligibility.types';
+
+// Behavior Evaluation Layer Types
+export {
+  RetryEvaluationStatus,
+  EscalationEvaluationStatus,
+  type EvaluatedRetryVerdict,
+  type EvaluatedEscalationVerdict,
+  type SourceOutcomeReference,
+  type DispatchBehaviorEvaluationInput,
+  type DispatchBehaviorEvaluationResult,
+} from './dispatch-behavior-evaluation.types';
+
+export {
+  createEvaluatedRetryVerdict,
+  createEvaluatedEscalationVerdict,
+  createDispatchBehaviorEvaluationResult,
+  type CreateEvaluatedRetryVerdictInput,
+  type CreateEvaluatedEscalationVerdictInput,
+  type CreateDispatchBehaviorEvaluationResultInput,
+} from './dispatch-behavior-evaluation.entity';
+
+export type { DispatchBehaviorEvaluationService } from './dispatch-behavior-evaluation.service';
+
+// Behavior Runtime Integration Layer Types
+export {
+  RuntimeIntegrationStatus,
+  type RuntimeOutcomeReference,
+  type BehaviorEvaluationHandoffInput,
+  type DispatchBehaviorRuntimeIntegrationContract,
+} from './dispatch-behavior-runtime-integration.types';
+
+export {
+  createDispatchBehaviorRuntimeIntegrationContract,
+  type CreateDispatchBehaviorRuntimeIntegrationContractInput,
+} from './dispatch-behavior-runtime-integration.entity';
+
+export type { DispatchBehaviorRuntimeIntegrationService } from './dispatch-behavior-runtime-integration.service';
+
+// Behavior Snapshot / Trace Hook Layer Types
+export {
+  TraceStatus,
+  SnapshotStatus,
+  type EvaluationTraceRecord,
+  type IntegrationTraceRecord,
+  type BehaviorTraceHookRecord,
+  type BehaviorSnapshotRecord,
+} from './dispatch-behavior-snapshot-trace.types';
+
+export {
+  createEvaluationTraceRecord,
+  createIntegrationTraceRecord,
+  createBehaviorTraceHookRecord,
+  createBehaviorSnapshotRecord,
+  type CreateEvaluationTraceRecordInput,
+  type CreateIntegrationTraceRecordInput,
+  type CreateBehaviorTraceHookRecordInput,
+  type CreateBehaviorSnapshotRecordInput,
+} from './dispatch-behavior-snapshot-trace.entity';
+
+export type { DispatchBehaviorSnapshotTraceService } from './dispatch-behavior-snapshot-trace.service';
+
+// Behavior API Surface Layer Types
+export {
+  APIStatus,
+  type BehaviorEvaluationAPIRequest,
+  type BehaviorEvaluationAPIResponse,
+  type RuntimeIntegrationAPIRequest,
+  type RuntimeIntegrationAPIResponse,
+  type BehaviorSnapshotAPIRequest,
+  type BehaviorSnapshotAPIResponse,
+} from './dispatch-behavior-api-surface.types';
+
+export {
+  createBehaviorEvaluationAPIRequest,
+  createBehaviorEvaluationAPIResponse,
+  createRuntimeIntegrationAPIRequest,
+  createRuntimeIntegrationAPIResponse,
+  createBehaviorSnapshotAPIRequest,
+  createBehaviorSnapshotAPIResponse,
+  type CreateBehaviorEvaluationAPIRequestInput,
+  type CreateBehaviorEvaluationAPIResponseInput,
+  type CreateRuntimeIntegrationAPIRequestInput,
+  type CreateRuntimeIntegrationAPIResponseInput,
+  type CreateBehaviorSnapshotAPIRequestInput,
+  type CreateBehaviorSnapshotAPIResponseInput,
+} from './dispatch-behavior-api-surface.entity';
+
+export type { DispatchBehaviorAPISurfaceService } from './dispatch-behavior-api-surface.service';

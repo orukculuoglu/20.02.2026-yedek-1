@@ -41,22 +41,22 @@ export interface DispatchBehaviorProfile {
 
   /**
    * The retry policy governing automatic retry behavior
-   * Optional - may be null if no retry is configured
+   * Required - must always be configured
    */
-  retryPolicy: DispatchRetryPolicy | null;
+  retryPolicy: DispatchRetryPolicy;
 
   /**
    * The escalation policy governing escalation behavior
-   * Optional - may be null if no escalation is configured
+   * Required - must always be configured
    */
-  escalationPolicy: DispatchEscalationPolicy | null;
+  escalationPolicy: DispatchEscalationPolicy;
 
   /**
-   * Current behavioral disposition for this dispatch
+   * Default behavioral disposition for this dispatch
    * Determines the system's response when outcomes occur
    * Must be one of DispatchBehaviorDisposition enum values
    */
-  disposition: DispatchBehaviorDisposition;
+  defaultDisposition: DispatchBehaviorDisposition;
 
   /**
    * Timestamp when this behavior profile was created (milliseconds since epoch)

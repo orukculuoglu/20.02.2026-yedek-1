@@ -156,19 +156,19 @@ export interface CreateDispatchBehaviorProfileInput {
   dispatchId: string;
 
   /**
-   * Retry policy (optional)
+   * Retry policy (required)
    */
-  retryPolicy: DispatchRetryPolicy | null;
+  retryPolicy: DispatchRetryPolicy;
 
   /**
-   * Escalation policy (optional)
+   * Escalation policy (required)
    */
-  escalationPolicy: DispatchEscalationPolicy | null;
+  escalationPolicy: DispatchEscalationPolicy;
 
   /**
-   * Behavior disposition
+   * Default behavior disposition
    */
-  disposition: DispatchBehaviorDisposition;
+  defaultDisposition: DispatchBehaviorDisposition;
 
   /**
    * Timestamp of creation (explicitly provided)
@@ -260,7 +260,7 @@ export function createDispatchBehaviorProfile(
     dispatchId: input.dispatchId,
     retryPolicy: input.retryPolicy,
     escalationPolicy: input.escalationPolicy,
-    disposition: input.disposition,
+    defaultDisposition: input.defaultDisposition,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
   });
