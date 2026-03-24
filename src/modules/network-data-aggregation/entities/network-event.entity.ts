@@ -1,148 +1,126 @@
 /**
- * Network Event Entity Construction
- *
- * Motor 3: Market / Network Intelligence Engine
- * Layer 1: Network Data Aggregation
- * Phase 1: Network Event Entity
- *
- * Purpose:
- * Provides immutable entity construction boundary for NetworkEvent
- * based on established type contracts.
+ * MOTOR 3 — PHASE 2: NETWORK EVENT ENTITY
+ * Immutable Entity Structure for Network Events
  *
  * Scope:
- * - Entity construction only
- * - No normalization logic
- * - No aggregation logic
+ * - Entity layer only
+ * - No normalization
+ * - No aggregation
  * - No orchestration
- * - No runtime-generated values
- * - No service layer
+ * - No ID/timestamp generation
+ * - No validation logic
  *
- * Design Principles:
- * - All values explicitly provided
- * - No ID generation
- * - No timestamp generation
- * - No hidden defaults
- * - Immutability enforced via Object.freeze
- * - Deterministic construction only
- * - Pure factory pattern
- *
- * Constraints:
- * - No Date.now()
- * - No randomness
- * - No side effects
- * - No transformation logic
- * - No normalization logic
- * - No aggregation logic
- * - Strict typing only
+ * Purpose:
+ * Provide immutable entity representation of canonical network events.
+ * Bridge between type contracts and domain layers.
  */
 
-import {
-  NetworkEvent,
+import type {
   NetworkDomain,
   NetworkEventType,
   NetworkSourceRef,
-  NetworkRelatedRefs,
-  NetworkRawContext,
-} from '../types/network-event.types';
+} from '../types/network-foundation.types';
+import type { NetworkRelatedRefs } from '../types/network-event.types';
 
 /**
- * Input contract for creating a NetworkEvent entity
- *
- * All parameters must be explicitly provided from intake layer.
- *
- * Constraints:
- * - No mutation of input
- * - No calculation of values
- * - No generation of IDs or timestamps
- * - All timestamps explicitly provided
+ * Constructor input contract for NetworkEventEntity.
+ * Represents the minimal data required to construct an event entity.
+ * All fields required (no optional ambiguity).
  */
 export interface CreateNetworkEventInput {
-  /**
-   * Unique identifier for this network event
-   * Explicitly provided, not generated
-   */
-  networkEventId: string;
-
-  /**
-   * Semantic event type
-   * What category of event occurred
-   */
-  eventType: NetworkEventType;
-
-  /**
-   * Operational domain of this event
-   * What network domain the event applies to
-   */
-  networkDomain: NetworkDomain;
-
-  /**
-   * Source reference
-   * Which system and entity produced this event
-   */
-  sourceRef: NetworkSourceRef;
-
-  /**
-   * Related entity references
-   * Services, parts, fleets, regions involved in this event
-   */
-  relatedRefs: NetworkRelatedRefs;
-
-  /**
-   * Event timestamp (milliseconds since epoch)
-   * When the event occurred in source system
-   * Explicitly provided
-   */
-  eventTimestamp: number;
-
-  /**
-   * Raw, unprocessed context
-   * Transport-only data from originating system
-   */
-  rawContext: NetworkRawContext;
-
-  /**
-   * Intake timestamp (milliseconds since epoch)
-   * When event was received by Motor 3
-   * Explicitly provided
-   */
-  intakeTimestamp: number;
+  readonly networkEventId: string;
+  readonly domain: NetworkDomain;
+  readonly eventType: NetworkEventType;
+  readonly sourceRef: NetworkSourceRef;
+  readonly relatedRefs: NetworkRelatedRefs;
+  readonly eventTimestamp: string;
+  readonly rawContext: Readonly<Record<string, unknown>>;
 }
 
 /**
- * Type alias for NetworkEvent entity
+ * Immutable entity representation of a network event.
  *
- * Ensures all NetworkEvent objects go through
- * immutable construction via createNetworkEvent factory.
+ * NetworkEventEntity provides the structural entity layer
+ * for network events without introducing any runtime generation,
+ * normalization, aggregation, or validation logic.
  *
- * Immutable:
- * Network event entities are frozen and immutable.
+ * Immutability Contract:
+ * - All properties are readonly
+ * - Constructor assignment only
+ * - No mutation methods
+ * - No computed properties
+ * - Pure data structure
  */
-export type NetworkEventEntity = NetworkEvent;
+export class NetworkEventEntity {
+  /**
+   * Unique identifier for this network event.
+   * Immutable once constructed.
+   */
+  readonly networkEventId: string;
 
-/**
- * Factory function to create a NetworkEvent entity
- *
- * Produces a deterministic, immutable network event entity with:
- * - All parameters explicit from input
- * - No input mutation
- * - No value transformation
- * - Immutability enforced via Object.freeze
- * - Pure deterministic object creation only
- *
- * @param input - CreateNetworkEventInput
- * @returns NetworkEventEntity - Immutable network event entity
- */
-export function createNetworkEvent(
-  input: CreateNetworkEventInput
-): NetworkEventEntity {
-  return Object.freeze({
-    networkEventId: input.networkEventId,
-    eventType: input.eventType,
-    networkDomain: input.networkDomain,
-    sourceRef: input.sourceRef,
-    relatedRefs: input.relatedRefs,
-    eventTimestamp: input.eventTimestamp,
-    rawContext: input.rawContext,
-    intakeTimestamp: input.intakeTimestamp,
-  });
+  /**
+   * Domain classification.
+   * Indicates the business domain this event belongs to.
+   * Immutable once constructed.
+   */
+  readonly domain: NetworkDomain;
+
+  /**
+   * Event type classification.
+   * Indicates what kind of state change occurred.
+   * Immutable once constructed.
+   */
+  readonly eventType: NetworkEventType;
+
+  /**
+   * Source origin reference.
+   * Maintains complete traceability of event source.
+   * Immutable once constructed.
+   */
+  readonly sourceRef: NetworkSourceRef;
+
+  /**
+   * References to entities affected by this event.
+   * Optional fields reflect weak coupling to entity types.
+   * Immutable once constructed.
+   */
+  readonly relatedRefs: NetworkRelatedRefs;
+
+  /**
+   * Event timestamp as ISO 8601 string.
+   * Represents the moment the event occurred.
+   * Format: YYYY-MM-DDTHH:mm:ss.sssZ
+   * Immutable once constructed.
+   */
+  readonly eventTimestamp: string;
+
+  /**
+   * Immutable raw context data from the event source.
+   * Maintains original event payload without transformation.
+   * Type is deliberately Record<string, unknown> to accept
+   * any event structure without runtime validation.
+   * Immutable once constructed.
+   */
+  readonly rawContext: Readonly<Record<string, unknown>>;
+
+  /**
+   * Construct a NetworkEventEntity from explicit input.
+   *
+   * Requirements:
+   * - All fields must be provided (no optional ambiguity)
+   * - No field generation or derivation
+   * - No validation (structural only)
+   * - No normalization
+   *
+   * @param input - Fully specified event data
+   */
+  constructor(input: CreateNetworkEventInput) {
+    this.networkEventId = input.networkEventId;
+    this.domain = input.domain;
+    this.eventType = input.eventType;
+    this.sourceRef = input.sourceRef;
+    this.relatedRefs = input.relatedRefs;
+    this.eventTimestamp = input.eventTimestamp;
+    this.rawContext = input.rawContext;
+  }
 }
