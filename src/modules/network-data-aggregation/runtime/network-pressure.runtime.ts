@@ -1,6 +1,7 @@
 /**
- * MOTOR 3 — PHASE 9: PRESSURE ENGINE RUNTIME
+ * MOTOR 3 — PHASE 9: PRESSURE ENGINE RUNTIME (REFACTORED)
  * Deterministic Conversion from NetworkEvent to NetworkPressure
+ * Using computed NetworkPressureSignal
  *
  * Scope:
  * - Runtime logic allowed
@@ -13,6 +14,7 @@
  *
  * Purpose:
  * Convert a detected NetworkEvent into a NetworkPressure condition.
+ * Derives magnitude from computed pressure signal levels.
  * Uses deterministic mapping rules with no external dependencies.
  */
 
@@ -21,6 +23,7 @@ import type { NetworkPressure } from '../types/network-pressure.types';
 import { NetworkPressureType, NetworkPressureDirection } from '../types/network-pressure.types';
 import { NetworkPressureEntity } from '../entities/network-pressure.entity';
 import { NetworkEventType } from '../types/network-foundation.types';
+import { computeNetworkPressureSignal } from './network-pressure-calculation.runtime';
 
 // ============================================================================
 // EXHAUSTIVENESS GUARD
@@ -66,31 +69,80 @@ function mapEventTypeToPressureType(eventType: NetworkEventType): NetworkPressur
 }
 
 // ============================================================================
+// MAGNITUDE DERIVATION FROM SIGNAL
+// ============================================================================
+
+/**
+ * Derive pressure magnitude from signal levels based on pressure type.
+ * Maps pressure type to corresponding signal level dimension.
+ *
+ * @param pressureType from mapped event type
+ * @param demandLevel from computed signal
+ * @param supplyLevel from computed signal
+ * @param capacityLevel from computed signal
+ * @param priceLevel from computed signal
+ * @returns magnitude (0-100)
+ */
+function deriveMagnitudeFromSignal(
+  pressureType: NetworkPressureType,
+  demandLevel: number,
+  supplyLevel: number,
+  capacityLevel: number,
+  priceLevel: number
+): number {
+  switch (pressureType) {
+    case NetworkPressureType.DEMAND_PRESSURE:
+      return demandLevel;
+    case NetworkPressureType.SUPPLY_PRESSURE:
+      return supplyLevel;
+    case NetworkPressureType.CAPACITY_PRESSURE:
+      return capacityLevel;
+    case NetworkPressureType.PRICE_PRESSURE:
+      return priceLevel;
+    default:
+      return assertUnreachable(pressureType);
+  }
+}
+
+// ============================================================================
 // PRESSURE CREATION RUNTIME
 // ============================================================================
 
 /**
  * Convert a NetworkEvent into a NetworkPressure.
- * Uses deterministic mapping rules without external dependencies.
+ * First computes pressure signal, then derives magnitude from signal levels.
  *
  * Mapping rules:
- * - DEMAND_CREATED → DEMAND_PRESSURE
- * - STOCK_UPDATED → SUPPLY_PRESSURE
- * - CAPACITY_CHANGED → CAPACITY_PRESSURE
- * - PRICE_CHANGED → PRICE_PRESSURE
- * - LOAD_REPORTED → CAPACITY_PRESSURE
+ * - DEMAND_CREATED → DEMAND_PRESSURE (magnitude from demandLevel)
+ * - STOCK_UPDATED → SUPPLY_PRESSURE (magnitude from supplyLevel)
+ * - CAPACITY_CHANGED → CAPACITY_PRESSURE (magnitude from capacityLevel)
+ * - PRICE_CHANGED → PRICE_PRESSURE (magnitude from priceLevel)
+ * - LOAD_REPORTED → CAPACITY_PRESSURE (magnitude from capacityLevel)
  *
  * All pressures:
  * - Direction: STABLE
- * - Magnitude: 50
- * - Detected time: from event timestamp
+ * - Magnitude: derived from computed signal
+ * - Detected time: from signal calculation timestamp
  *
  * @param event NetworkEvent to convert
  * @returns NetworkPressure contract object
  */
 export function createNetworkPressure(event: NetworkEvent): NetworkPressure {
+  // Compute pressure signal first
+  const computation = computeNetworkPressureSignal(event);
+  const signal = computation.signal;
+
   // Map event type to pressure type using exhaustive helper
   const pressureType = mapEventTypeToPressureType(event.eventType);
+
+  // Derive magnitude from signal levels based on pressure type
+  const magnitude = deriveMagnitudeFromSignal(
+    pressureType,
+    signal.demandLevel,
+    signal.supplyLevel,
+    signal.capacityLevel,
+    signal.priceLevel
+  );
 
   // Construct entity from deterministic values
   const entity = new NetworkPressureEntity({
@@ -99,9 +151,17 @@ export function createNetworkPressure(event: NetworkEvent): NetworkPressure {
     domain: event.domain,
     pressureType,
     direction: NetworkPressureDirection.STABLE,
-    magnitude: 50,
-    detectedAt: event.eventTimestamp,
-    metadata: { sourceEventType: event.eventType },
+    magnitude,
+    detectedAt: signal.calculatedAt,
+    metadata: {
+      sourceEventType: event.eventType,
+      sourceSignalLevels: {
+        demandLevel: signal.demandLevel,
+        supplyLevel: signal.supplyLevel,
+        capacityLevel: signal.capacityLevel,
+        priceLevel: signal.priceLevel,
+      },
+    },
   });
 
   // Return plain contract object, not entity instance

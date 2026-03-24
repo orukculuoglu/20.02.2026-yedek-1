@@ -1,6 +1,7 @@
 /**
- * MOTOR 3 — PHASE 15: DECISION RUNTIME
+ * MOTOR 3 — PHASE 15: DECISION RUNTIME (REFACTORED)
  * Deterministic Conversion from NetworkLiquidity + NetworkPressure to NetworkDecision
+ * Using computed NetworkDecisionSignal
  *
  * Scope:
  * - Runtime logic allowed
@@ -12,6 +13,7 @@
  *
  * Purpose:
  * Convert NetworkLiquidity and NetworkPressure into a NetworkDecision.
+ * Derives decision type from computed decision signal levels.
  * Uses deterministic mapping rules with no external dependencies.
  */
 
@@ -21,6 +23,7 @@ import type { NetworkDecision } from '../types/network-decision.types';
 import { NetworkDecisionType, NetworkDecisionPriority } from '../types/network-decision.types';
 import { NetworkLiquidityType as LiquidityTypeEnum, NetworkLiquidityStatus as StatusEnum } from '../types/network-liquidity.types';
 import { NetworkDecisionEntity } from '../entities/network-decision.entity';
+import { computeNetworkDecisionSignal } from './network-decision-calculation.runtime';
 
 // ============================================================================
 // EXHAUSTIVENESS GUARD
@@ -38,42 +41,55 @@ function assertUnreachable(value: never): never {
 }
 
 // ============================================================================
-// DECISION TYPE DERIVATION
+// DECISION TYPE DERIVATION FROM SIGNAL
 // ============================================================================
 
 /**
- * Derive NetworkDecisionType from liquidity type and status.
- * Deterministically maps liquidity conditions to decision actions.
+ * Derive NetworkDecisionType from decision signal levels.
+ * Selects the action with highest level, with deterministic tie-breaking.
  *
- * Decision type mapping:
- * - PART_FLOW + BLOCKED → INCREASE_STOCK
- * - SERVICE_CAPACITY_FLOW + BLOCKED → REDIRECT_SERVICE
- * - REGION_BALANCING_FLOW + (CONSTRAINED or BLOCKED) → REBALANCE_REGION
- * - otherwise → HOLD_POSITION
+ * Tie-break priority:
+ * 1. REDIRECT_SERVICE
+ * 2. INCREASE_STOCK
+ * 3. REBALANCE_REGION
+ * 4. HOLD_POSITION
  *
- * @param liquidityType from NetworkLiquidity
- * @param status from NetworkLiquidity
+ * @param redirectServiceLevel from signal
+ * @param increaseStockLevel from signal
+ * @param rebalanceRegionLevel from signal
+ * @param holdPositionLevel from signal
  * @returns corresponding NetworkDecisionType
  */
-function deriveDecisionType(
-  liquidityType: NetworkLiquidityType,
-  status: NetworkLiquidityStatus
+function deriveDecisionTypeFromSignal(
+  redirectServiceLevel: number,
+  increaseStockLevel: number,
+  rebalanceRegionLevel: number,
+  holdPositionLevel: number
 ): NetworkDecisionType {
-  if (liquidityType === LiquidityTypeEnum.PART_FLOW && status === StatusEnum.BLOCKED) {
-    return NetworkDecisionType.INCREASE_STOCK;
-  }
+  // Find maximum level value
+  const maxLevel = Math.max(
+    redirectServiceLevel,
+    increaseStockLevel,
+    rebalanceRegionLevel,
+    holdPositionLevel
+  );
 
-  if (liquidityType === LiquidityTypeEnum.SERVICE_CAPACITY_FLOW && status === StatusEnum.BLOCKED) {
+  // Apply tie-break priority: REDIRECT_SERVICE first
+  if (redirectServiceLevel === maxLevel) {
     return NetworkDecisionType.REDIRECT_SERVICE;
   }
 
-  if (
-    liquidityType === LiquidityTypeEnum.REGION_BALANCING_FLOW &&
-    (status === StatusEnum.CONSTRAINED || status === StatusEnum.BLOCKED)
-  ) {
+  // INCREASE_STOCK second
+  if (increaseStockLevel === maxLevel) {
+    return NetworkDecisionType.INCREASE_STOCK;
+  }
+
+  // REBALANCE_REGION third
+  if (rebalanceRegionLevel === maxLevel) {
     return NetworkDecisionType.REBALANCE_REGION;
   }
 
+  // HOLD_POSITION last
   return NetworkDecisionType.HOLD_POSITION;
 }
 
@@ -138,13 +154,13 @@ function deriveRationale(decisionType: NetworkDecisionType): string {
 
 /**
  * Convert NetworkLiquidity and NetworkPressure into a NetworkDecision.
- * Uses deterministic mapping rules without external dependencies.
+ * First computes decision signal, then derives decision type from signal levels.
  *
  * Decision logic:
- * - Type: derived from liquidity type + status
+ * - Type: derived from highest signal level (with tie-breaking)
  * - Priority: derived from liquidity status
  * - Rationale: derived from decision type
- * - Metadata: includes source liquidity and pressure context
+ * - Metadata: includes source context and signal levels
  *
  * @param liquidity NetworkLiquidity to convert
  * @param pressure NetworkPressure providing context
@@ -154,8 +170,17 @@ export function createNetworkDecision(
   liquidity: NetworkLiquidity,
   pressure: NetworkPressure
 ): NetworkDecision {
-  // Derive decision type from liquidity conditions
-  const decisionType = deriveDecisionType(liquidity.liquidityType, liquidity.status);
+  // Compute decision signal first
+  const computation = computeNetworkDecisionSignal(liquidity, pressure);
+  const signal = computation.signal;
+
+  // Derive decision type from signal levels with tie-breaking
+  const decisionType = deriveDecisionTypeFromSignal(
+    signal.redirectServiceLevel,
+    signal.increaseStockLevel,
+    signal.rebalanceRegionLevel,
+    signal.holdPositionLevel
+  );
 
   // Derive priority from liquidity status
   const priority = derivePriority(liquidity.status);
@@ -171,12 +196,18 @@ export function createNetworkDecision(
     domain: liquidity.domain,
     decisionType,
     priority,
-    createdAt: liquidity.evaluatedAt,
+    createdAt: signal.calculatedAt,
     rationale,
     metadata: {
       sourceLiquidityType: liquidity.liquidityType,
       sourceLiquidityStatus: liquidity.status,
-      sourcePressureId: pressure.pressureId,
+      sourcePressureType: pressure.pressureType,
+      sourceDecisionSignalLevels: {
+        redirectServiceLevel: signal.redirectServiceLevel,
+        increaseStockLevel: signal.increaseStockLevel,
+        rebalanceRegionLevel: signal.rebalanceRegionLevel,
+        holdPositionLevel: signal.holdPositionLevel,
+      },
     },
   });
 
