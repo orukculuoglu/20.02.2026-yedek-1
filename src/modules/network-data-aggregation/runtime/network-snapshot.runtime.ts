@@ -24,6 +24,7 @@ import type { NetworkLiquidity } from '../types/network-liquidity.types';
 import type { NetworkDecision } from '../types/network-decision.types';
 import type { NetworkSnapshot } from '../types/network-snapshot.types';
 import { NetworkTemporalWindowType as WindowTypeEnum, NetworkTrendDirection as TrendEnum } from '../types/network-snapshot.types';
+import { NetworkTemporalPressureLevel as PressureLevelEnum } from '../types/network-temporal-pressure.types';
 import {
   NetworkTraceRefEntity,
   NetworkTemporalContextEntity,
@@ -99,6 +100,8 @@ export function createNetworkSnapshot(
   });
 
   // Create snapshot entity with all components
+  const temporalPressureLevel = pressure.magnitude <= 25 ? PressureLevelEnum.LOW : pressure.magnitude <= 50 ? PressureLevelEnum.MEDIUM : pressure.magnitude <= 75 ? PressureLevelEnum.HIGH : PressureLevelEnum.CRITICAL;
+
   const entity = new NetworkSnapshotEntity({
     snapshotId: `snapshot_${decision.decisionId}`,
     domain: decision.domain,
@@ -111,6 +114,14 @@ export function createNetworkSnapshot(
       sourcePressureType: pressure.pressureType,
       sourceLiquidityType: liquidity.liquidityType,
       sourceDecisionType: decision.decisionType,
+    },
+    temporalLayer: {
+      windowId: `window_${decision.decisionId}`,
+      temporalPressureId: `temporal_pressure_${decision.decisionId}`,
+      bridgeId: `bridge_temporal_pressure_${decision.decisionId}`,
+      temporalPressureLevel,
+      mappedPressureType: pressure.pressureType,
+      mappedMagnitude: pressure.magnitude,
     },
   });
 
@@ -145,5 +156,13 @@ export function createNetworkSnapshot(
     },
     createdAt: entity.createdAt,
     metadata: entity.metadata,
+    temporalLayer: {
+      windowId: entity.temporalLayer.windowId,
+      temporalPressureId: entity.temporalLayer.temporalPressureId,
+      bridgeId: entity.temporalLayer.bridgeId,
+      temporalPressureLevel: entity.temporalLayer.temporalPressureLevel,
+      mappedPressureType: entity.temporalLayer.mappedPressureType,
+      mappedMagnitude: entity.temporalLayer.mappedMagnitude,
+    },
   };
 }

@@ -17,6 +17,8 @@
  */
 
 import type { NetworkDomain } from './network-foundation.types';
+import type { NetworkPressureType } from './network-pressure.types';
+import type { NetworkTemporalPressureLevel } from './network-temporal-pressure.types';
 
 // ============================================================================
 // TEMPORAL CONTEXT ENUMERATION
@@ -225,6 +227,58 @@ export interface NetworkTraceRef {
 }
 
 // ============================================================================
+// TEMPORAL SNAPSHOT LAYER (MOTOR 3 V2)
+// ============================================================================
+
+/**
+ * Temporal layer for Motor 3 V2 snapshot extension.
+ * Carries deterministic temporal intelligence output from window-based aggregation.
+ *
+ * Fields:
+ * - windowId: Reference to source temporal event window
+ * - temporalPressureId: Derived temporal pressure identifier
+ * - bridgeId: Bridge identifier mapping temporal to core pressure
+ * - temporalPressureLevel: Temporal pressure level classification
+ * - mappedPressureType: Core pressure type mapped from temporal pressure
+ * - mappedMagnitude: 0 to 100 deterministic mapped value (normalized intensity)
+ *
+ * Immutable contract: all fields readonly.
+ */
+export interface NetworkTemporalSnapshotLayer {
+  /**
+   * Identifier for source temporal event window.
+   */
+  readonly windowId: string;
+
+  /**
+   * Identifier for derived temporal pressure signal.
+   */
+  readonly temporalPressureId: string;
+
+  /**
+   * Identifier for pressure bridge mapping.
+   */
+  readonly bridgeId: string;
+
+  /**
+   * Temporal pressure level classification from aggregated window.
+   */
+  readonly temporalPressureLevel: NetworkTemporalPressureLevel;
+
+  /**
+   * Core pressure type mapped from temporal pressure level.
+   * Maps temporal intensity to core pressure dimension.
+   */
+  readonly mappedPressureType: NetworkPressureType;
+
+  /**
+   * 0 to 100 deterministic mapped value representing normalized intensity.
+   * Derived from temporal pressure level classification.
+   */
+  readonly mappedMagnitude: number;
+}
+
+// ============================================================================
 // NETWORK SNAPSHOT
 // ============================================================================
 
@@ -281,4 +335,10 @@ export interface NetworkSnapshot {
    * Contains additional context-specific information.
    */
   readonly metadata: Readonly<Record<string, unknown>>;
+
+  /**
+   * Temporal layer carrying Motor 3 V2 intelligence output.
+   * Provides window-based temporal pressure and bridge mapping.
+   */
+  readonly temporalLayer: NetworkTemporalSnapshotLayer;
 }

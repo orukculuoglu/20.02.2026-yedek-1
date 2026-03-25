@@ -26,6 +26,7 @@ import type {
   NetworkAggregatedSignalMetrics,
   NetworkTemporalWindowType,
   NetworkTrendDirection,
+  NetworkTemporalSnapshotLayer,
 } from '../types/network-snapshot.types';
 
 // ============================================================================
@@ -285,6 +286,11 @@ export interface CreateNetworkSnapshotInput {
    * Metadata associated with this snapshot.
    */
   readonly metadata: Readonly<Record<string, unknown>>;
+
+  /**
+   * Temporal layer carrying Motor 3 V2 intelligence output.
+   */
+  readonly temporalLayer: NetworkTemporalSnapshotLayer;
 }
 
 // ============================================================================
@@ -305,6 +311,7 @@ export class NetworkSnapshotEntity implements NetworkSnapshot {
   readonly aggregatedSignalMetrics: NetworkAggregatedSignalMetricsEntity;
   readonly createdAt: string;
   readonly metadata: Readonly<Record<string, unknown>>;
+  readonly temporalLayer: NetworkTemporalSnapshotLayer;
 
   constructor(input: CreateNetworkSnapshotInput) {
     this.snapshotId = input.snapshotId;
@@ -314,5 +321,6 @@ export class NetworkSnapshotEntity implements NetworkSnapshot {
     this.aggregatedSignalMetrics = input.aggregatedSignalMetrics;
     this.createdAt = input.createdAt;
     this.metadata = input.metadata;
+    this.temporalLayer = input.temporalLayer;
   }
 }
