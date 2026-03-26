@@ -44,34 +44,46 @@ export type VehicleStateSnapshot = {
   };
 
   // Risk domain indices (from RISK_INDICES_UPDATED events)
+  // Each index now includes domain, updatedAt, meta to match DataEngineIndex contract
   risk?: {
     indices: Array<{
+      domain: "risk";
       key: string;
       value: number;
-      confidence?: number;
+      confidence: number;        // Required, not optional
+      updatedAt: string;         // ISO 8601
+      meta?: Record<string, any>;
     }>;
     confidenceAverage?: number;
-    lastUpdatedAt?: string;
+    lastUpdatedAt?: string;      // Domain-level timestamp
   };
 
   // Insurance domain indices (from INSURANCE_INDICES_UPDATED events)
+  // Each index now includes domain, updatedAt, meta to match DataEngineIndex contract
   insurance?: {
     indices: Array<{
+      domain: "insurance";
       key: string;
       value: number;
-      confidence?: number;
+      confidence: number;        // Required, not optional
+      updatedAt: string;         // ISO 8601
+      meta?: Record<string, any>;
     }>;
-    lastUpdatedAt?: string;
+    lastUpdatedAt?: string;      // Domain-level timestamp
   };
 
   // Part domain indices (from PART_INDICES_UPDATED events)
+  // Each index now includes domain, updatedAt, meta to match DataEngineIndex contract
   part?: {
     indices: Array<{
+      domain: "part";
       key: string;
       value: number;
-      confidence?: number;
+      confidence: number;        // Required, not optional
+      updatedAt: string;         // ISO 8601
+      meta?: Record<string, any>;
     }>;
-    lastUpdatedAt?: string;
+    lastUpdatedAt?: string;      // Domain-level timestamp
   };
 
   // Expertise domain (from expert reports and findings)

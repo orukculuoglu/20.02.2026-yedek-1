@@ -32,7 +32,7 @@ import { logSecurityEvent, checkQueryLimit } from './services/securityService';
 import { startERPWorker } from './services/erp/erpWorker';
 // Data Engine Event Queue Worker
 import { startQueueWorker, flushQueue } from './src/modules/data-engine/eventQueue';
-import { flushQueuedEvents } from './src/modules/data-engine/ingestion/dataEngineEventSender';
+import { sendDataEngineEventPayload } from './src/modules/data-engine/ingestion/dataEngineEventSender';
 // Auto Expert Module
 import { AutoExpertRoutes } from './src/modules/auto-expert/routes';
 
@@ -54,10 +54,10 @@ export default function App() {
       
       // Start Data Engine event queue worker (Phase 6.3)
       // Automatically retries queued events every 15 seconds
-      const queueWorker = startQueueWorker(flushQueuedEvents, { intervalMs: 15000 });
+      const queueWorker = startQueueWorker(sendDataEngineEventPayload, { intervalMs: 15000 });
       
       // Attempt initial flush on startup
-      flushQueue(flushQueuedEvents).catch((err) => {
+      flushQueue(sendDataEngineEventPayload).catch((err) => {
         console.warn("[DataEngineEventQueue] Initial flush on startup failed:", err);
       });
       

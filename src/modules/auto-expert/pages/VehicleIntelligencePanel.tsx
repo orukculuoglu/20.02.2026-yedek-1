@@ -127,8 +127,8 @@ export function VehicleIntelligencePanel({ onBack }: VehicleIntelligencePanelPro
       // Fire event asynchronously (Phase 8.6)
       sendDataEngineEvent({
         eventId: `evt-vio-${vehicleIds}-${Date.now()}`,
-        eventType: 'VEHICLE_INTELLIGENCE_ANALYZED',
-        source: 'VEHICLE_INTELLIGENCE',
+        eventType: 'VEHICLE_INTELLIGENCE_AGGREGATED',
+        source: 'AUTO_EKSPERTIZ',
         vehicleId: vehicleIds,
         tenantId: 'dev',
         occurredAt: new Date().toISOString(),

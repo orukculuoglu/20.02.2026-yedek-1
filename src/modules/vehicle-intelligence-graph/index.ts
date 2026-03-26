@@ -95,5 +95,5 @@ export { validProvenanceRelation, invalidProvenanceRelation } from './examples/p
 export { validTrustRelation, invalidTrustRelation } from './examples/trust-relation-example';
 export { validGraphQuery, invalidGraphQuery } from './examples/graph-query-example';
 export { validGraphIndex, invalidGraphIndex } from './examples/graph-index-example';
-export { validGraphSignal, invalidGraphSignal } from './examples/graph-signal-example';
+export { validMaintenanceRiskSignal, validAnomalyDetectionSignal, validComponentHealthSignal, invalidGraphSignal } from './examples/graph-signal-example';
 export { validFederationRelation, invalidFederationRelation } from './examples/federation-relation-example';

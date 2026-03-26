@@ -5,6 +5,7 @@
  */
 
 import { getCurrentUserSecurity } from './securityService';
+import type { OfferRecommendation } from '../types/partMaster';
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -335,12 +336,12 @@ export async function getEffectiveOffers(
   if (isRealApiEnabled()) {
     try {
       console.log('[EffectiveOffers] Attempting server computation via API...');
-      const response = await apiGet(endpoint, config);
+      const response = await apiGet<{ success: boolean; data: OfferRecommendation }>(endpoint, config);
       
       // ✅ NEW: Validate server response structure
       if (response?.success === true && response?.data) {
         console.log('[EffectiveOffers] ✓ Server computation received successfully');
-        return response.data as OfferRecommendation;
+        return response.data;
       }
       
       console.warn('[EffectiveOffers] Invalid response structure from API, will compute locally');

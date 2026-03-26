@@ -119,6 +119,7 @@ export async function startMockServer() {
         }
 
         const url = new URL(req.url, `http://${req.headers.host}`);
+        const reqUrl = url;  // Alias for endpoint usage
         const path = url.pathname;
         const method = req.method;
 
@@ -240,15 +241,15 @@ export async function startMockServer() {
             // GET /api/offers or /api/supplier-offers (ALL offers)
             else if (method === 'GET' && (path === '/api/offers' || path === '/api/supplier-offers')) {
                 const reqUrl = new URL(req.url, `http://${req.headers.host}`);
-                const partMasterId = reqUrl.searchParams.get('partMasterId');
+                const part_master_id = reqUrl.searchParams.get('part_master_id') || reqUrl.searchParams.get('partMasterId');
                 
                 // Load mock offers
                 const { MOCK_OFFERS } = await import('./offers.seed');
                 
-                // Filter by partMasterId if provided
+                // Filter by part_master_id if provided
                 let filteredOffers = MOCK_OFFERS;
-                if (partMasterId) {
-                    filteredOffers = MOCK_OFFERS.filter(o => o.partMasterId === partMasterId);
+                if (part_master_id) {
+                    filteredOffers = MOCK_OFFERS.filter(o => o.part_master_id === part_master_id);
                 }
                 
                 res.writeHead(200);
@@ -262,9 +263,9 @@ export async function startMockServer() {
 
             // GET /api/offers/:offerId (single offer)
             else if (method === 'GET' && path.match(/^\/api\/offers\/[^/]+$/)) {
-                const offerId = path.split('/')[3];
+                const offer_id = path.split('/')[3];
                 const { MOCK_OFFERS } = await import('./offers.seed');
-                const offer = MOCK_OFFERS.find(o => o.offerId === offerId);
+                const offer = MOCK_OFFERS.find(o => o.offer_id === offer_id);
                 
                 if (offer) {
                     res.writeHead(200);
@@ -277,7 +278,7 @@ export async function startMockServer() {
                     res.writeHead(404);
                     res.end(JSON.stringify({
                         success: false,
-                        message: `Offer ${offerId} not found`,
+                        message: `Offer ${offer_id} not found`,
                         timestamp: new Date().toISOString(),
                     }));
                 }
@@ -293,19 +294,18 @@ export async function startMockServer() {
                     try {
                         const payload = JSON.parse(body);
                         const newOffer: SupplierOffer = {
-                            offerId: `OFF-${Date.now()}`,
-                            supplierId: payload.supplierId,
-                            supplierName: payload.supplierName,
-                            partMasterId: payload.partMasterId,
-                            price: payload.price,
+                            offer_id: `OFF-${Date.now()}`,
+                            supplier_id: payload.supplier_id || payload.supplierId,
+                            part_master_id: payload.part_master_id || payload.partMasterId,
+                            supplier_sku: payload.supplier_sku || '',
+                            brand: payload.brand || '',
+                            quality_grade: payload.quality_grade || 'EQUIVALENT',
                             currency: payload.currency || 'TRY',
-                            minOrderQty: payload.minOrderQty || 1,
-                            packQty: payload.packQty,
-                            stock: payload.stock,
-                            leadDays: payload.leadDays,
-                            lastUpdated: new Date().toISOString(),
-                            isVerified: payload.isVerified || false,
-                            trustScore: payload.trustScore,
+                            list_price: payload.list_price || payload.price || 0,
+                            stock_on_hand: payload.stock_on_hand || payload.stock || 0,
+                            lead_time_days: payload.lead_time_days || payload.leadDays || 0,
+                            source: payload.source || 'MANUAL',
+                            updated_at: new Date().toISOString(),
                         };
                         res.writeHead(201);
                         res.end(JSON.stringify({
@@ -335,19 +335,18 @@ export async function startMockServer() {
                     try {
                         const payload = JSON.parse(body);
                         const newOffer: SupplierOffer = {
-                            offerId: `OFF-${Date.now()}`,
-                            supplierId: payload.supplierId,
-                            supplierName: payload.supplierName,
-                            partMasterId: payload.partMasterId,
-                            price: payload.price,
+                            offer_id: `OFF-${Date.now()}`,
+                            supplier_id: payload.supplier_id || payload.supplierId,
+                            part_master_id: payload.part_master_id || payload.partMasterId,
+                            supplier_sku: payload.supplier_sku || '',
+                            brand: payload.brand || '',
+                            quality_grade: payload.quality_grade || 'EQUIVALENT',
                             currency: payload.currency || 'TRY',
-                            minOrderQty: payload.minOrderQty || 1,
-                            packQty: payload.packQty,
-                            stock: payload.stock,
-                            leadDays: payload.leadDays,
-                            lastUpdated: new Date().toISOString(),
-                            isVerified: payload.isVerified || false,
-                            trustScore: payload.trustScore,
+                            list_price: payload.list_price || payload.price || 0,
+                            stock_on_hand: payload.stock_on_hand || payload.stock || 0,
+                            lead_time_days: payload.lead_time_days || payload.leadDays || 0,
+                            source: payload.source || 'MANUAL',
+                            updated_at: new Date().toISOString(),
                         };
                         res.writeHead(201);
                         res.end(JSON.stringify({

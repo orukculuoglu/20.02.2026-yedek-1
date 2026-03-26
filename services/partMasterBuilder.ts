@@ -180,6 +180,7 @@ export function buildPartMasterCatalog(tenantId = 'LENT-CORP-DEMO'): PartMasterC
       aftermarketRefs: [],
       fitments: seed.platforms.map((platform, pidx) => ({
         fitmentId: `FIT-${seed.sku}-${pidx}`,
+        partId: `PM-${String(idx + 1).padStart(4, '0')}`,
         vehiclePlatform: platform,
         yearRange: platform === 'BMW_F30_2012_2019' ? { from: 2012, to: 2019 } : 
                    platform === 'VAG_MQB' ? { from: 2013, to: 2024 } :

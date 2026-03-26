@@ -114,9 +114,10 @@ export function WorkOrderRiskRecommendation(props: WorkOrderRiskRecommendationPr
             <p className="text-xs font-semibold text-gray-600 mb-2">İlgili Kodlar:</p>
             <div className="flex flex-wrap gap-1">
               {recommendation.reasonCodes.map((code, idx) => (
-                <span key={idx} className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-mono">
-                  {code}
-                </span>
+                <div key={idx} className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded font-mono">
+                  <span>{code.code}</span>
+                  {code.message && <p className="text-gray-600 text-xs mt-0.5">{code.message}</p>}
+                </div>
               ))}
             </div>
           </div>

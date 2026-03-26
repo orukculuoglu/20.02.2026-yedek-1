@@ -31,7 +31,7 @@ export function RiskIndicesPanel({ vehicleId: initialVehicleId, vin: initialVin,
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [indices, setIndices] = useState<Array<{ key: string; value: number; confidence?: number }>>([]);
+  const [indices, setIndices] = useState<Array<{ domain: "risk"; key: string; value: number; confidence: number; updatedAt: string; meta?: Record<string, any> }>>([]);
 
   // Fetch risk indices from Vehicle State Snapshot (Single Source of Truth)
   const fetchRiskIndices = async () => {

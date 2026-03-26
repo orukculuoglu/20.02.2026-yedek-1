@@ -549,7 +549,7 @@ async function emitInsuranceIndicesEvent(
   const insuranceEvent: DataEngineEventEnvelope<RiskIndicesUpdatedPayload> = {
     eventId: generateEventId(),
     eventType: "INSURANCE_INDICES_UPDATED",
-    source: "VEHICLE_INTELLIGENCE",
+    source: "AUTO_EKSPERTIZ",
     vehicleId,
     occurredAt: new Date().toISOString(),
     tenantId: "dev",
@@ -593,7 +593,7 @@ function emitPartIndicesEvent(
   const partEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
     eventId: generateEventId(),
     eventType: "PART_INDICES_UPDATED",
-    source: "VEHICLE_INTELLIGENCE",
+    source: "AUTO_EKSPERTIZ",
     vehicleId,
     occurredAt: new Date().toISOString(),
     tenantId: "dev",

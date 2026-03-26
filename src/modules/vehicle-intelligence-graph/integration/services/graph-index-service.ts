@@ -18,13 +18,13 @@ function deriveIndexType(graph: VehicleGraphSchema, result: GraphQueryResult): G
     return GraphIndexType.INTELLIGENCE_INDEX;
   }
   if (eventCount > 0 && eventCount >= sourceCount) {
-    return GraphIndexType.EVENT_INDEX;
+    return GraphIndexType.TEMPORAL_INDEX;
   }
   if (sourceCount > 0) {
-    return GraphIndexType.SOURCE_INDEX;
+    return GraphIndexType.LINEAGE_INDEX;
   }
   if (hasRoot) {
-    return GraphIndexType.VEHICLE_INDEX;
+    return GraphIndexType.TRUST_INDEX;
   }
   return GraphIndexType.NODE_INDEX;
 }

@@ -41,8 +41,8 @@ export function applyDataEngineEventToSnapshot(
   else if (eventType.includes("ODOMETER")) domain = "odometer";
   else if (eventType.includes("DIAGNOSTIC")) domain = "diagnostics";
 
-  // Extract indices from payload (PII-safe: only key/value/confidence)
-  let indices: Array<{ key: string; value: number; confidence?: number }> = [];
+  // Extract indices from payload (preserve domain, updatedAt, meta for DataEngineIndex contract)
+  let indices: Array<{ domain: string; key: string; value: number; confidence: number; updatedAt: string; meta?: Record<string, any> }> = [];
   if (
     payload &&
     typeof payload === "object" &&
@@ -50,9 +50,12 @@ export function applyDataEngineEventToSnapshot(
     Array.isArray(payload.indices)
   ) {
     indices = (payload.indices as any[]).map((idx) => ({
+      domain,                                           // From envelope
       key: idx.key || "unknown",
       value: typeof idx.value === "number" ? idx.value : 0,
-      confidence: typeof idx.confidence === "number" ? idx.confidence : undefined,
+      confidence: typeof idx.confidence === "number" ? idx.confidence : 50,  // Default 50 if missing
+      updatedAt: idx.updatedAt || domainTimestamp,   // From index or envelope
+      meta: idx.meta,                                  // Preserve rich context
     }));
   }
 
@@ -82,18 +85,18 @@ export function applyDataEngineEventToSnapshot(
   // Apply domain-specific update
   if (eventType.includes("RISK") && indices.length > 0) {
     partialUpdate.risk = { 
-      indices, 
+      indices: indices.map(idx => ({ ...idx, domain: "risk" as const })),
       confidenceAverage,
       lastUpdatedAt: domainTimestamp,
     };
   } else if (eventType.includes("INSURANCE") && indices.length > 0) {
     partialUpdate.insurance = { 
-      indices,
+      indices: indices.map(idx => ({ ...idx, domain: "insurance" as const })),
       lastUpdatedAt: domainTimestamp,
     };
   } else if (eventType.includes("PART") && indices.length > 0) {
     partialUpdate.part = { 
-      indices,
+      indices: indices.map(idx => ({ ...idx, domain: "part" as const })),
       lastUpdatedAt: domainTimestamp,
     };
   } else if (eventType.includes("EXPERTISE")) {

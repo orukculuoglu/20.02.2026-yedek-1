@@ -206,6 +206,7 @@ export async function createServiceRedirect(
     servicePointId: string;
     redirectType: 'RoutineMaintenance' | 'BreakdownIncident';
     reason: string;
+    note?: string;
     applyStatusChange?: boolean;
     trigger?: {
       source: string;

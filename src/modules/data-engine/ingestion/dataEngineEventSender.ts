@@ -128,7 +128,7 @@ export async function flushQueuedEvents(): Promise<{ sent: number; failed: numbe
 /**
  * Internal function to send event payload (used by queue flush)
  */
-async function sendDataEngineEventPayload(payload: any): Promise<void> {
+export async function sendDataEngineEventPayload(payload: any): Promise<void> {
   const config = createApiConfig();
   await apiPost<{ ok: boolean; eventId: string }>("/data-engine/events", payload, config);
 }

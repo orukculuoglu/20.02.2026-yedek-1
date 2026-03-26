@@ -177,6 +177,7 @@ export interface ServiceRedirect {
   createdAt: string; // ISO
   applyStatusChange: boolean;
   newStatus?: 'Serviced';
+  appointmentId?: string; // Appointment created by redirect
   workOrderId?: string; // V2.3 - Link to work order
   // V2.5 - Workflow types
   redirectType: 'RoutineMaintenance' | 'BreakdownIncident'; // V2.5

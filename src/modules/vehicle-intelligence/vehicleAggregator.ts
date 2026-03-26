@@ -304,7 +304,7 @@ export async function emitRecalculationEvents(aggregate: VehicleAggregate): Prom
   const riskIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
     eventId: `evt-risk-${vehicleId}-${Date.now()}`,
     eventType: 'RISK_INDICES_UPDATED',
-    source: 'VEHICLE_INTELLIGENCE',
+    source: 'AUTO_EKSPERTIZ',
     vehicleId,
     occurredAt: now,
     tenantId: 'dev',
@@ -327,7 +327,7 @@ export async function emitRecalculationEvents(aggregate: VehicleAggregate): Prom
   const insuranceIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
     eventId: `evt-insurance-${vehicleId}-${Date.now()}`,
     eventType: 'INSURANCE_INDICES_UPDATED',
-    source: 'VEHICLE_INTELLIGENCE',
+    source: 'AUTO_EKSPERTIZ',
     vehicleId,
     occurredAt: now,
     tenantId: 'dev',
@@ -347,7 +347,7 @@ export async function emitRecalculationEvents(aggregate: VehicleAggregate): Prom
   const partIndicesEvent: DataEngineEventEnvelope<IndicesUpdatedPayload> = {
     eventId: `evt-part-${vehicleId}-${Date.now()}`,
     eventType: 'PART_INDICES_UPDATED',
-    source: 'VEHICLE_INTELLIGENCE',
+    source: 'AUTO_EKSPERTIZ',
     vehicleId,
     occurredAt: now,
     tenantId: 'dev',

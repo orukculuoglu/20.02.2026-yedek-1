@@ -38,7 +38,7 @@ export function mapB2BToSupplierOffers(
 
     if (!catalogPart) continue;
 
-    // Create SupplierOffer
+    // Create SupplierOffer (camelCase schema)
     const offer: SupplierOffer = {
       offerId: `SUP-${supplier.id}-${b2bPart.id}-${Date.now()}`,
       supplierId: supplier.id,
