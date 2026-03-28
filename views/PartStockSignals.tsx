@@ -12,10 +12,19 @@ interface ProcessedStockItem {
     category: string;
     partGroup?: string;
     stock: number;
+    unit?: string;
     leadDays: number;
     trustScore: number;
     riskScore: number;
     orderSuggestion: number;
+    inventory?: {
+        onHand: number;
+    };
+    salesSignal?: {
+        soldQty: number;
+        dailyAverage: number;
+    };
+    daysToZero?: number;
 }
 
 export const PartStockSignals: React.FC = () => {
@@ -58,14 +67,17 @@ export const PartStockSignals: React.FC = () => {
                 const processed: ProcessedStockItem[] = pmCatalog.parts.map(part => {
                     // Find indices for this part
                     const topSupply = computedIndices.topSupplyStress.find(i => i.partMasterId === part.partMasterId);
-                    const relevantOffers = offers.filter(o => o.partMasterId === part.partMasterId);
-                    const totalStock = relevantOffers.reduce((s, o) => s + o.stock, 0);
+                    const relevantOffers = offers.filter(o => o.part_master_id === part.partMasterId);
+                    const totalStock = relevantOffers.reduce((s, o) => s + o.stock_on_hand, 0);
                     const avgLeadDays = relevantOffers.length > 0
-                        ? Math.round(relevantOffers.reduce((s, o) => s + o.leadDays, 0) / relevantOffers.length)
+                        ? Math.round(relevantOffers.reduce((s, o) => s + o.lead_time_days, 0) / relevantOffers.length)
                         : 7;
                     
                     // Order suggestion: if supply < 10 days, suggest reorder
                     const orderSuggestion = (totalStock <= 5 || avgLeadDays > 5) ? 10 : 0;
+                    
+                    // Calculate days to zero: without sales history, default to 999
+                    const daysToZero = 999;
                     
                     return {
                         partMasterId: part.partMasterId,
@@ -74,10 +86,19 @@ export const PartStockSignals: React.FC = () => {
                         category: part.category,
                         partGroup: part.partGroup,
                         stock: totalStock,
+                        unit: part.unit,
                         leadDays: avgLeadDays,
                         trustScore: part.dataQuality || 85,
                         riskScore: topSupply?.supplyStress || 45,
                         orderSuggestion,
+                        inventory: {
+                            onHand: totalStock,
+                        },
+                        salesSignal: {
+                            soldQty: 0,
+                            dailyAverage: 0,
+                        },
+                        daysToZero,
                     };
                 });
                 
@@ -180,7 +201,7 @@ export const PartStockSignals: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {processedData.map((item) => (
-                                <tr key={item.partId || item.sku} className="hover:bg-slate-50/50 transition-colors group">
+                                <tr key={item.partMasterId || item.sku} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-800 text-sm">{item.name}</div>
                                         <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.sku}</div>

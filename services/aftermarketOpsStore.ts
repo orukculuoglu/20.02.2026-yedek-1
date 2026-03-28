@@ -118,7 +118,7 @@ export const aftermarketOpsStore = {
     /**
      * İstatistikler (KPI'lar için)
      */
-    async getOperationalStats() {
+    async getOperationalStats(): Promise<{ pendingAndPreparingCount: number; shippedCount: number; deliveredTotal: number }> {
         return new Promise(resolve => {
             setTimeout(() => {
                 const pendingPreparingCount = orders.filter(o => o.status === 'PENDING' || o.status === 'PREPARING').length;

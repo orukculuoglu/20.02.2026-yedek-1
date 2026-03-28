@@ -47,9 +47,9 @@ const getSimulationSuggestion = (productCity?: string, productCategory?: string,
     region: matched.region || '',
     district: matched.district || '',
     partGroup: matched.partGroup || '',
-    changePercent: toNum(matched.changePercent ?? matched.recommendedStockChange, 0),
-    confidence: toNum(matched.confidence ?? matched.confidenceRatio, 0),
-    impact: toNum(matched.impact ?? matched.impactScore, 0),
+    changePercent: toNum(matched.changePercent, 0),
+    confidence: toNum(matched.confidence, 0),
+    impact: toNum(matched.impact, 0),
   };
 };
 
@@ -230,7 +230,9 @@ export const Retailers: React.FC<RetailersProps> = ({ onNavigate }) => {
         const freshOrders = await aftermarketOpsStore.getOrders();
         setOrders(freshOrders);
         const stats = await aftermarketOpsStore.getOperationalStats();
-        setOperationalStats(stats);
+        if (stats) {
+            setOperationalStats(stats);
+        }
     };
 
     const showToast = (msg: string) => {
@@ -239,8 +241,8 @@ export const Retailers: React.FC<RetailersProps> = ({ onNavigate }) => {
     };
 
     // --- Rol Katmanı (Role Layer) ---
-    type AftermarketRole = 'OPERATION' | 'STRATEGY';
-    const CURRENT_ROLE: AftermarketRole = 'OPERATION';
+    type AftermarketViewRole = 'OPERATION' | 'STRATEGY';
+    const CURRENT_ROLE: AftermarketViewRole = 'OPERATION';
 
     // --- Sub-Components ---
 
@@ -583,8 +585,8 @@ export const Retailers: React.FC<RetailersProps> = ({ onNavigate }) => {
             const segment = item.segment || 'EQUIVALENT';
             const segmentMult = segmentMultipliers[segment as keyof typeof segmentMultipliers] || 1.0;
             
-            const purchasePrice = (item as any).purchasePrice || item.price;
-            const salePrice = (item as any).salePrice || item.price;
+            const purchasePrice = item.purchasePrice ?? item.price;
+            const salePrice = item.salePrice ?? item.price;
             const marginAmount = salePrice - purchasePrice;
             const marginPercent = purchasePrice > 0 ? (marginAmount / purchasePrice) * 100 : 0;
             const monthlyEstimatedProfit = item.last30Sales * marginAmount;
@@ -1546,6 +1548,7 @@ export const Retailers: React.FC<RetailersProps> = ({ onNavigate }) => {
                 salePrice,
                 margin,
                 marginPercent,
+                stock: item.stock,
                 segment: item.segment || 'EQUIVALENT'
             };
         });

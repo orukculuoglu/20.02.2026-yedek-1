@@ -557,6 +557,8 @@ export interface AftermarketProductCard {
   stock: number;
   reserved: number;
   price: number;
+  purchasePrice?: number;  // Cost price for profit calculation
+  salePrice?: number;      // Selling price
 
   last30Sales: number;
   fitment: string[]; // Uyumlu araç modelleri (örn: ["BMW 3 Series", "Mercedes C Class"])

@@ -29,7 +29,7 @@ export default function B2BNetwork() {
       if (data.suppliers.length > 0) {
         // Select B2B suppliers by default
         const b2bSupplier = data.suppliers.find(s => s.type === 'B2B_NETWORK') || data.suppliers[0];
-        setSelectedSupplierId(b2bSupplier?.supplierId);
+        setSelectedSupplierId(b2bSupplier?.supplier_id);
       }
       setLoading(false);
     });
@@ -46,7 +46,7 @@ export default function B2BNetwork() {
 
   if (!snapshot) return null;
 
-  const selectedSupplier = snapshot.suppliers.find(s => s.supplierId === selectedSupplierId);
+  const selectedSupplier = snapshot.suppliers.find(s => s.supplier_id === selectedSupplierId);
   const connectedEdges = snapshot.edges.filter(e => e.supplierId === selectedSupplierId);
   const connectedPartIds = connectedEdges.map(e => e.partId);
 
@@ -98,9 +98,9 @@ export default function B2BNetwork() {
           <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
             {snapshot.suppliers.map(sup => (
               <div 
-                key={sup.supplierId}
-                onClick={() => setSelectedSupplierId(sup.supplierId)}
-                className={`p-4 cursor-pointer transition-all hover:bg-slate-50 group ${selectedSupplierId === sup.supplierId ? 'bg-indigo-50/50 border-r-4 border-indigo-600' : ''}`}
+                key={sup.supplier_id}
+                onClick={() => setSelectedSupplierId(sup.supplier_id)}
+                className={`p-4 cursor-pointer transition-all hover:bg-slate-50 group ${selectedSupplierId === sup.supplier_id ? 'bg-indigo-50/50 border-r-4 border-indigo-600' : ''}`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <h5 className="font-bold text-slate-800 text-sm group-hover:text-indigo-700">{sup.name}</h5>
@@ -109,7 +109,7 @@ export default function B2BNetwork() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium uppercase tracking-tight">
-                  <span className="flex items-center gap-1"><MapPin size={10} /> {sup.country || 'TR'}</span>
+                  <span className="flex items-center gap-1"><MapPin size={10} /> {sup.regions?.[0] || 'TR'}</span>
                   <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-400">{sup.type}</span>
                 </div>
               </div>
@@ -124,7 +124,7 @@ export default function B2BNetwork() {
               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-slate-800 text-sm">{selectedSupplier.name} Envanteri</h4>
-                  <p className="text-[10px] text-slate-500 font-medium">Supplier ID: {selectedSupplier.supplierId}</p>
+                  <p className="text-[10px] text-slate-500 font-medium">Supplier ID: {selectedSupplier.supplier_id}</p>
                 </div>
                 <div className="relative w-64">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

@@ -71,7 +71,7 @@ export function RiskIndicesPanel({ vehicleId: initialVehicleId, vin: initialVin,
           vin: vinInput,
           plate: plateInput,
           indices: result,
-          source: 'EXPERTISE_SNAPSHOT'
+          source: 'EXPERTISE'
         });
       } catch (logErr) {
         console.warn('[RiskIndicesPanel] Failed to log event', logErr);

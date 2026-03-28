@@ -38,20 +38,20 @@ export function mapB2BToSupplierOffers(
 
     if (!catalogPart) continue;
 
-    // Create SupplierOffer (camelCase schema)
+    // Create SupplierOffer (snake_case schema - canonical)
     const offer: SupplierOffer = {
-      offerId: `SUP-${supplier.id}-${b2bPart.id}-${Date.now()}`,
-      supplierId: supplier.id,
-      supplierName: supplier.name,
-      partMasterId: catalogPart.partMasterId,
-      price: b2bPart.price,
+      offer_id: `SUP-${supplier.id}-${b2bPart.id}-${Date.now()}`,
+      supplier_id: supplier.id,
+      part_master_id: catalogPart.partMasterId,
+      supplier_sku: b2bPart.sku || 'N/A',
+      brand: b2bPart.brand,
+      quality_grade: 'OEM',
       currency: 'TRY',
-      minOrderQty: 1,
-      stock: b2bPart.stock,
-      leadDays: edge.leadDays || 3,
-      lastUpdated: new Date().toISOString(),
-      isVerified: supplier.score ? supplier.score > 85 : false,
-      trustScore: supplier.score || 80,
+      list_price: b2bPart.price,
+      stock_on_hand: b2bPart.stock,
+      lead_time_days: edge.leadDays || 3,
+      source: 'B2B_NETWORK',
+      updated_at: new Date().toISOString(),
     };
 
     offers.push(offer);

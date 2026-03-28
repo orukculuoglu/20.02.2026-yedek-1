@@ -175,28 +175,6 @@ export interface OemAftermarketMap {
  * SupplierOffer: Bridge between Part Master and B2B Network
  * A supplier's specific pricing/availability for a part
  */
-export interface SupplierOffer {
-  offerId: string;
-  supplierId: string;
-  supplierName: string;
-  partMasterId: string;         // Reference to PartMasterPart
-  
-  // Pricing
-  price: number;
-  currency: 'USD' | 'EUR' | 'TRY';
-  minOrderQty: number;
-  packQty?: number;
-  
-  // Availability
-  stock: number;
-  leadDays: number;
-  lastUpdated: string;
-  
-  // Quality assurance
-  isVerified: boolean;
-  trustScore?: number;          // 0-100
-}
-
 /**
  * PriceSnapshot: Historical price data for analytics
  */
@@ -353,26 +331,6 @@ export type PartCategory =
   | 'INTERIOR'         // Döşeme, tabela
   | 'AFTERMARKET'      // Aksesuar, sarf malzeme
   | 'OTHER';
-
-export interface Supplier {
-  supplierId: string;
-  name: string;
-  type: 'WHOLESALER' | 'DISTRIBUTOR' | 'MANUFACTURER' | 'B2B_NETWORK';
-  contactPerson?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  country?: string;
-  
-  // Performance metrics
-  avgLeadDays?: number;
-  reliabilityScore?: number;  // 0-100
-  priceCompetitiveness?: number;
-  
-  status: 'ACTIVE' | 'INACTIVE';
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface SupplierPartEdge {
   edgeId: string;
@@ -580,7 +538,7 @@ export interface SupplierOffer {
   lead_time_days: number;     // Days to deliver
   
   // Metadata
-  source: 'MANUAL' | 'FEED' | 'ERP';
+  source: 'MANUAL' | 'FEED' | 'ERP' | 'B2B_NETWORK';
   updated_at: string;
   valid_until?: string;
   notes?: string;
@@ -648,7 +606,7 @@ export interface SupplyHealthIndex {
   
   // Metrics per supplier
   suppliers: Array<{
-    supplierId: string;
+    supplier_id: string;
     supplierName: string;
     score: number;              // 0-100
     avgLeadDays: number;
@@ -833,34 +791,38 @@ export const PART_MASTER_MOCK: PartMasterSnapshot = {
   
   suppliers: [
     {
-      supplierId: 'SUPP-001',
+      supplier_id: 'SUPP-001',
       name: 'Brembo Tedarik',
       type: 'DISTRIBUTOR',
-      country: 'İtalya',
+      regions: ['İtalya'],
+      rating: 4.8,
       avgLeadDays: 5,
       reliabilityScore: 95,
-      status: 'ACTIVE',
+      isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
     {
-      supplierId: 'SUPP-002',
+      supplier_id: 'SUPP-002',
       name: 'Mann Filter',
-      type: 'MANUFACTURER',
-      country: 'Almanya',
+      type: 'WHOLESALER',
+      regions: ['Almanya'],
+      rating: 4.6,
       avgLeadDays: 7,
       reliabilityScore: 92,
-      status: 'ACTIVE',
+      isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
     {
-      supplierId: 'SUPP-003',
+      supplier_id: 'SUPP-003',
       name: 'B2B Parça Ağı',
       type: 'B2B_NETWORK',
+      regions: ['Türkiye'],
+      rating: 4.2,
       avgLeadDays: 3,
       reliabilityScore: 85,
-      status: 'ACTIVE',
+      isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },

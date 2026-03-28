@@ -148,19 +148,19 @@ export function buildPartIndices(
 }
 
 function calculatePriceVolatility(part: PartMasterPart, offers: SupplierOffer[]): number {
-  const relevantOffers = offers.filter(o => o.partMasterId === part.partMasterId);
+  const relevantOffers = offers.filter(o => o.part_master_id === part.partMasterId);
   
   if (relevantOffers.length === 0) {
     return part.qualityTier === 'OEM' ? 30 : 50;
   }
 
-  const prices = relevantOffers.map(o => o.price);
+  const prices = relevantOffers.map(o => o.list_price);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
   const avgPrice = prices.reduce((a, b) => a + b) / prices.length;
   
   const spread = avgPrice > 0 ? ((maxPrice - minPrice) / avgPrice) * 100 : 0;
-  const supplierCount = new Set(relevantOffers.map(o => o.supplierId)).size;
+  const supplierCount = new Set(relevantOffers.map(o => o.supplier_id)).size;
   const supplierStability = Math.max(0, 100 - (supplierCount * 10));
   const tierFactor = part.qualityTier === 'OEM' ? 20 : part.qualityTier === 'PREMIUM' ? 35 : 50;
   
@@ -168,19 +168,19 @@ function calculatePriceVolatility(part: PartMasterPart, offers: SupplierOffer[])
 }
 
 function calculateSupplyStress(part: PartMasterPart, offers: SupplierOffer[]): number {
-  const relevantOffers = offers.filter(o => o.partMasterId === part.partMasterId);
+  const relevantOffers = offers.filter(o => o.part_master_id === part.partMasterId);
   
   if (relevantOffers.length === 0) {
     return 45;
   }
 
-  const avgLeadDays = relevantOffers.reduce((s, o) => s + o.leadDays, 0) / relevantOffers.length;
+  const avgLeadDays = relevantOffers.reduce((s, o) => s + o.lead_time_days, 0) / relevantOffers.length;
   const leadTimeFactor = Math.min(100, (avgLeadDays / 30) * 100);
   
-  const totalStock = relevantOffers.reduce((s, o) => s + o.stock, 0);
+  const totalStock = relevantOffers.reduce((s, o) => s + o.stock_on_hand, 0);
   const stockFactor = totalStock === 0 ? 100 : Math.max(10, 100 - (Math.log(totalStock + 1) * 20));
   
-  const leadTimes = relevantOffers.map(o => o.leadDays);
+  const leadTimes = relevantOffers.map(o => o.lead_time_days);
   const variance = calculateVariance(leadTimes);
   const varianceFactor = Math.min(100, variance * 2);
   
@@ -213,7 +213,7 @@ function calculateTrustScore(part: PartMasterPart, offers: SupplierOffer[]): num
     : 0;
   score += (avgOemConfidence / 100) * 20;
   
-  const relevantOffers = offers.filter(o => o.partMasterId === part.partMasterId);
+  const relevantOffers = offers.filter(o => o.part_master_id === part.partMasterId);
   const offerCoverage = Math.min(100, (relevantOffers.length / 3) * 100);
   score += (offerCoverage / 100) * 20;
   
@@ -242,7 +242,7 @@ export function generateSupplyHealthIndex(snapshot: PartMasterSnapshot): SupplyH
   
   const suppliers = snapshot.suppliers.map(sup => {
     // Find all parts supplied
-    const supplyEdges = snapshot.edges.filter(e => e.supplierId === sup.supplierId);
+    const supplyEdges = snapshot.edges.filter(e => e.supplierId === sup.supplier_id);
     const partCount = supplyEdges.length;
     
     // Average lead days and calculate reliability
@@ -265,7 +265,7 @@ export function generateSupplyHealthIndex(snapshot: PartMasterSnapshot): SupplyH
     const score = Math.round((reliabilityScore + leadTimeScore + volatilityScore) / 3);
     
     return {
-      supplierId: sup.supplierId,
+      supplier_id: sup.supplier_id,
       supplierName: sup.name,
       score,
       avgLeadDays,

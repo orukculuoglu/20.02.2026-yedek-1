@@ -481,7 +481,7 @@ export default function FleetRental() {
         applyStatusChange: false,
       });
 
-      setToast({ show: true, message: `Arıza bildirimi oluşturuldu (Randevu: ${redirect.appointmentId})` });
+      setToast({ show: true, message: `Arıza bildirimi oluşturuldu (Randevu: ${redirect.redirect.redirectId})` });
       setTimeout(() => setToast({ show: false, message: '' }), 3000);
 
       // Reset form and close modal

@@ -378,8 +378,8 @@ export async function startMockServer() {
                         const offers = (payload.offers || payload) as SupplierOffer[];
                         const created = offers.map((o, idx) => ({
                             ...o,
-                            offerId: o.offerId || `OFF-bulk-${Date.now()}-${idx}`,
-                            lastUpdated: new Date().toISOString(),
+                            offer_id: o.offer_id || `OFF-bulk-${Date.now()}-${idx}`,
+                            updated_at: new Date().toISOString(),
                         }));
                         res.writeHead(201);
                         res.end(JSON.stringify({
@@ -433,7 +433,7 @@ export async function startMockServer() {
                 }
                 
                 // Create supplier map
-                const suppliersMap = new Map(MOCK_SUPPLIERS.map(s => [s.supplierId, s]));
+                const suppliersMap = new Map(MOCK_SUPPLIERS.map(s => [s.supplier_id, s]));
                 
                 // Filter rules by institution
                 const rules = MOCK_PRICE_RULES.filter(r => r.institution_id === institutionId);

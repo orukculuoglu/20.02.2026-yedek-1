@@ -1764,7 +1764,7 @@ export async function getEffectiveOffersForPart(
       suppliersList.push(...MOCK_SUPPLIERS);
     }
 
-    const suppliersMap = new Map(suppliersList.map(s => [s.supplierId, s]));
+    const suppliersMap = new Map(suppliersList.map(s => [s.supplier_id, s]));
 
     // Step 2.4: Compute effective offers locally
     const recommendation = effectiveOfferEngine.computeOfferRecommendation(
@@ -1809,24 +1809,24 @@ export async function getAllSuppliers(): Promise<Supplier[]> {
  */
 export async function getAllOffers(
   filters?: {
-    partMasterId?: string;
-    supplierId?: string;
-    qualityGrade?: string;
+    part_master_id?: string;
+    supplier_id?: string;
+    quality_grade?: string;
   }
 ): Promise<SupplierOffer[]> {
   try {
     const response = await apiGetSupplierOffers(
-      filters?.partMasterId || '',
+      filters?.part_master_id || '',
       'LENT-CORP-DEMO'
     );
     let all = Array.isArray(response) ? response : [];
 
     // Apply filters
-    if (filters?.supplierId) {
-      all = all.filter(o => o.supplierId === filters.supplierId);
+    if (filters?.supplier_id) {
+      all = all.filter(o => o.supplier_id === filters.supplier_id);
     }
-    if (filters?.qualityGrade) {
-      all = all.filter(o => o.qualityGrade === filters.qualityGrade);
+    if (filters?.quality_grade) {
+      all = all.filter(o => o.quality_grade === filters.quality_grade);
     }
 
     return all;
@@ -1836,14 +1836,14 @@ export async function getAllOffers(
     let all = MOCK_OFFERS;
 
     // Apply filters
-    if (filters?.partMasterId) {
-      all = all.filter(o => o.partMasterId === filters.partMasterId);
+    if (filters?.part_master_id) {
+      all = all.filter(o => o.part_master_id === filters.part_master_id);
     }
-    if (filters?.supplierId) {
-      all = all.filter(o => o.supplier_id === filters.supplierId);
+    if (filters?.supplier_id) {
+      all = all.filter(o => o.supplier_id === filters.supplier_id);
     }
-    if (filters?.qualityGrade) {
-      all = all.filter(o => o.quality_grade === filters.qualityGrade);
+    if (filters?.quality_grade) {
+      all = all.filter(o => o.quality_grade === filters.quality_grade);
     }
 
     return all;

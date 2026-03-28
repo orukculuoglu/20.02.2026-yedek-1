@@ -271,7 +271,7 @@ export async function getSupplierOffers(partMasterId: string, tenantId: string) 
   
   // Filter by partMasterId if provided
   if (partMasterId) {
-    const filtered = MOCK_OFFERS.filter(o => o.partMasterId === partMasterId);
+    const filtered = MOCK_OFFERS.filter(o => o.part_master_id === partMasterId);
     console.log(`[SupplierOffers] Filtered ${filtered.length} offers for part=${partMasterId}`);
     return filtered;
   }
