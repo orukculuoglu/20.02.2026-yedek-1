@@ -630,6 +630,43 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              // Data Engine modules
+              if (id.includes('/src/modules/data-engine')) {
+                return 'chunk-data-engine';
+              }
+              // Insurance modules
+              if (id.includes('/src/modules/insurance')) {
+                return 'chunk-insurance';
+              }
+              // Market Valuation modules
+              if (id.includes('/src/modules/market-valuation')) {
+                return 'chunk-valuation';
+              }
+              // Vehicle Intelligence modules
+              if (id.includes('/src/modules/vehicle-intelligence')) {
+                return 'chunk-vehicle-intel';
+              }
+              // Composite Layer modules
+              if (id.includes('/src/modules/composite-layer')) {
+                return 'chunk-composite';
+              }
+              // Bakim Merkezi modules
+              if (id.includes('/src/modules/bakim-merkezi')) {
+                return 'chunk-bakim';
+              }
+              // Vehicle State and Workflow
+              if (id.includes('/src/modules/vehicle-state') || id.includes('/src/modules/workflow-engine')) {
+                return 'chunk-vehicle-state';
+              }
+            }
+          }
+        }
       }
     };
 });

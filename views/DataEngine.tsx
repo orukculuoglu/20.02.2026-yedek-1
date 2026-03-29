@@ -4,7 +4,7 @@ import { mockDataEngineV1 } from '../data/dataEngine.mock';
 import { createAftermarketMetrics } from '../utils/aftermarketMetrics';
 import { buildDataEngineSummary, getIndexMetadata, getTrendArrow, getFormulaExplanation, getSecurityExplanation } from '../src/engine/dataEngine/dataEngineAggregator';
 import { buildFleetRiskSummary } from '../src/engine/fleetRisk/fleetRiskAggregator';
-import { getPartMasterCatalog, getSupplierOffers, getPartIndices } from '../services/dataService';
+import { getPartMasterCatalog, getSupplierOffers, getPartIndices, getDataEngineIndices } from '../services/dataService';
 import { DataEngineIndices } from '../services/dataEngineIndices';
 import { PartIndex } from '../services/dataEngineIndices';
 import { AftermarketProductCard, VehicleProfile } from '../types';
@@ -130,7 +130,6 @@ export const DataEngine: React.FC = () => {
     }
     setInsuranceDomainLoading(true);
     try {
-      const { getDataEngineIndices } = await import('../services/dataService');
       const indices = await getDataEngineIndices({
         domain: 'insurance',
         vehicleId: insuranceDomainVehicleId,
