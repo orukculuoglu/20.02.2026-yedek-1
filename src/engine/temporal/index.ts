@@ -33,6 +33,11 @@
  * No business logic, no interpretation, structural sequencing only.
  * 
  * Phase 7 Scope:
+ * Deterministic analytics binding layer.
+ * Converts execution plans into analytics-ready structural inputs.
+ * No scoring, no anomaly interpretation, purely structural binding.
+ * 
+ * Phase 8 Scope:
  * Deterministic example artifacts and verification scenarios.
  * Exercise foundation structure and contracts without business logic.
  */
@@ -64,5 +69,8 @@ export * from "./runtime/index.ts";
 // Execution Orchestration (Phase 6)
 export * from "./execution/index.ts";
 
-// Examples / Verification (Phase 7)
+// Analytics Binding (Phase 7)
+export * from "./analytics/index.ts";
+
+// Examples / Verification (Phase 8)
 export * from "./examples/index.ts";
