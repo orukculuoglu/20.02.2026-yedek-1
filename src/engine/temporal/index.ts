@@ -23,6 +23,16 @@
  * No business logic, no scoring, explicit transformation rules only.
  * 
  * Phase 5 Scope:
+ * Deterministic runtime preparation layer.
+ * Converts explicit structural inputs into preparation outputs.
+ * No ID/timestamp generation, all caller-provided.
+ * 
+ * Phase 6 Scope:
+ * Deterministic execution orchestration layer.
+ * Converts preparation outputs into execution plans.
+ * No business logic, no interpretation, structural sequencing only.
+ * 
+ * Phase 7 Scope:
  * Deterministic example artifacts and verification scenarios.
  * Exercise foundation structure and contracts without business logic.
  */
@@ -48,5 +58,11 @@ export * from "./builders/ComparisonGroupBuilder.ts";
 export * from "./operators/WindowCollectionOperator.ts";
 export * from "./operators/PartitionOperator.ts";
 
-// Examples / Verification (Phase 5)
+// Runtime Preparation (Phase 5)
+export * from "./runtime/index.ts";
+
+// Execution Orchestration (Phase 6)
+export * from "./execution/index.ts";
+
+// Examples / Verification (Phase 7)
 export * from "./examples/index.ts";
