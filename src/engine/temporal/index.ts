@@ -81,11 +81,23 @@ export * from "./builders/index.ts";
 export * from "./operators/WindowCollectionOperator.ts";
 export * from "./operators/PartitionOperator.ts";
 
-// Window Lineage Foundation
+// Temporal Continuity / Comparison Foundation
 export * from "./contracts/WindowLineageContract.ts";
+export * from "./contracts/PreviousCurrentContract.ts";
+export * from "./contracts/MultiWindowComparisonContract.ts";
+export * from "./contracts/TrendModelContract.ts";
 export * from "./entities/WindowLineageEntity.ts";
+export * from "./entities/PreviousCurrentEntity.ts";
+export * from "./entities/MultiWindowComparisonEntity.ts";
+export * from "./entities/TrendModelEntity.ts";
 export * from "./guards/WindowLineageGuards.ts";
+export * from "./guards/PreviousCurrentGuards.ts";
+export * from "./guards/MultiWindowComparisonGuards.ts";
+export * from "./guards/TrendModelGuards.ts";
 export * from "./builders/WindowLineageBuilder.ts";
+export * from "./builders/PreviousCurrentBuilder.ts";
+export * from "./builders/MultiWindowComparisonBuilder.ts";
+export * from "./builders/TrendModelBuilder.ts";
 
 // Runtime Preparation (Phase 5)
 export * from "./runtime/index.ts";
