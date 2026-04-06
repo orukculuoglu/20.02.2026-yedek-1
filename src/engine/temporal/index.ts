@@ -38,6 +38,11 @@
  * No scoring, no anomaly interpretation, purely structural binding.
  * 
  * Phase 8 Scope:
+ * Deterministic evaluation layer.
+ * Converts analytics-ready inputs into comparison and interpretation results.
+ * Pure structural evaluation only, no business logic, no hidden defaults.
+ * 
+ * Phase 9 Scope:
  * Deterministic example artifacts and verification scenarios.
  * Exercise foundation structure and contracts without business logic.
  */
@@ -72,5 +77,8 @@ export * from "./execution/index.ts";
 // Analytics Binding (Phase 7)
 export * from "./analytics/index.ts";
 
-// Examples / Verification (Phase 8)
+// Evaluation (Phase 8)
+export * from "./evaluation/index.ts";
+
+// Examples / Verification (Phase 9)
 export * from "./examples/index.ts";
