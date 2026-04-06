@@ -43,8 +43,19 @@
  * Pure structural evaluation only, no business logic, no hidden defaults.
  * 
  * Phase 9 Scope:
+ * Deterministic pattern/pressure reading layer.
+ * Converts evaluation outputs into pressure and pattern surfaces.
+ * Derives structural measurements: repeated breaches, stage density, drift, clusters, concentrations.
+ * Pure structural pattern reading only, no business logic, no hidden defaults.
+ * 
+ * Phase 10 Scope:
  * Deterministic example artifacts and verification scenarios.
  * Exercise foundation structure and contracts without business logic.
+ * 
+ * Window Lineage Foundation:
+ * Explicit contracts for temporal continuity and window ancestry.
+ * Lineage references, chains, ancestry models, and builders.
+ * No inference, no implicit generation, all caller-provided.
  */
 
 // Contracts (Phase 1)
@@ -58,15 +69,23 @@ export * from "./entities/ComparisonEntityModels.ts";
 // Guards (Phase 2)
 export * from "./guards/WindowContractGuards.ts";
 export * from "./guards/ComparisonEntityGuards.ts";
+export * from "./guards/index.ts";
 
 // Builders (Phase 3)
 export * from "./builders/WindowBuilder.ts";
 export * from "./builders/ComparisonPairBuilder.ts";
 export * from "./builders/ComparisonGroupBuilder.ts";
+export * from "./builders/index.ts";
 
 // Operators (Phase 4)
 export * from "./operators/WindowCollectionOperator.ts";
 export * from "./operators/PartitionOperator.ts";
+
+// Window Lineage Foundation
+export * from "./contracts/WindowLineageContract.ts";
+export * from "./entities/WindowLineageEntity.ts";
+export * from "./guards/WindowLineageGuards.ts";
+export * from "./builders/WindowLineageBuilder.ts";
 
 // Runtime Preparation (Phase 5)
 export * from "./runtime/index.ts";
@@ -80,5 +99,8 @@ export * from "./analytics/index.ts";
 // Evaluation (Phase 8)
 export * from "./evaluation/index.ts";
 
-// Examples / Verification (Phase 9)
+// Pattern / Pressure Reading (Phase 9)
+export * from "./patterns/index.ts";
+
+// Examples / Verification (Phase 10)
 export * from "./examples/index.ts";

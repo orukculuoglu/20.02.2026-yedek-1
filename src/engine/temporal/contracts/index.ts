@@ -146,3 +146,13 @@ export type { GroupComparisonResult } from "./GroupComparisonResult.ts";
 // Aggregate comparison results
 export type { AggregateComparisonResult } from "./AggregateComparisonResult.ts";
 export { ComparisonFailureReason } from "./AggregateComparisonResult.ts";
+
+// Phase 4: Window lineage contracts
+// Lineage identity and ancestry
+export type {
+  WindowLineageReference,
+  WindowLineageContract,
+  WindowLineageChain,
+  WindowLineageAncestry,
+} from "./WindowLineageContract.ts";
+export type { WindowLineageRole, WindowLineageRelationType } from "./WindowLineageContract.ts";

@@ -14,3 +14,6 @@ export * from "./TemporalWindowEntity.ts";
 
 // Comparison entity models
 export * from "./ComparisonEntityModels.ts";
+
+// Window lineage entity models
+export * from "./WindowLineageEntity.ts";
