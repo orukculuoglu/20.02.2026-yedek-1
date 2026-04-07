@@ -31,3 +31,20 @@ export type {
   PatternMarker,
   PatternSurfaces,
 } from "./TemporalPatternResult.ts";
+
+// Pressure evolution context types
+export type { PressureEvolutionInputSurface, PressureEvolutionContext } from "./PressureEvolutionContext.ts";
+export { PressureEvolutionContextValidator } from "./PressureEvolutionContext.ts";
+
+// Pressure evolution result types
+export type {
+  PressureEvolutionStage,
+  PressureEvolutionTransition,
+  PressureEvolutionSurface,
+  PressureEvolutionResult,
+} from "./PressureEvolutionResult.ts";
+export { PressureEvolutionResultBuilder } from "./PressureEvolutionResult.ts";
+
+// Pressure evolution runtime
+export { PressureEvolutionRuntime } from "./PressureEvolutionRuntime.ts";
+
