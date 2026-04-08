@@ -17,3 +17,18 @@ export { ExecutionPlanBuilder } from "./TemporalExecutionPlan.ts";
 
 // Runtime orchestration
 export { TemporalExecutionRuntime } from "./TemporalExecutionRuntime.ts";
+
+// Temporal composite binding
+export type { TrendRuntimeResultRef } from "./TemporalCompositeContext.ts";
+export type { PressureEvolutionResultRef } from "./TemporalCompositeContext.ts";
+export type { TrendChainResultRef } from "./TemporalCompositeContext.ts";
+export type { TrendChainEvaluationResultRef } from "./TemporalCompositeContext.ts";
+export type { TemporalCompositeMemberRef } from "./TemporalCompositeContext.ts";
+export type { TemporalCompositeContext } from "./TemporalCompositeContext.ts";
+export { TemporalCompositeContextValidator } from "./TemporalCompositeContext.ts";
+
+export type { TemporalCompositeSurface } from "./TemporalCompositeResult.ts";
+export type { TemporalCompositeResult } from "./TemporalCompositeResult.ts";
+export { TemporalCompositeResultBuilder } from "./TemporalCompositeResult.ts";
+
+export { TemporalCompositeRuntime } from "./TemporalCompositeRuntime.ts";

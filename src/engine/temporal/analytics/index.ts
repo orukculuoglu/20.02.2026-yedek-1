@@ -21,3 +21,14 @@ export { TemporalAnalyticsBindingResultBuilder } from "./TemporalAnalyticsBindin
 
 // Binding runtime orchestration
 export { TemporalAnalyticsBindingRuntime } from "./TemporalAnalyticsBindingRuntime.ts";
+
+// Trend chain context types
+export type { TrendChainMember, TrendChainLink, TrendChainInputContext } from "./TrendChainContext.ts";
+export { TrendChainContextValidator } from "./TrendChainContext.ts";
+
+// Trend chain result types
+export type { TrendChainSurface, TrendChainResult } from "./TrendChainResult.ts";
+export { TrendChainResultBuilder } from "./TrendChainResult.ts";
+
+// Trend chain runtime
+export { TrendChainRuntime } from "./TrendChainRuntime.ts";

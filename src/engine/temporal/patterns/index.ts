@@ -48,3 +48,14 @@ export { PressureEvolutionResultBuilder } from "./PressureEvolutionResult.ts";
 // Pressure evolution runtime
 export { PressureEvolutionRuntime } from "./PressureEvolutionRuntime.ts";
 
+// Temporal composite evaluation context types
+export type { TemporalCompositeEvaluationMarker, TemporalCompositeEvaluationContext } from "./TemporalCompositeEvaluationContext.ts";
+export { TemporalCompositeEvaluationContextValidator } from "./TemporalCompositeEvaluationContext.ts";
+
+// Temporal composite evaluation result types
+export type { TemporalCompositeEvaluationSurface, TemporalCompositeEvaluationResult } from "./TemporalCompositeEvaluationResult.ts";
+export { TemporalCompositeEvaluationResultBuilder } from "./TemporalCompositeEvaluationResult.ts";
+
+// Temporal composite evaluation runtime
+export { TemporalCompositeEvaluationRuntime } from "./TemporalCompositeEvaluationRuntime.ts";
+

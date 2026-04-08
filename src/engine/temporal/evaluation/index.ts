@@ -24,3 +24,14 @@ export type {
   ComparisonInterpretation,
   InterpretationMarker,
 } from "./TemporalInterpretationResult.ts";
+
+// Trend chain evaluation
+export type { TrendChainEvaluationMarker } from "./TrendChainEvaluationContext.ts";
+export type { TrendChainEvaluationContext } from "./TrendChainEvaluationContext.ts";
+export { TrendChainEvaluationContextValidator } from "./TrendChainEvaluationContext.ts";
+
+export type { TrendChainEvaluationSurface } from "./TrendChainEvaluationResult.ts";
+export type { TrendChainEvaluationResult } from "./TrendChainEvaluationResult.ts";
+export { TrendChainEvaluationResultBuilder } from "./TrendChainEvaluationResult.ts";
+
+export { TrendChainEvaluationRuntime } from "./TrendChainEvaluationRuntime.ts";
