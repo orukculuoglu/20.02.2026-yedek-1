@@ -6,3 +6,6 @@
 
 // Domain layer - foundational contracts and type language
 export * from "./domain/index.ts";
+
+// Runtime layer - graph assembly and operational input surfaces
+export * from "./runtime/index.ts";
