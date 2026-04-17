@@ -9,3 +9,6 @@ export * from "./domain/index.ts";
 
 // Runtime layer - graph assembly and operational input surfaces
 export * from "./runtime/index.ts";
+
+// Intelligence layer - graph intelligence input vocabulary
+export * from "./intelligence";
