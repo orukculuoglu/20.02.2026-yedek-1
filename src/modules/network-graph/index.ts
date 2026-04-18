@@ -12,3 +12,6 @@ export * from "./runtime/index.ts";
 
 // Intelligence layer - graph intelligence input vocabulary
 export * from "./intelligence";
+
+// Optimization layer - optimization objective, constraint, and control language
+export * from "./optimization";
