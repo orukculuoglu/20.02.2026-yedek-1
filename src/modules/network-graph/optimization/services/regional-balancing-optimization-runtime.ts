@@ -30,6 +30,7 @@ export const regionalBalancingOptimizationRuntime: RegionalBalancingOptimization
         constraints: input.constraints,
         tieBreak: input.tieBreak,
         candidateActions,
+        runtimeContext: null,
       },
       selectionLimit: input.selectionLimit,
       resultId: input.resultId,

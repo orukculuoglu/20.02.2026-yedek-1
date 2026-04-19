@@ -29,6 +29,7 @@ export const routingOptimizationRuntime: RoutingOptimizationRuntime = {
         constraints: input.constraints,
         tieBreak: input.tieBreak,
         candidateActions,
+        runtimeContext: null,
       },
       selectionLimit: input.selectionLimit,
       resultId: input.resultId,
