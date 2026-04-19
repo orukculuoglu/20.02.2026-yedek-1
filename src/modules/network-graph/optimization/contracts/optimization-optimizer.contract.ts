@@ -35,4 +35,43 @@ export interface OptimizationOptimizer {
  * - No probabilistic search
  * - No recommendation logic embedded
  * - Pure function contract (structural definition only)
+ * 
+ * DECISION BOUNDARY (Phase 4):
+ * - Optimizer is responsible for: deterministic transformation given objective + constraints + strategy
+ * - Optimizer is NOT responsible for: approval, authorization, policy, or decision making
+ * - Optimizer is NOT responsible for: execution, state mutation, or runtime application
+ * - Optimizer output is structural: \"selected\" means optimizer chose this under constraints
+ * - Optimizer output is NOT approval: decidioning layer adds business logic and approval
+ * - Optimizer output is NOT execution: execution layer applies decision
+ * - No semantic drift: Selected ≠ Decided ≠ Executed (three separate responsibilities)
+ * - Workflow: Optimization (compute) → Decisioning (approve) → Execution (apply)
+ * 
+ * DETERMINISM & FORBIDDEN ZONE CLOSURE (Phase 5):
+ * - Optimizer is deterministic pure function: same input ALWAYS produces same output
+ * - All outputs are structural and reproducible: no randomness, no time-based variation
+ * - All identifiers are caller-provided only: no ID generation, no timestamping
+ * - All computation paths are deterministic: no probabilistic search, no stochastic behavior
+ * - All strategies are structural: no ML inference, no hidden weights, no adaptive learning
+ * - EXPLICITLY FORBIDDEN in optimizer:
+ *   - Math.random() or any randomness: breaks determinism
+ *   - Date.now() or any time-based values: breaks reproducibility
+ *   - Generated IDs: all identifiers caller-provided only
+ *   - Generated timestamps: structural only, no execution timestamps
+ *   - ML inference: no learned models, no neural networks, no probabilistic inference
+ *   - Hidden weights: no implicit prioritization, no hidden scoring
+ *   - Adaptive/dynamic optimization: no learning loops, no feedback adaptation
+ *   - Probabilistic search: no Monte Carlo, no genetic algorithms, no simulated annealing
+ *   - Stochastic optimization: no randomized tie-breaking, no probabilistic selection
+ *   - Policy override: no business logic substitution of input parameters
+ *   - Auto-execution: no automatic action application or state mutation
+ *   - Mutation of source state: no modification of input objects or cached state
+ *   - Hidden side effects: no implicit callbacks, no lazy evaluation surprises
+ *   - Recommendation logic: no confidence scoring, no priority inference
+ *   - Execution logic: no state application, no runtime mutation
+ *   - Analytics logic: no telemetry, no metrics collection, no reporting
+ *   - Persistence logic: no storage binding, no cache mutation
+ * - Determinism doctrine: reproducible identical outputs for identical inputs
+ * - Structure doctrine: all behavior explicitly specified in contracts, no inference
+ * - Boundary doctrine: optimization responsibility ends at result production
  */
+

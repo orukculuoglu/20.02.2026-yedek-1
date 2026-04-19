@@ -5,7 +5,37 @@
  * Deterministic: same input always produces same output.
  * No class, no factory, no ID generation (all IDs caller-provided and reused from sources).
  * No mutation of input state.
+ * 
+ * DETERMINISM & FORBIDDEN ZONE CLOSURE (Phase 5):
+ * - Orchestrator is fully deterministic: identical input produces identical output always
+ * - All composition paths are deterministic: Phase 1 → Phase 2 is fully specified
+ * - All ID reuse is deterministic: feasibleActionId = selectedActionId = sourceCandidateActionId (explicit)
+ * - All traceability paths are deterministic: every ID is traceable to caller-provided source
+ * - No hidden phase interaction: Phase 1 and Phase 2 results are independent
+ * - No randomness: no probabilistic composition, no randomized phase selection
+ * - No time-based behavior: no temporal phase selection
+ * - EXPLICITLY FORBIDDEN:
+ *   - Math.random(): breaks determinism
+ *   - Date.now(): breaks reproducibility
+ *   - ID generation: all IDs reused from caller-provided sources
+ *   - Generated timestamps: structural only
+ *   - Unsupported tie-break strategies: error thrown for non-explicit_order/fifo
+ *   - ML-based orchestration: no learned phase weighting, no adaptive composition
+ *   - Hidden weights: no implicit phase prioritization
+ *   - Conditional phase skipping: both phases always executed if input valid
+ *   - Feedback between phases: no phase results modify phase inputs
+ *   - Probabilistic composition: no randomized phase interaction
+ *   - Adaptive orchestration: no learning loops, no dynamic phase adjustment
+ *   - Auto-execution: no automatic action application
+ *   - Mutation of input state: no modification of OptimizationRuntimeOrchestrationInput
+ *   - Side effects: no implicit callbacks, no lazy evaluation surprises
+ *   - Analytics: no telemetry during orchestration
+ *   - Persistence: no storage binding during orchestration
+ * - Determinism doctrine: identical orchestration input produces identical result always
+ * - Composition doctrine: Phase 1 and Phase 2 execution order is fixed and deterministic
+ * - Traceability doctrine: every ID in result is traceable to caller-provided source
  */
+
 
 import type { OptimizationRuntimeOrchestrationInput, OptimizationRuntimeOrchestrator } from "../contracts/optimization-runtime-orchestrator.contract";
 import type { OptimizationResult } from "../contracts/optimization-result.contract";

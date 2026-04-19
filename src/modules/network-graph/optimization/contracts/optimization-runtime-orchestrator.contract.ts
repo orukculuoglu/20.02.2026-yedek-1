@@ -62,5 +62,44 @@ export interface OptimizationRuntimeOrchestrator {
  * - No mutation of input state
  * - Selection is not execution (result is selection, not application)
  * - Orchestration is not recommendation (no confidence, no scoring, no priority)
+ * 
+ * DECISION BOUNDARY (Phase 4):
+ * - Orchestrator is responsible for: composing feasibility evaluation + selection deterministically
+ * - Orchestrator is NOT responsible for: approval, authorization, or policy evaluation
+ * - Orchestrator is NOT responsible for: execution, state mutation, or runtime application
+ * - Orchestrator output is structural: \"selected\" means orchestrator chose this deterministically
+ * - Orchestrator output is NOT approval: later decisioning layer makes approval decisions
+ * - Orchestrator output is NOT execution: later execution layer applies decisions
+ * - Workflow: Orchestration (deterministic compute) → Decisioning (business logic) → Execution (apply)
+ * 
+ * DETERMINISM & FORBIDDEN ZONE CLOSURE (Phase 5):
+ * - Orchestrator is deterministic composition: same input ALWAYS produces same output
+ * - Phase 1 + Phase 2 composition is fully deterministic: no hidden state between phases
+ * - All ID reuse is deterministic: feasibleActionId = sourceCandidateActionId (no generation)
+ * - All traceability is deterministic: candidate → feasible → selected paths are all explicit
+ * - All strategies are bounded and explicit: only explicit_order and fifo tie-breaking
+ * - EXPLICITLY FORBIDDEN in orchestrator:
+ *   - Math.random() or any randomness: breaks determinism
+ *   - Date.now() or any time-based values: breaks reproducibility
+ *   - Generated IDs: all IDs reused from source identifiers
+ *   - Generated timestamps: structural only, no execution timestamps
+ *   - Unsupported tie-break strategies: only explicit_order and fifo allowed
+ *   - ML inference: no learned tie-breaking, no dynamic weighting
+ *   - Hidden weights: no implicit optimization across phases
+ *   - Adaptive phase composition: no conditional phase skipping or phase mutation
+ *   - Probabilistic selection: no randomized tie-breaking within Phase 2
+ *   - Policy override: no substitution of input selection parameters
+ *   - Auto-execution: no automatic action application
+ *   - Mutation of input state: no modification of OptimizationInput or feasible pools
+ *   - Mutation of intermediate state: no side effects during phase composition
+ *   - Hidden side effects: no implicit callbacks between phases
+ *   - Recommendation logic: no confidence scoring across composition
+ *   - Execution logic: no state application, no runtime mutation
+ *   - Analytics logic: no telemetry, no metrics across phases
+ *   - Persistence logic: no storage binding, no cache mutation
+ * - Determinism doctrine: reproducible identical results for identical orchestration input
+ * - Composition doctrine: Phase 1 and Phase 2 are strictly sequential, no feedback loops
+ * - Boundary doctrine: orchestrator responsibility ends at result production
  */
+
 

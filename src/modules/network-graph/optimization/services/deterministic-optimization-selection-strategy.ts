@@ -5,7 +5,33 @@
  * Deterministic: same input always produces same output.
  * No class, no factory, no generated IDs, no mutation.
  * No hidden fallback behavior - only supports strategies explicitly in contract.
+ * 
+ * DETERMINISM & FORBIDDEN ZONE CLOSURE (Phase 5):
+ * - Strategy is fully deterministic: identical feasible pool + limit + tieBreak produce identical results
+ * - All selection paths are structural: no ML inference, no adaptive scoring, no hidden heuristics
+ * - All tieBreak evaluation is explicit: only explicit_order and fifo strategies supported
+ * - No unsupported tie-break: capacity_*, cost_*, time_*, availability_* strategies rejected
+ * - No ID generation: selectedActionId = sourceFeasibleActionId (reused, not generated)
+ * - No randomness: no probabilistic tie-breaking or randomized selection
+ * - No time-based behavior: no temporal tie-breaking
+ * - EXPLICITLY FORBIDDEN:
+ *   - Math.random(): breaks determinism
+ *   - Date.now(): breaks reproducibility
+ *   - ID generation: all IDs reused from sources
+ *   - Unsupported tie-break strategies: only explicit_order, fifo allowed
+ *   - ML-based selection: no learned scoring models
+ *   - Hidden weights: no implicit scoring of equivalent feasible actions
+ *   - Probabilistic selection: no randomized tie-breaking
+ *   - Adaptive selection: no feedback loops, no priority learning
+ *   - Cost-based tie-breaking: cost_* strategies require execution context (deferred)
+ *   - Time-based tie-breaking: time_* strategies require execution context (deferred)
+ *   - Capacity-based tie-breaking: capacity_* strategies require execution context (deferred)
+ *   - Availability-based tie-breaking: availability_* strategies require execution context (deferred)
+ *   - Auto-execution of selected: no application of results
+ *   - Mutation of feasible pool: no modification of input
+ * - Result is honest: only explicit_order and fifo tie-breaking applied
  */
+
 
 import type {
   SelectionInput,

@@ -5,7 +5,29 @@
  * Deterministic: same input always produces same output.
  * No class, no factory, no generated IDs, no any-casts, no mutation.
  * Evaluates only constraints that are structurally determinable from candidates alone.
+ * 
+ * DETERMINISM & FORBIDDEN ZONE CLOSURE (Phase 5):
+ * - Evaluator is fully deterministic: identical candidate + constraint inputs produce identical outputs
+ * - All evaluation paths are structural: no ML inference, no adaptive rules, no hidden heuristics
+ * - All constraint evaluation is explicit: only ForbiddenActionConstraint and RegionalRestrictionConstraint evaluated
+ * - No hidden constraint application: deferred constraints are never evaluated in feasibility phase
+ * - No ID generation: all outputs reuse sourceCandidateActionId (no feasibleActionId generation)
+ * - No randomness: no probabilistic constraint evaluation
+ * - No time-based behavior: no temporal constraints or time-dependent evaluation
+ * - EXPLICITLY FORBIDDEN:
+ *   - Math.random(): breaks determinism
+ *   - Date.now(): breaks reproducibility
+ *   - ID generation: all IDs reused from sources
+ *   - Generated timestamps: none
+ *   - ML-based feasibility: no learned feasibility models
+ *   - Hidden weights: no implicit constraint prioritization
+ *   - Deferred constraint evaluation: never evaluate capacity/stock/sla/required/control
+ *   - Adaptive evaluation: no feedback loops, no heuristic adjustment
+ *   - Probabilistic constraint checking: no probabilistic feasibility
+ *   - Auto-rejection with side effects: no implicit state mutation
+ * - Result is honest: only feasibility-relevant constraints evaluated
  */
+
 
 import type { OptimizationInput } from "../contracts/optimization-input.contract";
 import type { OptimizationCandidateAction } from "../contracts/optimization-candidate-action.contract";

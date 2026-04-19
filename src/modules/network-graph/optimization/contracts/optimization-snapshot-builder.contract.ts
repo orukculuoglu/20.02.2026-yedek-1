@@ -53,4 +53,16 @@ export interface OptimizationSnapshotBuilder {
  * - Builder carries no recommendations: no decision flags or policy evaluation
  * - Builder is immutable: interface defines a pure transformation
  * - Phase 3 scope: deterministic composition boundary only
+ * 
+ * TRACEABILITY DEEPENING (Phase 6):
+ * - Builder composes snapshot + audit into single OptimizationExecutionOutcome
+ * - Snapshot carries input for objective/constraint/candidate traceability
+ * - Audit carries selected/rejected action trace references (caller-provided)
+ * - Together they enable complete reconstruction of optimization execution path
+ * - Outcome provides:
+ *   - Input traceability: what objective, constraints, candidates were used
+ *   - Result traceability: what was selected and what was rejected
+ *   - Audit traceability: how selected/rejected connect to sources via IDs
+ * - Builder ensures traceability chain is unbroken: input → result → audit → outcome
+ * - No derived analytics or summaries introduced during composition
  */

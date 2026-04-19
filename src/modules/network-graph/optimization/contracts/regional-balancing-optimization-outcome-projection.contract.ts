@@ -36,4 +36,13 @@ export interface RegionalBalancingOptimizationOutcomeProjection {
  * - Projection carries no recommendations: no decision flags or policy evaluation
  * - Projection is deterministic: same outcome always produces same projection
  * - Projection is immutable: all fields are readonly
+ * 
+ * TRACEABILITY PRESERVATION (Phase 6 - Deepening):
+ * - Projection carries shared OptimizationExecutionOutcome as foundation (implicit)
+ * - Projection exposes regional-balancing-bounded view: selectedRegionalBalancingActions, rejectedRegionalBalancingCandidates
+ * - Projection carries full regionalBalancingAudit: selected/rejected action traces with source references
+ * - Audit traces carry sourceCandidateId + rejectionKind for explicit traceability
+ * - Caller can reconstruct full trace chain from projection + underlying outcome
+ * - No traceability loss in projection: audit maintains all caller-provided references
+ * - Domain boundary remains clean: regional-balancing-specific view, shared outcome foundation
  */

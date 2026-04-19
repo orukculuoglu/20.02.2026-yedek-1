@@ -38,4 +38,14 @@ export interface OptimizationSnapshot {
  * - Snapshot is deterministic: same runtime input always produces same snapshot
  * - Snapshot is immutable: all fields are readonly
  * - Phase 1 scope: core carrier only, no audit layering, no metadata overflow
+ * 
+ * TRACEABILITY (Phase 6 - Deepening):
+ * - Snapshot carries complete input for objective/constraint/candidate source traceability
+ * - Snapshot input enables trace back from result to original problem definition
+ * - Result selectedActions and rejectedCandidates can be traced to source candidates via input
+ * - Snapshot-level traceability: input.candidateActions → result.selectedActions/rejectedCandidates
+ * - Objective traceability: input.objective defines what was optimized for (single-objective bound)
+ * - Constraint traceability: input.constraints defines feasibility rules evaluated against
+ * - Candidate traceability: input.candidateActions are the source for all result actions
+ * - This enables complete audit reconstruction: what was requested, what was evaluated, what was selected
  */
