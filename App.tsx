@@ -148,7 +148,6 @@ export default function App() {
   const renderContent = () => {
     switch (currentView) {
       case ViewState.DASHBOARD: return <Dashboard onChangeView={handleViewChange} />;
-      case ViewState.MANAGER_PANEL: return <ManagerPanel />;
       case ViewState.LIBRARY: return <VehicleList onSelectVehicle={handleSelectVehicle} />;
       case ViewState.DETAILS: return selectedVehicleId ? <VehicleDetail vehicleId={selectedVehicleId} onBack={() => handleViewChange(ViewState.LIBRARY)} onNavigate={handleViewChange}/> : <Dashboard onChangeView={handleViewChange} />;
       case ViewState.PART_LIFE_ANALYSIS: return <PartLifeAnalysis />;

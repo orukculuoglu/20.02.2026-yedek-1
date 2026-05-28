@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, PieChart, Cpu, Globe, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Car, Database, Settings, ShieldCheck, History, Box, FileText, Wrench, Users, ShoppingBag, ClipboardCheck, Shield, User, Store, Component, Briefcase, Scale, Cpu, Globe, ChevronDown } from 'lucide-react';
 import { ViewState, SystemPermission } from '../types';
 import { getCurrentUserSecurity } from '../services/securityService';
 
@@ -46,20 +46,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
         <div className="mb-6">
             <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Platform Yönetimi</p>
             {hasPermission(SystemPermission.READ_DASHBOARD) && (
-                <>
-                    <div onClick={() => onChangeView(ViewState.DASHBOARD)} className={navClass(ViewState.DASHBOARD)}>
-                        <LayoutDashboard size={18} /> Dashboard
-                    </div>
-                    <div onClick={() => onChangeView(ViewState.MANAGER_PANEL)} className={navClass(ViewState.MANAGER_PANEL)}>
-                        <PieChart size={18} /> Yönetici Konsolu
-                    </div>
-                </>
+                <div onClick={() => onChangeView(ViewState.DASHBOARD)} className={navClass(ViewState.DASHBOARD)}>
+                    <LayoutDashboard size={18} /> Dashboard
+                </div>
             )}
-             {hasPermission(SystemPermission.MANAGE_USERS) && (
+            {hasPermission(SystemPermission.MANAGE_USERS) && (
                 <div onClick={() => onChangeView(ViewState.USERS)} className={navClass(ViewState.USERS)}>
                     <Users size={18} /> Kullanıcı Yönetimi
                 </div>
-             )}
+            )}
         </div>
 
         {/* EKOSISTEM */}
