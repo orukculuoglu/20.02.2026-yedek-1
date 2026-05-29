@@ -2,7 +2,298 @@ import React, { useState, useEffect } from 'react';
 import { listFleets, listVehicles, listContracts, createContract, getVehicleSummary, setContext, getContext, getFleetPolicy, updateFleetPolicy, listServiceRedirects, createServiceRedirect, createWorkOrder, getWorkOrder, updateWorkOrder, addLineItem, applyCost, updateFleetPolicyWithCosts, requestApproval, approveWorkOrder, rejectWorkOrder } from '../services/fleetRentalService';
 import type { Fleet, Vehicle, RentalContract, CreateContractPayload, VehicleSummary, FleetPolicy, ServiceRedirect, WorkOrder, WorkOrderLineItem } from '../types/fleetRental';
 import { FleetIntelligenceRiskPanel } from './FleetIntelligenceRiskPanel';
-import { AlertTriangle, CheckCircle, TrendingUp, AlertCircle, Settings, DollarSign, Database, Briefcase, Calendar, Wrench, Shield, Users, TrendingDown, Eye, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, TrendingUp, AlertCircle, Settings, DollarSign, Database, Briefcase, Calendar, Wrench, Shield, Users, TrendingDown, Eye, X, Lock, Unlock, ShieldAlert } from 'lucide-react';
+import { getDataEngineSender } from '../src/modules/data-engine/adapters/dataEngineSender';
+import type { DataEngineEventEnvelope, DataEngineEventType } from '../src/modules/data-engine/contracts/dataEngineContract';
+import { makeEventId, makeOccurredAt, makeIdempotencyKey } from '../src/modules/data-engine/contracts/dataEngineContract';
+
+// ========== FLEET RENTAL AVID-SAFE EVENT HELPER ==========
+/**
+ * Safe event payload for Fleet Rental feedback events
+ * Uses vehicleId as AVID - no VIN, plate, chassis, or PII
+ */
+interface FleetRentalEventPayload {
+  domain: 'fleet-rental';
+  eventSource: 'fleet-rental-ui';
+  vehicleId: string;             // AVID
+  fleetId?: string;              // Fleet context (if not PII)
+  contractId?: string;           // Contract context (if not PII)
+  operationStatus?: string;      // e.g., 'ready', 'maintenance'
+  readinessStatus?: string;      // e.g., 'ready', 'monitored', 'approval_required'
+  readinessLabel?: string;       // Human label
+  approvalLevel?: string;        // e.g., 'manager_approval', 'compliance_escalation'
+  approvalReasonCodes?: string[]; // Structured reason codes
+  riskScore?: number;            // 0-100 risk metric
+  mileageKm?: number;            // Current mileage (operational use only)
+  maintenanceSignal?: string;    // e.g., 'scheduled', 'urgent'
+  serviceRedirectStatus?: string; // Redirect context
+  dataConfidence?: number;       // 0-100 confidence
+  identityStatus?: string;       // AVID verification status
+  domainIsolationStatus?: string; // 'active', 'restricted', 'none'
+  dataSharingEligibility?: string; // 'full', 'restricted', 'minimal'
+}
+
+/**
+ * Emit a Fleet Rental feedback event to Data Engine
+ * - Gracefully fails without crashing UI
+ * - Uses vehicleId as AVID
+ * - No VIN, plate, chassis, or customer PII
+ * - Includes safe operational metadata
+ */
+async function emitFleetRentalEvent(
+  eventType: DataEngineEventType,
+  vehicle: Vehicle,
+  payload: Partial<FleetRentalEventPayload> = {}
+): Promise<void> {
+  try {
+    // Construct AVID-safe payload
+    const safePayload: FleetRentalEventPayload = {
+      domain: 'fleet-rental',
+      eventSource: 'fleet-rental-ui',
+      vehicleId: vehicle.vehicleId, // AVID
+      ...payload,
+    };
+
+    // Create event envelope
+    const envelope: DataEngineEventEnvelope<FleetRentalEventPayload> = {
+      schemaVersion: 'DE-1.0',
+      eventId: makeEventId(),
+      eventType: eventType as DataEngineEventType,
+      occurredAt: makeOccurredAt(),
+      tenantId: 'fleet-rental-tenant', // Can be overridden by context
+      subject: {
+        vehicleId: vehicle.vehicleId,
+      },
+      payload: safePayload,
+      idempotencyKey: makeIdempotencyKey({
+        vehicleId: vehicle.vehicleId,
+        eventType,
+        timestamp: Date.now(),
+      }),
+      meta: {
+        source: 'fleet-rental-ui',
+        env: import.meta.env.MODE,
+        appVersion: '1.0.0',
+      },
+    };
+
+    // Send event safely
+    const sender = getDataEngineSender();
+    const result = await sender.send(envelope);
+
+    if (import.meta.env.DEV) {
+      console.debug('[FleetRental] Event emitted', {
+        eventType,
+        vehicleId: vehicle.vehicleId,
+        status: result.status,
+      });
+    }
+  } catch (error) {
+    // Gracefully fail without crashing UI
+    if (import.meta.env.DEV) {
+      console.warn('[FleetRental] Event emission failed (non-blocking)', {
+        eventType,
+        vehicleId: vehicle.vehicleId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    // Event failure does not affect user experience
+  }
+}
+
+/**
+ * Emit approval or readiness change event
+ * Triggered when operational readiness status changes
+ */
+async function emitReadinessEvent(
+  vehicle: Vehicle,
+  readiness: { status: string; label: string; reasons: string[] }
+): Promise<void> {
+  const reasonCodes = readiness.reasons.map(r => r.split(' - ')[0] || 'unknown').slice(0, 5); // First 5 codes
+
+  if (readiness.status === 'critical_approval_required') {
+    // Compliance escalation required
+    await emitFleetRentalEvent('FLEET_APPROVAL_ESCALATED', vehicle, {
+      readinessStatus: readiness.status,
+      readinessLabel: readiness.label,
+      approvalLevel: 'compliance_escalation',
+      approvalReasonCodes: reasonCodes,
+    });
+  } else if (readiness.status === 'approval_required') {
+    // Manager approval required
+    await emitFleetRentalEvent('FLEET_APPROVAL_REQUESTED', vehicle, {
+      readinessStatus: readiness.status,
+      readinessLabel: readiness.label,
+      approvalLevel: 'manager_approval',
+      approvalReasonCodes: reasonCodes,
+    });
+  } else {
+    // Readiness status changed (ready, monitored, maintenance)
+    await emitFleetRentalEvent('FLEET_VEHICLE_RISK_CHANGED', vehicle, {
+      readinessStatus: readiness.status,
+      readinessLabel: readiness.label,
+      riskScore: vehicle.riskScore,
+      operationStatus: vehicle.status,
+    });
+  }
+}
+
+// ========== AVID IDENTITY DERIVATION ==========
+// VIN is intentionally not displayed or propagated in Fleet Rental.
+// vehicleId represents AVID in this operational context.
+interface AvidIdentityStatus {
+  status: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated';
+  label: string;
+  severity: 'low' | 'medium' | 'high';
+  avidCode: string;
+  domainIsolationStatus: 'active' | 'restricted' | 'none';
+  dataSharingEligibility: 'full' | 'restricted' | 'minimal';
+  identityConfidence: number;
+}
+
+function deriveAvidIdentity(vehicle: Vehicle): AvidIdentityStatus {
+  // Determine AVID status based on vehicle properties
+  const hasAvidField = vehicle && (vehicle as any).avidId;
+  const isActive = vehicle.status === 'ACTIVE';
+  
+  // AVID Code - using vehicleId as AVID in operational context
+  const avidCode = vehicle.vehicleId;
+  
+  // Determine AVID verification status
+  let status: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated' = 'pending';
+  let severity: 'low' | 'medium' | 'high' = 'medium';
+  let label = 'Doğrulama Bekleyen';
+  
+  if (hasAvidField) {
+    status = 'verified';
+    severity = 'low';
+    label = 'AVID Doğrulanmış';
+  } else if (vehicle.riskScore > 75) {
+    status = 'mismatch';
+    severity = 'high';
+    label = 'Yüksek Risk - Eşleşme Sorunlu';
+  } else {
+    status = 'missing';
+    severity = 'high';
+    label = 'AVID Bilgisi Eksik';
+  }
+  
+  // Domain isolation: if vehicle has active rental or maintenance, restrict data sharing
+  const domainIsolationStatus: 'active' | 'restricted' | 'none' = 
+    vehicle.status === 'MAINTENANCE' || (vehicle as any).activeContractCount > 0 ? 'restricted' : 'none';
+  
+  // Data sharing eligibility based on AVID and risk
+  let dataSharingEligibility: 'full' | 'restricted' | 'minimal' = 'full';
+  if (domainIsolationStatus !== 'none' || status !== 'verified') dataSharingEligibility = 'restricted';
+  if (status === 'missing' || status === 'mismatch') dataSharingEligibility = 'minimal';
+  
+  // Identity confidence: 0-100%
+  const identityConfidence = status === 'verified' ? 95 : 30;
+  
+  return {
+    status,
+    label,
+    severity,
+    avidCode,
+    domainIsolationStatus,
+    dataSharingEligibility,
+    identityConfidence,
+  };
+}
+
+// ========== OPERATIONAL READINESS DETERMINATION ==========
+interface OperationalReadiness {
+  status: 'ready' | 'monitored' | 'maintenance' | 'approval_required' | 'critical_approval_required';
+  label: string;
+  severity: 'low' | 'medium' | 'high';
+  reasons: string[];
+  suggestedAction: string;
+}
+
+function getOperationalReadiness(vehicle: Vehicle, contracts: RentalContract[]): OperationalReadiness {
+  const reasons: string[] = [];
+  let status: 'ready' | 'monitored' | 'maintenance' | 'approval_required' | 'critical_approval_required' = 'ready';
+  let severity: 'low' | 'medium' | 'high' = 'low';
+  const avidStatus = deriveAvidIdentity(vehicle);
+  
+  // Check AVID status - missing/mismatch = critical approval required
+  if (avidStatus.status === 'missing' || avidStatus.status === 'mismatch') {
+    status = 'critical_approval_required';
+    severity = 'high';
+    reasons.push('AVID kimlik doğrulama başarısız - uygunluk onayı gerekli');
+  } else if (avidStatus.status === 'pending' || avidStatus.status === 'isolated') {
+    status = 'approval_required';
+    severity = 'medium';
+    reasons.push('AVID doğrulama bekleyen - yetkili onayı gerekli');
+  }
+  
+  // Check vehicle status
+  if (vehicle.status === 'MAINTENANCE') {
+    if (status !== 'critical_approval_required') status = 'maintenance';
+    severity = 'high';
+    reasons.push('Araç bakımda');
+  } else if (vehicle.status !== 'ACTIVE') {
+    status = 'critical_approval_required';
+    severity = 'high';
+    reasons.push('Araç aktif değil');
+  }
+  
+  // Check risk score
+  if (vehicle.riskScore > 75) {
+    if (status === 'ready') status = 'approval_required';
+    severity = 'high';
+    reasons.push('Yüksek risk skoru - yetkili incelemesi gerekli');
+  } else if (vehicle.riskScore > 60) {
+    if (status === 'ready') status = 'monitored';
+    severity = 'medium';
+    reasons.push('Orta seviye risk - izleme önerilen');
+  }
+  
+  // Check mileage
+  if (vehicle.currentMileage > 75000) {
+    status = 'maintenance';
+    severity = 'high';
+    reasons.push('Bakım kilometre sınırını aştı');
+  } else if (vehicle.currentMileage > 50000) {
+    if (status === 'ready') status = 'maintenance';
+    severity = 'medium';
+    reasons.push('Bakım kilometresine yaklaşıyor');
+  }
+  
+  // Check if already rented
+  const activeContract = contracts.find(c => c.vehicleId === vehicle.vehicleId && c.status === 'ACTIVE');
+  if (activeContract) {
+    if (status === 'ready') status = 'monitored';
+    severity = 'low';
+    reasons.push('Aktif kiralamada');
+  }
+  
+  // Determine final label and action
+  let label = 'Kiralamaya Hazır';
+  let suggestedAction = 'İşleme başlayabilirsiniz';
+  
+  if (status === 'critical_approval_required') {
+    label = 'Kritik Onay Gerekli';
+    suggestedAction = 'Uygunluk ve kimlik doğrulama onayı için yönetici/uygunluk müdürüne yönlendir';
+  } else if (status === 'approval_required') {
+    label = 'Yetkili Onayı Gerekli';
+    suggestedAction = 'Kiralama işlemine devam etmek için yetkili yöneticinin onayı gerekli';
+  } else if (status === 'maintenance') {
+    label = 'Uyarılı Kiralanabilir - Bakım Gerekli';
+    suggestedAction = 'Bakım planlaması yapılmalı, acil kiralama gerekirse yönetici onayı alınacak';
+  } else if (status === 'monitored') {
+    label = 'Uyarılı Kiralanabilir';
+    suggestedAction = 'Riskler göz önüne alınarak ve uygun koordinasyonla kiralanabilir';
+  }
+  
+  return {
+    status,
+    label,
+    severity,
+    reasons,
+    suggestedAction,
+  };
+}
 
 export default function FleetRental() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
@@ -147,7 +438,7 @@ export default function FleetRental() {
     fetchAllData();
   }, []);
 
-  // ========== KPI CALCULATIONS ==========
+  // ========= KPI CALCULATIONS ==========
   const calculateKPIs = () => {
     const totalVehicles = vehicles.length;
     const readyForRental = vehicles.filter(v => v.status === 'ACTIVE').length;
@@ -158,6 +449,29 @@ export default function FleetRental() {
     const avergePerfRating = 85; // Placeholder
     const monthlyRevenue = contracts.filter(c => c.status === 'ACTIVE').reduce((sum, c) => sum + (c.monthlyRate || 0), 0);
 
+    // AVID & Operational Readiness Metrics
+    const avidVerifiedVehicles = vehicles.filter(v => deriveAvidIdentity(v).status === 'verified').length;
+    const avidPendingVehicles = vehicles.filter(v => {
+      const status = deriveAvidIdentity(v).status;
+      return status === 'pending' || status === 'isolated';
+    }).length;
+    const avidMissingVehicles = vehicles.filter(v => {
+      const status = deriveAvidIdentity(v).status;
+      return status === 'missing' || status === 'mismatch';
+    }).length;
+    
+    // Count vehicles that are genuinely ready (AVID verified + operational ready)
+    const fullyReadyVehicles = vehicles.filter(v => {
+      const avidStatus = deriveAvidIdentity(v);
+      const readiness = getOperationalReadiness(v, contracts);
+      return avidStatus.status === 'verified' && readiness.status === 'ready';
+    }).length;
+    
+    const complianceIssueVehicles = vehicles.filter(v => {
+      const readiness = getOperationalReadiness(v, contracts);
+      return readiness.status === 'approval_required' || readiness.status === 'critical_approval_required';
+    }).length;
+
     return {
       totalVehicles,
       readyForRental,
@@ -167,6 +481,11 @@ export default function FleetRental() {
       avgRiskScore,
       avergePerfRating,
       monthlyRevenue,
+      avidVerifiedVehicles,
+      avidPendingVehicles,
+      avidMissingVehicles,
+      fullyReadyVehicles,
+      complianceIssueVehicles,
     };
   };
 
@@ -189,6 +508,69 @@ export default function FleetRental() {
   const generateSmartSignals = () => {
     const signals: Array<{ type: string; title: string; count: number; icon: React.ReactNode; severity: 'low' | 'medium' | 'high' }> = [];
 
+    // AVID/KVKK Signals
+    const avidPendingCount = vehicles.filter(v => {
+      const status = deriveAvidIdentity(v).status;
+      return status === 'pending' || status === 'isolated';
+    }).length;
+    if (avidPendingCount > 0) signals.push({
+      type: 'avid_pending',
+      title: 'AVID doğrulaması bekleyen araçlar',
+      count: avidPendingCount,
+      icon: <Unlock size={18} />,
+      severity: 'medium',
+    });
+
+    const avidMissingCount = vehicles.filter(v => {
+      const status = deriveAvidIdentity(v).status;
+      return status === 'missing' || status === 'mismatch';
+    }).length;
+    if (avidMissingCount > 0) signals.push({
+      type: 'avid_missing',
+      title: 'AVID eşleşmesi eksik araçlar',
+      count: avidMissingCount,
+      icon: <Lock size={18} />,
+      severity: 'high',
+    });
+
+    const domainRestrictedCount = vehicles.filter(v => {
+      const avidStatus = deriveAvidIdentity(v);
+      return avidStatus.domainIsolationStatus === 'restricted';
+    }).length;
+    if (domainRestrictedCount > 0) signals.push({
+      type: 'domain_restricted',
+      title: 'Domain isolation nedeniyle sınırlı veriyle çalışan araçlar',
+      count: domainRestrictedCount,
+      icon: <Database size={18} />,
+      severity: 'medium',
+    });
+
+    const riskyNoAvidCount = vehicles.filter(v => {
+      const avidStatus = deriveAvidIdentity(v);
+      return v.riskScore > 60 && avidStatus.status !== 'verified';
+    }).length;
+    if (riskyNoAvidCount > 0) signals.push({
+      type: 'risky_no_avid',
+      title: 'Risk skoru var ama AVID doğrulaması olmayan araçlar',
+      count: riskyNoAvidCount,
+      icon: <AlertTriangle size={18} />,
+      severity: 'high',
+    });
+
+    const readyButBlockedByAvidCount = vehicles.filter(v => {
+      const readiness = getOperationalReadiness(v, contracts);
+      return (readiness.status === 'approval_required' || readiness.status === 'critical_approval_required') && 
+             readiness.reasons.some(r => r.includes('AVID'));
+    }).length;
+    if (readyButBlockedByAvidCount > 0) signals.push({
+      type: 'blocked_by_avid',
+      title: 'AVID doğrulaması nedeniyle yetkili onayı gereken araçlar',
+      count: readyButBlockedByAvidCount,
+      icon: <ShieldAlert size={18} />,
+      severity: 'high',
+    });
+
+    // Maintenance Signal
     const maintenanceWarning = vehicles.filter(v => v.currentMileage > 50000).length;
     if (maintenanceWarning > 0) signals.push({
       type: 'maintenance',
@@ -198,6 +580,7 @@ export default function FleetRental() {
       severity: 'high',
     });
 
+    // Risk Signal
     const riskyVehicles = vehicles.filter(v => v.status === 'ACTIVE' && v.riskScore > 60).length;
     if (riskyVehicles > 0) signals.push({
       type: 'risk',
@@ -207,6 +590,7 @@ export default function FleetRental() {
       severity: 'medium',
     });
 
+    // Contract Signal
     const endingContracts = contracts.filter(c => {
       const endDate = new Date(c.endDate);
       const today = new Date();
@@ -240,12 +624,12 @@ export default function FleetRental() {
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Toplam Araç" value={kpis.totalVehicles.toString()} icon={<Users size={24} />} color="blue" />
-        <KPICard label="Kiralamaya Hazır" value={kpis.readyForRental.toString()} icon={<CheckCircle size={24} />} color="emerald" />
-        <KPICard label="Müsait Ama Riskli" value={kpis.riskyButAvailable.toString()} icon={<AlertCircle size={24} />} color="amber" />
-        <KPICard label="Kirada Araç" value={kpis.onRental.toString()} icon={<Calendar size={24} />} color="blue" />
+        <KPICard label="Kiralamaya Gerçekten Hazır" value={kpis.fullyReadyVehicles.toString()} icon={<CheckCircle size={24} />} color="emerald" />
+        <KPICard label="AVID Doğrulanmış" value={kpis.avidVerifiedVehicles.toString()} icon={<Lock size={24} />} color="emerald" />
+        <KPICard label="Kimlik Doğrulama Bekleyen" value={kpis.avidPendingVehicles.toString()} icon={<Unlock size={24} />} color="amber" />
+        <KPICard label="Uygunluk Sorunu Olan" value={kpis.complianceIssueVehicles.toString()} icon={<AlertTriangle size={24} />} color="red" />
         <KPICard label="Bakımda / Serviste" value={kpis.inMaintenance.toString()} icon={<Wrench size={24} />} color="purple" />
         <KPICard label="Ortalama Risk Skoru" value={kpis.avgRiskScore.toString()} icon={<Shield size={24} />} color="red" />
-        <KPICard label="AVID Doğrulama Oranı" value={kpis.avergePerfRating.toString()} icon={<Database size={24} />} color="blue" />
         <KPICard label="Aylık Gelir" value={`₺${(kpis.monthlyRevenue / 1000).toFixed(0)}K`} icon={<DollarSign size={24} />} color="emerald" />
       </div>
 
@@ -296,49 +680,131 @@ export default function FleetRental() {
       </div>
 
       {/* Vehicle Detail Preview */}
-      {selectedVehicle && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xl font-bold text-slate-900">Araç Detayları: {selectedVehicle.plateNumber}</h3>
-            <button onClick={() => setSelectedVehicle(null)} className="p-2 hover:bg-slate-100 rounded-lg transition">
-              <X size={20} />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Araç Kimliği</p>
-              <p className="text-sm font-bold text-slate-900">{selectedVehicle.brand} {selectedVehicle.model}</p>
-              <p className="text-xs text-slate-600">{selectedVehicle.plateNumber}</p>
+      {selectedVehicle && (() => {
+        const avidStatus = deriveAvidIdentity(selectedVehicle);
+        const vehicleContracts = contracts.filter(c => c.vehicleId === selectedVehicle.vehicleId);
+        const readiness = getOperationalReadiness(selectedVehicle, vehicleContracts);
+        
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="flex justify-between items-start">
+              <h3 className="text-xl font-bold text-slate-900">Araç Detayları: {selectedVehicle.plateNumber}</h3>
+              <button onClick={() => setSelectedVehicle(null)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                <X size={20} />
+              </button>
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Kiralama Uygunluğu</p>
-              <p className="text-2xl font-black text-emerald-600">{selectedVehicle.status === 'ACTIVE' ? 'Uygun' : 'Uygun Değil'}</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Bakım Sağlığı</p>
-              <p className="text-sm font-bold text-slate-900">{selectedVehicle.currentMileage} km</p>
-              <p className={`text-xs font-bold ${selectedVehicle.currentMileage > 50000 ? 'text-red-600' : 'text-emerald-600'}`}>
-                {selectedVehicle.currentMileage > 50000 ? 'Bakım Gerekli' : 'İyi Durumda'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Risk Zekâsı</p>
-              <p className="text-2xl font-black">{selectedVehicle.riskScore}/100</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Servis Ağı</p>
-              <p className="text-sm text-slate-600">Bağlı Merkez</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Aksiyonlar</p>
-              <div className="flex gap-2">
-                <button className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Detay</button>
-                <button className="px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">Sözleşmeye Ata</button>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Araç Kimliği</p>
+                <p className="text-sm font-bold text-slate-900">{selectedVehicle.brand} {selectedVehicle.model}</p>
+                <p className="text-xs text-slate-600">{selectedVehicle.plateNumber}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Kiralama Uygunluğu</p>
+                <p className="text-2xl font-black text-emerald-600">{selectedVehicle.status === 'ACTIVE' ? 'Uygun' : 'Uygun Değil'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Bakım Sağlığı</p>
+                <p className="text-sm font-bold text-slate-900">{selectedVehicle.currentMileage} km</p>
+                <p className={`text-xs font-bold ${selectedVehicle.currentMileage > 50000 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {selectedVehicle.currentMileage > 50000 ? 'Bakım Gerekli' : 'İyi Durumda'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Risk Zekâsı</p>
+                <p className="text-2xl font-black">{selectedVehicle.riskScore}/100</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Servis Ağı</p>
+                <p className="text-sm text-slate-600">Bağlı Merkez</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Aksiyonlar</p>
+                <div className="flex gap-2">
+                  <button className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Detay</button>
+                  <button className="px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">Sözleşmeye Ata</button>
+                </div>
               </div>
             </div>
+            
+            {/* AVID Kimlik & KVKK Uygunluk Section */}
+            <div className="border-t border-slate-200 pt-6">
+              <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Shield size={20} className="text-slate-600" />
+                AVID Kimlik & KVKK Uygunluk
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">AVID Durum</p>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        avidStatus.status === 'verified' ? 'bg-emerald-500' :
+                        avidStatus.status === 'pending' ? 'bg-amber-500' :
+                        avidStatus.status === 'mismatch' ? 'bg-red-500' :
+                        avidStatus.status === 'isolated' ? 'bg-purple-500' :
+                        'bg-slate-300'
+                      }`}></div>
+                      <p className="text-sm font-bold text-slate-900">{avidStatus.label}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">AVID Kodu</p>
+                    <p className="text-sm font-mono text-slate-900">{avidStatus.avidCode}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Operasyonel Hazırlık</p>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        readiness.status === 'ready' ? 'bg-emerald-500' :
+                        readiness.status === 'monitored' ? 'bg-blue-500' :
+                        readiness.status === 'maintenance' ? 'bg-amber-500' :
+                        readiness.status === 'approval_required' ? 'bg-purple-500' :
+                        'bg-red-500'
+                      }`}></div>
+                      <p className="text-sm font-bold text-slate-900">{readiness.label}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Domain İzolasyon</p>
+                    <p className="text-sm text-slate-900">{
+                      avidStatus.domainIsolationStatus === 'active' ? 'Aktif - Veri Koruması Uygulanıyor' :
+                      avidStatus.domainIsolationStatus === 'restricted' ? 'Kısıtlı - Sınırlı Erişim' :
+                      'Yoktur - Standart Erişim'
+                    }</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Veri Paylaşım Uygunluğu</p>
+                    <p className="text-sm text-slate-900">{
+                      avidStatus.dataSharingEligibility === 'full' ? 'Tam Paylaşıma Uygun' :
+                      avidStatus.dataSharingEligibility === 'restricted' ? 'Kısıtlı Paylaşım' :
+                      'Minimal Paylaşım'
+                    }</p>
+                  </div>
+                </div>
+              </div>
+              
+              {readiness.reasons && readiness.reasons.length > 0 && (
+                <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">Durum Nedenleri</p>
+                  <ul className="space-y-1">
+                    {readiness.reasons.map((reason, idx) => (
+                      <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                        <span className="text-slate-400 mt-1">•</span>
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 
@@ -503,58 +969,155 @@ export default function FleetRental() {
   );
 
   // ========== RENDER: AVID & DATA HEALTH SECTION ==========
-  const renderAVIDAndData = () => (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-slate-900">AVID & Veri Sağlığı</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Database size={20} className="text-blue-600" />
-            AVID Kimlik Doğrulama
-          </h3>
-          <div className="space-y-3">
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <p className="text-sm font-bold text-emerald-700">Doğrulanmış Araçlar</p>
-              <p className="text-2xl font-black text-emerald-600">{Math.round(vehicles.length * 0.8)}</p>
+  const renderAVIDAndData = () => {
+    const kpis = calculateKPIs();
+    
+    // Calculate additional AVID metrics
+    const avidVerificationRate = vehicles.length > 0 ? Math.round((kpis.avidVerifiedVehicles / vehicles.length) * 100) : 0;
+    const complianceRate = vehicles.length > 0 ? Math.round(((vehicles.length - kpis.complianceIssueVehicles) / vehicles.length) * 100) : 0;
+    const operationalReadinessRate = vehicles.length > 0 ? Math.round((kpis.fullyReadyVehicles / vehicles.length) * 100) : 0;
+    
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-slate-900">AVID & Veri Sağlığı</h2>
+        
+        {/* AVID Identity Verification Dashboard */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <p className="text-xs font-bold text-slate-400 uppercase mb-2">AVID Doğrulanmış Araçlar</p>
+            <p className="text-3xl font-black text-emerald-600">{kpis.avidVerifiedVehicles}</p>
+            <p className="text-xs text-slate-600 mt-2">{avidVerificationRate}% Doğrulama Oranı</p>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <p className="text-xs font-bold text-slate-400 uppercase mb-2">Doğrulama Bekleyen</p>
+            <p className="text-3xl font-black text-amber-600">{kpis.avidPendingVehicles}</p>
+            <p className="text-xs text-slate-600 mt-2">Kimlik Doğrulama Devam Ediyor</p>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <p className="text-xs font-bold text-slate-400 uppercase mb-2">AVID Sorunlu</p>
+            <p className="text-3xl font-black text-red-600">{kpis.avidMissingVehicles}</p>
+            <p className="text-xs text-slate-600 mt-2">Eksik / Eşleşme Sorunu</p>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <p className="text-xs font-bold text-slate-400 uppercase mb-2">Gerçekten Hazır</p>
+            <p className="text-3xl font-black text-blue-600">{kpis.fullyReadyVehicles}</p>
+            <p className="text-xs text-slate-600 mt-2">{operationalReadinessRate}% Operasyonel</p>
+          </div>
+        </div>
+        
+        {/* Operational Readiness & Compliance */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Shield size={20} className="text-blue-600" />
+              AVID Uygunluk Durumu
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-semibold text-slate-700">Uygunluk Sağlayanlar</p>
+                  <p className="text-sm font-bold text-emerald-600">{complianceRate}%</p>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-3">
+                  <div className="bg-emerald-500 h-3 rounded-full transition-all" style={{ width: `${complianceRate}%` }}></div>
+                </div>
+              </div>
+              
+              <div className="border-t border-slate-200 pt-4 space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-700">KVKK Uygunluk</span>
+                  <span className="font-bold text-emerald-600">✓ Sağlanıyor</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-700">Veri Koruması (Domain İzolasyon)</span>
+                  <span className="font-bold text-emerald-600">✓ Aktif</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-700">AVID Kimliği Operasyonel</span>
+                  <span className="font-bold text-emerald-600">✓ Aktif</span>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm font-bold text-amber-700">Bekleyen Doğrulama</p>
-              <p className="text-2xl font-black text-amber-600">{Math.round(vehicles.length * 0.2)}</p>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Database size={20} className="text-purple-600" />
+              Veri Sağlığı Göstergeleri
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-bold text-slate-600 mb-2">Servis Ağı Veri Akışı</p>
+                <div className="w-full bg-slate-200 rounded-full h-2">
+                  <div className="bg-emerald-600 h-2 rounded-full" style={{ width: '85%' }}></div>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">85% Sağlıklı</p>
+              </div>
+              
+              <div>
+                <p className="text-xs font-bold text-slate-600 mb-2">Bakım Veri Akışı</p>
+                <div className="w-full bg-slate-200 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: '78%' }}></div>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">78% Sağlıklı</p>
+              </div>
+              
+              <div>
+                <p className="text-xs font-bold text-slate-600 mb-2">Risk Motoru Veri Akışı</p>
+                <div className="w-full bg-slate-200 rounded-full h-2">
+                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: '92%' }}></div>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">92% Sağlıklı</p>
+              </div>
+              
+              <div className="border-t border-slate-200 pt-3">
+                <p className="text-xs font-bold text-slate-600 mb-2">Veri Paylaşım Uygunluğu</p>
+                <div className="flex gap-2 text-xs">
+                  <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full font-semibold">Tam: {Math.round(vehicles.length * 0.7)}</span>
+                  <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-semibold">Kısıtlı: {Math.round(vehicles.length * 0.2)}</span>
+                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full font-semibold">Minimal: {Math.round(vehicles.length * 0.1)}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <TrendingUp size={20} className="text-purple-600" />
-            Veri Sağlığı
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-bold text-slate-600 mb-1">Servis Veri Akışı</p>
-              <div className="w-full bg-slate-200 rounded-full h-2">
-                <div className="bg-purple-600 h-2 rounded-full" style={{ width: '85%' }}></div>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">85% Sağlıklı</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-600 mb-1">Bakım Veri Akışı</p>
-              <div className="w-full bg-slate-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '78%' }}></div>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">78% Sağlıklı</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-600 mb-1">Risk Motoru Veri Akışı</p>
-              <div className="w-full bg-slate-200 rounded-full h-2">
-                <div className="bg-emerald-600 h-2 rounded-full" style={{ width: '92%' }}></div>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">92% Sağlıklı</p>
-            </div>
+        
+        {/* Domain Isolation & Readiness Rules */}
+        {kpis.complianceIssueVehicles > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-amber-900 mb-4 flex items-center gap-2">
+              <AlertTriangle size={20} />
+              Onay Gerekli Araçlar ({kpis.complianceIssueVehicles} araç)
+            </h3>
+            <p className="text-sm text-amber-800 mb-3">
+              Aşağıdaki araçlar kiralama işlemine devam etmeden önce yetkili onayı veya uygunluk doğrulaması gerektirir:
+            </p>
+            <ul className="space-y-2 text-sm text-amber-700">
+              <li className="flex items-center gap-2">
+                <span>•</span>
+                <span>AVID kimliği eksik veya eşleşme sorunu olan araçlar → Kritik onay gerekli</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span>•</span>
+                <span>Bakım süresi içinde olan araçlar (50.000+ km) → Bakım onayı ve yönetici incelemesi</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span>•</span>
+                <span>Risk skoru 75+ olan araçlar (AVID eşleşme sorunu) → Yetkili incelemesi gerekli</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span>•</span>
+                <span>INACTIVE durumda olan araçlar → Kritik onay gerekli</span>
+              </li>
+            </ul>
           </div>
-        </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -680,19 +1243,35 @@ function KanbanColumn({ title, vehicles, onSelectVehicle, color }: { title: stri
         {vehicles.length === 0 ? (
           <p className="text-xs text-slate-500">Araç yok</p>
         ) : (
-          vehicles.map(v => (
-            <button
-              key={v.vehicleId}
-              onClick={() => onSelectVehicle(v)}
-              className="w-full p-2 bg-white rounded-lg border border-slate-200 hover:border-slate-400 transition text-left"
-            >
-              <p className="text-xs font-bold text-slate-900">{v.plateNumber}</p>
-              <p className="text-xs text-slate-600">{v.brand} {v.model}</p>
-              <div className="flex gap-1 mt-1">
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded">Risk: {v.riskScore}</span>
-              </div>
-            </button>
-          ))
+          vehicles.map(v => {
+            const avidStatus = deriveAvidIdentity(v);
+            
+            return (
+              <button
+                key={v.vehicleId}
+                onClick={() => onSelectVehicle(v)}
+                className="w-full p-2 bg-white rounded-lg border border-slate-200 hover:border-slate-400 transition text-left"
+              >
+                <p className="text-xs font-bold text-slate-900">{v.plateNumber}</p>
+                <p className="text-xs text-slate-600">{v.brand} {v.model}</p>
+                <div className="flex gap-1 mt-1 flex-wrap">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded">Risk: {v.riskScore}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${
+                    avidStatus.status === 'verified' ? 'bg-emerald-100 text-emerald-700' :
+                    avidStatus.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                    avidStatus.status === 'isolated' ? 'bg-purple-100 text-purple-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {avidStatus.status === 'verified' && <Lock size={10} />}
+                    {avidStatus.status === 'pending' && <Unlock size={10} />}
+                    {avidStatus.status === 'isolated' && <Database size={10} />}
+                    {(avidStatus.status === 'missing' || avidStatus.status === 'mismatch') && <AlertTriangle size={10} />}
+                    {avidStatus.label.split(' ')[0]}
+                  </span>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>

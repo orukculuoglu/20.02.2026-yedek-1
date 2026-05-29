@@ -7,12 +7,19 @@
 
 const PII_FIELD_NAMES = [
   'vin',
+  'VIN',
+  'maskedVin',
   'plate',
   'plaka',
+  'licensePlate',
+  'plateNumber',
   'chassis',
+  'şase',
+  'sase',
   'imei',
   'identity',
   'tckn',
+  'identityNumber',
   'phone',
   'email',
   'address',
@@ -21,7 +28,11 @@ const PII_FIELD_NAMES = [
   'card',
   'passport',
   'license',
-  'registration'
+  'registration',
+  'customerName',
+  'name',
+  'rawNote',
+  'freeText'
 ];
 
 const VIN_PATTERN = /^[A-Z0-9]{17}$/i; // Standard VIN: 17 alphanumeric

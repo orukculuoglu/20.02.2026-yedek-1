@@ -13,13 +13,37 @@
 /**
  * Event type enumeration
  * Extensible for future event kinds
+ * 
+ * Fleet Rental events (AVID-safe):
+ * - FLEET_VEHICLE_RENTED: Vehicle assigned to rental contract
+ * - FLEET_VEHICLE_RETURNED: Vehicle returned from contract
+ * - FLEET_VEHICLE_MILEAGE_UPDATED: Mileage tracked
+ * - FLEET_VEHICLE_DAMAGE_REPORTED: Damage/incident recorded
+ * - FLEET_VEHICLE_MAINTENANCE_REQUESTED: Vehicle sent to maintenance
+ * - FLEET_VEHICLE_SERVICE_REDIRECTED: Service redirect initiated
+ * - FLEET_VEHICLE_RISK_CHANGED: Risk status changed
+ * - FLEET_CONTRACT_STARTED: Rental contract activated
+ * - FLEET_CONTRACT_ENDED: Rental contract closed
+ * - FLEET_APPROVAL_REQUESTED: Manager approval required
+ * - FLEET_APPROVAL_ESCALATED: Compliance escalation required
  */
 export type DataEngineEventType =
   | "RISK_RECOMMENDATION"
   | "RISK_INDEX_SNAPSHOT"
   | "WORKORDER_HISTORY_VIEW"
   | "SEARCH_INTENT"
-  | "ORDER_EXECUTION";
+  | "ORDER_EXECUTION"
+  | "FLEET_VEHICLE_RENTED"
+  | "FLEET_VEHICLE_RETURNED"
+  | "FLEET_VEHICLE_MILEAGE_UPDATED"
+  | "FLEET_VEHICLE_DAMAGE_REPORTED"
+  | "FLEET_VEHICLE_MAINTENANCE_REQUESTED"
+  | "FLEET_VEHICLE_SERVICE_REDIRECTED"
+  | "FLEET_VEHICLE_RISK_CHANGED"
+  | "FLEET_CONTRACT_STARTED"
+  | "FLEET_CONTRACT_ENDED"
+  | "FLEET_APPROVAL_REQUESTED"
+  | "FLEET_APPROVAL_ESCALATED";
 
 /**
  * PII-safe subject (identifier only)
