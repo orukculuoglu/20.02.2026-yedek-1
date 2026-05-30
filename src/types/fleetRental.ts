@@ -3,6 +3,15 @@
  * Covers: Fleets, Vehicles, Contracts, Maintenance, Costs, Risk, Service Points
  */
 
+// ===== CONTROLLED LOCATION TYPE =====
+export type ContractLocationCode =
+  | 'istanbul_office'
+  | 'ankara_office'
+  | 'izmir_office'
+  | 'central_depot'
+  | 'service_delivery_point'
+  | 'fleet_customer_point';
+
 // ===== CORE ENTITIES =====
 
 export interface Fleet {
@@ -47,6 +56,16 @@ export interface RentalContract {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  // Professional rental contract fields (operational/structured only)
+  rentalPeriodType?: 'daily' | 'weekly' | 'monthly';
+  pricingModel?: 'fixed' | 'daily_rate' | 'monthly_rate';
+  extraKmFee?: number;       // ₺ per km
+  pickupLocation?: ContractLocationCode;
+  returnLocation?: ContractLocationCode;
+  fuelPolicy?: 'same_level' | 'full_to_full' | 'included';
+  lateReturnPolicy?: 'standard' | 'strict' | 'manual_review';
+  insurancePolicy?: 'standard_coverage' | 'extended_coverage' | 'manual_review';
+  damageResponsibility?: 'renter_responsible' | 'company_review' | 'insurance_review';
 }
 
 export interface MaintenanceLog {

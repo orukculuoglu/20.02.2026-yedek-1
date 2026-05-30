@@ -1,11 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { listFleets, listVehicles, listContracts, createContract, getVehicleSummary, setContext, getContext, getFleetPolicy, updateFleetPolicy, listServiceRedirects, createServiceRedirect, createWorkOrder, getWorkOrder, updateWorkOrder, addLineItem, applyCost, updateFleetPolicyWithCosts, requestApproval, approveWorkOrder, rejectWorkOrder } from '../services/fleetRentalService';
-import type { Fleet, Vehicle, RentalContract, CreateContractPayload, VehicleSummary, FleetPolicy, ServiceRedirect, WorkOrder, WorkOrderLineItem } from '../types/fleetRental';
+import type { Fleet, Vehicle, RentalContract, CreateContractPayload, VehicleSummary, FleetPolicy, ServiceRedirect, WorkOrder, WorkOrderLineItem, ContractLocationCode } from '../types/fleetRental';
 import { FleetIntelligenceRiskPanel } from './FleetIntelligenceRiskPanel';
 import { AlertTriangle, CheckCircle, TrendingUp, AlertCircle, Settings, DollarSign, Database, Briefcase, Calendar, Wrench, Shield, Users, TrendingDown, Eye, X, Lock, Unlock, ShieldAlert } from 'lucide-react';
 import { getDataEngineSender } from '../src/modules/data-engine/adapters/dataEngineSender';
 import type { DataEngineEventEnvelope, DataEngineEventType } from '../src/modules/data-engine/contracts/dataEngineContract';
 import { makeEventId, makeOccurredAt, makeIdempotencyKey } from '../src/modules/data-engine/contracts/dataEngineContract';
+
+// ========== CONTROLLED LOCATION VOCABULARY ==========
+const CONTRACT_LOCATION_OPTIONS: Array<{ value: ContractLocationCode; label: string }> = [
+  { value: 'istanbul_office', label: 'İstanbul Ofisi' },
+  { value: 'ankara_office', label: 'Ankara Ofisi' },
+  { value: 'izmir_office', label: 'İzmir Ofisi' },
+  { value: 'central_depot', label: 'Merkez Depo' },
+  { value: 'service_delivery_point', label: 'Servis Teslim Noktası' },
+  { value: 'fleet_customer_point', label: 'Filo Müşteri Noktası' },
+] as const;
+
+/**
+ * Get human-readable label for location code
+ * Returns label if found, otherwise returns "Lokasyon Belirsiz"
+ */
+function getContractLocationLabel(code: ContractLocationCode | undefined): string {
+  if (!code) return 'Lokasyon Belirsiz';
+  const option = CONTRACT_LOCATION_OPTIONS.find(opt => opt.value === code);
+  return option ? option.label : 'Lokasyon Belirsiz';
+}
 
 // ========== FLEET RENTAL AVID-SAFE EVENT HELPER ==========
 /**
@@ -362,7 +382,22 @@ function createLocalContract(
   startDate: string,
   endDate: string,
   contractsCount: number,
-  selectedVehicle?: Vehicle
+  selectedVehicle?: Vehicle,
+  formData?: {
+    rentalPeriodType: 'daily' | 'weekly' | 'monthly';
+    pricingModel: 'fixed' | 'daily_rate' | 'monthly_rate';
+    dailyRate: number;
+    monthlyRate: number;
+    kmLimit: number;
+    extraKmFee: number;
+    depositAmount: number;
+    pickupLocation: ContractLocationCode;
+    returnLocation: ContractLocationCode;
+    fuelPolicy: 'same_level' | 'full_to_full' | 'included';
+    lateReturnPolicy: 'standard' | 'strict' | 'manual_review';
+    insurancePolicy: 'standard_coverage' | 'extended_coverage' | 'manual_review';
+    damageResponsibility: 'renter_responsible' | 'company_review' | 'insurance_review';
+  }
 ): RentalContract {
   const contractId = generateContractId(vehicleId, startDate, endDate, contractsCount);
   
@@ -377,14 +412,24 @@ function createLocalContract(
     customerName: `Kiracı - ${vehicleId}`, // Local display placeholder, not sent to Data Engine
     startDate,
     endDate,
-    dailyRate: selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 600 : 500, // Safe calculation based on risk
-    monthlyRate: selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 13200 : 11000,
-    kmLimit: 10000,
-    depositAmount: 5000,
+    dailyRate: formData?.dailyRate ?? (selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 600 : 500),
+    monthlyRate: formData?.monthlyRate ?? (selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 13200 : 11000),
+    kmLimit: formData?.kmLimit ?? 10000,
+    depositAmount: formData?.depositAmount ?? 5000,
     status: 'ACTIVE',
     createdBy: 'fleet-rental-ui',
     createdAt: timestamp,
     updatedAt: timestamp,
+    // Professional rental contract fields
+    rentalPeriodType: formData?.rentalPeriodType,
+    pricingModel: formData?.pricingModel,
+    extraKmFee: formData?.extraKmFee,
+    pickupLocation: formData?.pickupLocation,
+    returnLocation: formData?.returnLocation,
+    fuelPolicy: formData?.fuelPolicy,
+    lateReturnPolicy: formData?.lateReturnPolicy,
+    insurancePolicy: formData?.insurancePolicy,
+    damageResponsibility: formData?.damageResponsibility,
   };
 }
 
@@ -691,7 +736,22 @@ export default function FleetRental() {
     vehicle: Vehicle,
     readiness: { status: string; label: string; reasons: string[] },
     startDate: string,
-    endDate: string
+    endDate: string,
+    formData?: {
+      rentalPeriodType: 'daily' | 'weekly' | 'monthly';
+      pricingModel: 'fixed' | 'daily_rate' | 'monthly_rate';
+      dailyRate: number;
+      monthlyRate: number;
+      kmLimit: number;
+      extraKmFee: number;
+      depositAmount: number;
+      pickupLocation: ContractLocationCode;
+      returnLocation: ContractLocationCode;
+      fuelPolicy: 'same_level' | 'full_to_full' | 'included';
+      lateReturnPolicy: 'standard' | 'strict' | 'manual_review';
+      insurancePolicy: 'standard_coverage' | 'extended_coverage' | 'manual_review';
+      damageResponsibility: 'renter_responsible' | 'company_review' | 'insurance_review';
+    }
   ) => {
     try {
       if (readiness.status === 'ready' || readiness.status === 'monitored') {
@@ -702,7 +762,8 @@ export default function FleetRental() {
           startDate,
           endDate,
           contracts.length,
-          vehicle
+          vehicle,
+          formData
         );
         
         // Add to contracts state
@@ -1353,10 +1414,40 @@ export default function FleetRental() {
     selectedVehicleId: string | null;
     startDate: string;
     endDate: string;
+    // Rental period & pricing
+    rentalPeriodType: 'daily' | 'weekly' | 'monthly';
+    pricingModel: 'fixed' | 'daily_rate' | 'monthly_rate';
+    dailyRate: number;
+    monthlyRate: number;
+    // Limits & fees
+    kmLimit: number;
+    extraKmFee: number;
+    depositAmount: number;
+    // Logistics (controlled codes, not free text)
+    pickupLocation: ContractLocationCode;
+    returnLocation: ContractLocationCode;
+    // Policies
+    fuelPolicy: 'same_level' | 'full_to_full' | 'included';
+    lateReturnPolicy: 'standard' | 'strict' | 'manual_review';
+    insurancePolicy: 'standard_coverage' | 'extended_coverage' | 'manual_review';
+    damageResponsibility: 'renter_responsible' | 'company_review' | 'insurance_review';
   }>({
     selectedVehicleId: null,
-    startDate: '2025-01-20', // Static default - users must set their own dates
-    endDate: '2025-01-27', // Static default - users must set their own dates
+    startDate: '2025-01-20',
+    endDate: '2025-01-27',
+    rentalPeriodType: 'daily',
+    pricingModel: 'daily_rate',
+    dailyRate: 500,
+    monthlyRate: 11000,
+    kmLimit: 10000,
+    extraKmFee: 5,
+    depositAmount: 5000,
+    pickupLocation: 'istanbul_office',
+    returnLocation: 'istanbul_office',
+    fuelPolicy: 'same_level',
+    lateReturnPolicy: 'standard',
+    insurancePolicy: 'standard_coverage',
+    damageResponsibility: 'renter_responsible',
   });
 
   // ========== RENDER: CONTRACTS SECTION ==========
@@ -1375,8 +1466,8 @@ export default function FleetRental() {
       {/* Contract Form Modal - Renders when showContractForm is true */}
       {showContractForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-8 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 sticky top-0 bg-white">
               <h3 className="text-xl font-bold text-slate-900">Yeni Sözleşme Oluştur</h3>
               <button
                 onClick={() => setShowContractForm(false)}
@@ -1387,78 +1478,293 @@ export default function FleetRental() {
             </div>
 
             <div className="space-y-4">
-              {/* Vehicle Selection */}
-              <div>
-                <label className="text-sm font-bold text-slate-700 block mb-2">Araç Seçimi</label>
-                <select
-                  value={contractFormState.selectedVehicleId || ''}
-                  onChange={(e) => setContractFormState({
-                    ...contractFormState,
-                    selectedVehicleId: e.target.value || null,
-                  })}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Araç Seçiniz...</option>
-                  {vehicles.map(vehicle => (
-                    <option key={vehicle.vehicleId} value={vehicle.vehicleId}>
-                      {vehicle.plateNumber} - {vehicle.brand} {vehicle.model}
-                    </option>
-                  ))}
-                </select>
+              {/* A) Araç ve uygunluk */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-700 uppercase mb-3">A) Araç ve Uygunluk</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Araç Seçimi</label>
+                    <select
+                      value={contractFormState.selectedVehicleId || ''}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        selectedVehicleId: e.target.value || null,
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="">Araç Seçiniz...</option>
+                      {vehicles.map(vehicle => (
+                        <option key={vehicle.vehicleId} value={vehicle.vehicleId}>
+                          {vehicle.plateNumber} - {vehicle.brand} {vehicle.model}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Show readiness after vehicle selection */}
+                  {contractFormState.selectedVehicleId && (() => {
+                    const selectedVehicleData = vehicles.find(v => v.vehicleId === contractFormState.selectedVehicleId);
+                    const vehicleContracts = contracts.filter(c => c.vehicleId === contractFormState.selectedVehicleId);
+                    const readinessData = selectedVehicleData ? getOperationalReadiness(selectedVehicleData, vehicleContracts) : null;
+                    const avidData = selectedVehicleData ? deriveAvidIdentity(selectedVehicleData) : null;
+
+                    return (
+                      <div className="p-2 bg-white rounded border border-slate-200 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-xs font-bold text-slate-600">Araç ID:</span>
+                          <span className="text-xs font-mono text-slate-700">{selectedVehicleData?.vehicleId}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-xs font-bold text-slate-600">Operasyonel Hazırlık:</span>
+                          <span className={`text-xs font-bold ${
+                            readinessData?.status === 'ready' || readinessData?.status === 'monitored' ? 'text-emerald-600' :
+                            readinessData?.status === 'maintenance' ? 'text-amber-600' :
+                            'text-red-600'
+                          }`}>
+                            {readinessData?.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
-              {/* Show readiness after vehicle selection */}
-              {contractFormState.selectedVehicleId && (() => {
-                const selectedVehicleData = vehicles.find(v => v.vehicleId === contractFormState.selectedVehicleId);
-                const vehicleContracts = contracts.filter(c => c.vehicleId === contractFormState.selectedVehicleId);
-                const readinessData = selectedVehicleData ? getOperationalReadiness(selectedVehicleData, vehicleContracts) : null;
-                const avidData = selectedVehicleData ? deriveAvidIdentity(selectedVehicleData) : null;
-
-                return (
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              {/* B) Kiralama dönemi */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-700 uppercase mb-3">B) Kiralama Dönemi</h4>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs font-bold text-slate-600 uppercase">Operasyonel Hazırlık</p>
-                      <p className={`text-sm font-bold ${
-                        readinessData?.status === 'ready' || readinessData?.status === 'monitored' ? 'text-emerald-600' :
-                        readinessData?.status === 'maintenance' ? 'text-amber-600' :
-                        'text-red-600'
-                      }`}>
-                        {readinessData?.label}
-                      </p>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">Başlangıç Tarihi</label>
+                      <input
+                        type="date"
+                        value={contractFormState.startDate}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          startDate: e.target.value,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-600 uppercase">AVID Kodu</p>
-                      <p className="text-xs font-mono text-slate-700">{avidData?.avidCode}</p>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">Bitiş Tarihi</label>
+                      <input
+                        type="date"
+                        value={contractFormState.endDate}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          endDate: e.target.value,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
                     </div>
                   </div>
-                );
-              })()}
-
-              {/* Date fields */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-bold text-slate-700 block mb-2">Başlangıç Tarihi</label>
-                  <input
-                    type="date"
-                    value={contractFormState.startDate}
-                    onChange={(e) => setContractFormState({
-                      ...contractFormState,
-                      startDate: e.target.value,
-                    })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Kiralama Dönemi Türü</label>
+                    <select
+                      value={contractFormState.rentalPeriodType}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        rentalPeriodType: e.target.value as 'daily' | 'weekly' | 'monthly',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="daily">Günlük</option>
+                      <option value="weekly">Haftalık</option>
+                      <option value="monthly">Aylık</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-bold text-slate-700 block mb-2">Bitiş Tarihi</label>
-                  <input
-                    type="date"
-                    value={contractFormState.endDate}
-                    onChange={(e) => setContractFormState({
-                      ...contractFormState,
-                      endDate: e.target.value,
-                    })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              </div>
+
+              {/* C) Ücret ve limitler */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-700 uppercase mb-3">C) Ücret ve Limitler</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Fiyatlandırma Modeli</label>
+                    <select
+                      value={contractFormState.pricingModel}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        pricingModel: e.target.value as 'fixed' | 'daily_rate' | 'monthly_rate',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="daily_rate">Günlük Tarife</option>
+                      <option value="monthly_rate">Aylık Tarife</option>
+                      <option value="fixed">Sabit Fiyat</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">Günlük Ücret (₺)</label>
+                      <input
+                        type="number"
+                        value={contractFormState.dailyRate}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          dailyRate: parseInt(e.target.value) || 0,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">Aylık Ücret (₺)</label>
+                      <input
+                        type="number"
+                        value={contractFormState.monthlyRate}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          monthlyRate: parseInt(e.target.value) || 0,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">KM Limiti</label>
+                      <input
+                        type="number"
+                        value={contractFormState.kmLimit}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          kmLimit: parseInt(e.target.value) || 0,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1">Ekstra KM Ücreti (₺/km)</label>
+                      <input
+                        type="number"
+                        value={contractFormState.extraKmFee}
+                        onChange={(e) => setContractFormState({
+                          ...contractFormState,
+                          extraKmFee: parseInt(e.target.value) || 0,
+                        })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Depozito Tutarı (₺)</label>
+                    <input
+                      type="number"
+                      value={contractFormState.depositAmount}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        depositAmount: parseInt(e.target.value) || 0,
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* D) Teslim / iade koşulları */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-700 uppercase mb-3">D) Teslim / İade Koşulları</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Teslim Yeri</label>
+                    <select
+                      value={contractFormState.pickupLocation}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        pickupLocation: e.target.value as ContractLocationCode,
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      {CONTRACT_LOCATION_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">İade Yeri</label>
+                    <select
+                      value={contractFormState.returnLocation}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        returnLocation: e.target.value as ContractLocationCode,
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      {CONTRACT_LOCATION_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Yakıt Politikası</label>
+                    <select
+                      value={contractFormState.fuelPolicy}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        fuelPolicy: e.target.value as 'same_level' | 'full_to_full' | 'included',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="same_level">Aynı Seviyeye Getir</option>
+                      <option value="full_to_full">Tam Getir - Tam Teslim Al</option>
+                      <option value="included">Yakıt Dahil</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Geç İade Politikası</label>
+                    <select
+                      value={contractFormState.lateReturnPolicy}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        lateReturnPolicy: e.target.value as 'standard' | 'strict' | 'manual_review',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="standard">Standart</option>
+                      <option value="strict">Katı</option>
+                      <option value="manual_review">Manuel İnceleme</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* E) Güvence / hasar sorumluluğu */}
+              <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <h4 className="text-sm font-bold text-slate-700 uppercase mb-3">E) Güvence / Hasar Sorumluluğu</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Sigorta Politikası</label>
+                    <select
+                      value={contractFormState.insurancePolicy}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        insurancePolicy: e.target.value as 'standard_coverage' | 'extended_coverage' | 'manual_review',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="standard_coverage">Standart Kapsama</option>
+                      <option value="extended_coverage">Genişletilmiş Kapsama</option>
+                      <option value="manual_review">Manuel İnceleme</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 block mb-1">Hasar Sorumluluğu</label>
+                    <select
+                      value={contractFormState.damageResponsibility}
+                      onChange={(e) => setContractFormState({
+                        ...contractFormState,
+                        damageResponsibility: e.target.value as 'renter_responsible' | 'company_review' | 'insurance_review',
+                      })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="renter_responsible">Kiracı Sorumlu</option>
+                      <option value="company_review">Şirket İncelemesi</option>
+                      <option value="insurance_review">Sigorta İncelemesi</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1492,14 +1798,42 @@ export default function FleetRental() {
                       selectedVehicleData,
                       readinessData,
                       contractFormState.startDate,
-                      contractFormState.endDate
+                      contractFormState.endDate,
+                      {
+                        rentalPeriodType: contractFormState.rentalPeriodType,
+                        pricingModel: contractFormState.pricingModel,
+                        dailyRate: contractFormState.dailyRate,
+                        monthlyRate: contractFormState.monthlyRate,
+                        kmLimit: contractFormState.kmLimit,
+                        extraKmFee: contractFormState.extraKmFee,
+                        depositAmount: contractFormState.depositAmount,
+                        pickupLocation: contractFormState.pickupLocation,
+                        returnLocation: contractFormState.returnLocation,
+                        fuelPolicy: contractFormState.fuelPolicy,
+                        lateReturnPolicy: contractFormState.lateReturnPolicy,
+                        insurancePolicy: contractFormState.insurancePolicy,
+                        damageResponsibility: contractFormState.damageResponsibility,
+                      }
                     );
 
                     setShowContractForm(false);
                     setContractFormState({
                       selectedVehicleId: null,
-                      startDate: '2025-01-20', // Static default - users must set their own dates
-                      endDate: '2025-01-27', // Static default - users must set their own dates
+                      startDate: '2025-01-20',
+                      endDate: '2025-01-27',
+                      rentalPeriodType: 'daily',
+                      pricingModel: 'daily_rate',
+                      dailyRate: 500,
+                      monthlyRate: 11000,
+                      kmLimit: 10000,
+                      extraKmFee: 5,
+                      depositAmount: 5000,
+                      pickupLocation: 'istanbul_office',
+                      returnLocation: 'istanbul_office',
+                      fuelPolicy: 'same_level',
+                      lateReturnPolicy: 'standard',
+                      insurancePolicy: 'standard_coverage',
+                      damageResponsibility: 'renter_responsible',
                     });
                   }}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold text-sm"
@@ -1511,8 +1845,21 @@ export default function FleetRental() {
                     setShowContractForm(false);
                     setContractFormState({
                       selectedVehicleId: null,
-                      startDate: '2025-01-20', // Static default - users must set their own dates
-                      endDate: '2025-01-27', // Static default - users must set their own dates
+                      startDate: '2025-01-20',
+                      endDate: '2025-01-27',
+                      rentalPeriodType: 'daily',
+                      pricingModel: 'daily_rate',
+                      dailyRate: 500,
+                      monthlyRate: 11000,
+                      kmLimit: 10000,
+                      extraKmFee: 5,
+                      depositAmount: 5000,
+                      pickupLocation: 'istanbul_office',
+                      returnLocation: 'istanbul_office',
+                      fuelPolicy: 'same_level',
+                      lateReturnPolicy: 'standard',
+                      insurancePolicy: 'standard_coverage',
+                      damageResponsibility: 'renter_responsible',
                     });
                   }}
                   className="flex-1 px-4 py-2 bg-slate-300 text-slate-900 rounded-lg hover:bg-slate-400 transition font-bold text-sm"
@@ -1534,39 +1881,71 @@ export default function FleetRental() {
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Durum</th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Başlangıç</th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Bitiş</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Günlük Ücret</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Ücret/KM</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Depozito</th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">İşlemler</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {contracts.map(contract => {
               const contractVehicle = vehicles.find(v => v.vehicleId === contract.vehicleId);
+              const rentalPeriodLabel = contract.rentalPeriodType ? 
+                (contract.rentalPeriodType === 'daily' ? 'Günlük' : 
+                 contract.rentalPeriodType === 'weekly' ? 'Haftalık' : 'Aylık') : '-';
+              const fuelPolicyLabel = contract.fuelPolicy ?
+                (contract.fuelPolicy === 'same_level' ? 'Aynı Seviye' :
+                 contract.fuelPolicy === 'full_to_full' ? 'Tam-Tam' : 'Dahil') : '-';
+              
               return (
-                <tr key={contract.contractId} className="hover:bg-slate-50 transition">
-                  <td className="px-6 py-4 font-bold text-slate-900">{contract.customerName}</td>
-                  <td className="px-6 py-4 text-sm text-slate-700">{contract.vehicleId}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${contract.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                      {contract.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.startDate)}</td>
-                  <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.endDate)}</td>
-                  <td className="px-6 py-4 font-bold text-slate-900">₺{contract.dailyRate}</td>
-                  <td className="px-6 py-4">
-                    {contract.status === 'ACTIVE' && contractVehicle && (
-                      <button
-                        onClick={() => handleContractEnd(contractVehicle)}
-                        className="text-red-600 hover:text-red-700 font-bold text-sm"
-                      >
-                        Araç İade Al
-                      </button>
-                    )}
-                    {contract.status !== 'ACTIVE' && (
-                      <span className="text-xs text-slate-500">-</span>
-                    )}
-                  </td>
-                </tr>
+                <React.Fragment key={contract.contractId}>
+                  <tr className="hover:bg-slate-50 transition">
+                    <td className="px-6 py-4 font-bold text-slate-900">{contract.customerName}</td>
+                    <td className="px-6 py-4 text-sm text-slate-700">{contract.vehicleId}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${contract.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                        {contract.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.startDate)}</td>
+                    <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.endDate)}</td>
+                    <td className="px-6 py-4 font-bold text-slate-900">₺{contract.dailyRate}/{contract.kmLimit}km</td>
+                    <td className="px-6 py-4 font-bold text-slate-900">₺{contract.depositAmount}</td>
+                    <td className="px-6 py-4">
+                      {contract.status === 'ACTIVE' && contractVehicle && (
+                        <button
+                          onClick={() => handleContractEnd(contractVehicle)}
+                          className="text-red-600 hover:text-red-700 font-bold text-sm"
+                        >
+                          Araç İade Al
+                        </button>
+                      )}
+                      {contract.status !== 'ACTIVE' && (
+                        <span className="text-xs text-slate-500">-</span>
+                      )}
+                    </td>
+                  </tr>
+                  {/* Compact details row for rental contract fields */}
+                  {(contract.rentalPeriodType || contract.pickupLocation || contract.fuelPolicy) && (
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <td colSpan={8} className="px-6 py-3">
+                        <div className="flex flex-wrap gap-4 text-xs">
+                          {contract.rentalPeriodType && (
+                            <div><span className="font-bold text-slate-600">Dönem:</span> {rentalPeriodLabel}</div>
+                          )}
+                          {contract.fuelPolicy && (
+                            <div><span className="font-bold text-slate-600">Yakıt:</span> {fuelPolicyLabel}</div>
+                          )}
+                          {contract.pickupLocation && (
+                            <div><span className="font-bold text-slate-600">Teslim:</span> {getContractLocationLabel(contract.pickupLocation)}</div>
+                          )}
+                          {contract.returnLocation && contract.returnLocation !== contract.pickupLocation && (
+                            <div><span className="font-bold text-slate-600">İade:</span> {getContractLocationLabel(contract.returnLocation)}</div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
