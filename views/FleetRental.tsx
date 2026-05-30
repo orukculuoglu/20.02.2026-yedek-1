@@ -10,7 +10,7 @@ import { makeEventId, makeOccurredAt, makeIdempotencyKey } from '../src/modules/
 // ========== FLEET RENTAL AVID-SAFE EVENT HELPER ==========
 /**
  * Safe event payload for Fleet Rental feedback events
- * Uses vehicleId as AVID - no VIN, plate, chassis, or PII
+ * Uses vehicleId as AVID with AVID/KVKK-safe event payloads
  */
 interface FleetRentalEventPayload {
   domain: 'fleet-rental';
@@ -18,26 +18,28 @@ interface FleetRentalEventPayload {
   vehicleId: string;             // AVID
   fleetId?: string;              // Fleet context (if not PII)
   contractId?: string;           // Contract context (if not PII)
-  operationStatus?: string;      // e.g., 'ready', 'maintenance'
+  operationStatus?: string;      // e.g., 'ready', 'maintenance', 'rented', 'rented_with_warning'
   readinessStatus?: string;      // e.g., 'ready', 'monitored', 'approval_required'
   readinessLabel?: string;       // Human label
-  approvalLevel?: string;        // e.g., 'manager_approval', 'compliance_escalation'
+  approvalLevel?: string;        // e.g., 'manager_approval', 'compliance_escalation', 'warning_acknowledgement'
   approvalReasonCodes?: string[]; // Structured reason codes
+  warningAcknowledged?: boolean; // Whether user acknowledged warnings
   riskScore?: number;            // 0-100 risk metric
   mileageKm?: number;            // Current mileage (operational use only)
-  maintenanceSignal?: string;    // e.g., 'scheduled', 'urgent'
+  maintenanceSignal?: string;    // e.g., 'scheduled', 'urgent', 'damage_reported'
   serviceRedirectStatus?: string; // Redirect context
   dataConfidence?: number;       // 0-100 confidence
   identityStatus?: string;       // AVID verification status
   domainIsolationStatus?: string; // 'active', 'restricted', 'none'
   dataSharingEligibility?: string; // 'full', 'restricted', 'minimal'
+  decisionSource?: string;       // Source of decision: 'avid-readiness-gate', 'user-action-*', etc.
 }
 
 /**
  * Emit a Fleet Rental feedback event to Data Engine
  * - Gracefully fails without crashing UI
  * - Uses vehicleId as AVID
- * - No VIN, plate, chassis, or customer PII
+ * - No direct identifiers or customer PII are propagated
  * - Includes safe operational metadata
  */
 async function emitFleetRentalEvent(
@@ -54,12 +56,15 @@ async function emitFleetRentalEvent(
       ...payload,
     };
 
+    // Generate occurred timestamp once and reuse for idempotency
+    const occurredAt = makeOccurredAt();
+
     // Create event envelope
     const envelope: DataEngineEventEnvelope<FleetRentalEventPayload> = {
       schemaVersion: 'DE-1.0',
       eventId: makeEventId(),
       eventType: eventType as DataEngineEventType,
-      occurredAt: makeOccurredAt(),
+      occurredAt: occurredAt,
       tenantId: 'fleet-rental-tenant', // Can be overridden by context
       subject: {
         vehicleId: vehicle.vehicleId,
@@ -68,7 +73,7 @@ async function emitFleetRentalEvent(
       idempotencyKey: makeIdempotencyKey({
         vehicleId: vehicle.vehicleId,
         eventType,
-        timestamp: Date.now(),
+        occurredAt: occurredAt,
       }),
       meta: {
         source: 'fleet-rental-ui',
@@ -139,8 +144,8 @@ async function emitReadinessEvent(
 }
 
 // ========== AVID IDENTITY DERIVATION ==========
-// VIN is intentionally not displayed or propagated in Fleet Rental.
-// vehicleId represents AVID in this operational context.
+// vehicleId represents AVID; direct identifiers are not exposed in operational context.
+// All operational events use AVID subject only.
 interface AvidIdentityStatus {
   status: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated';
   label: string;
@@ -152,30 +157,53 @@ interface AvidIdentityStatus {
 }
 
 function deriveAvidIdentity(vehicle: Vehicle): AvidIdentityStatus {
-  // Determine AVID status based on vehicle properties
-  const hasAvidField = vehicle && (vehicle as any).avidId;
-  const isActive = vehicle.status === 'ACTIVE';
-  
-  // AVID Code - using vehicleId as AVID in operational context
+  // AVID Code - using vehicleId as AVID in operational context (e.g., VEH-001)
   const avidCode = vehicle.vehicleId;
   
-  // Determine AVID verification status
+  // Determine AVID verification status based on avidVerificationStatus field
   let status: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated' = 'pending';
   let severity: 'low' | 'medium' | 'high' = 'medium';
   let label = 'Doğrulama Bekleyen';
   
-  if (hasAvidField) {
-    status = 'verified';
-    severity = 'low';
-    label = 'AVID Doğrulanmış';
-  } else if (vehicle.riskScore > 75) {
-    status = 'mismatch';
-    severity = 'high';
-    label = 'Yüksek Risk - Eşleşme Sorunlu';
+  // Check avidVerificationStatus field if present
+  if (vehicle.avidVerificationStatus) {
+    status = vehicle.avidVerificationStatus;
+    
+    // Map verification status to labels and severity
+    switch (status) {
+      case 'verified':
+        label = 'AVID Doğrulanmış';
+        severity = 'low';
+        break;
+      case 'pending':
+        label = 'Doğrulama Bekleyen';
+        severity = 'medium';
+        break;
+      case 'isolated':
+        label = 'Veri İzolasyonunda';
+        severity = 'medium';
+        break;
+      case 'missing':
+        label = 'AVID Bilgisi Eksik';
+        severity = 'high';
+        break;
+      case 'mismatch':
+        label = 'Yüksek Risk - Eşleşme Sorunlu';
+        severity = 'high';
+        break;
+    }
   } else {
-    status = 'missing';
-    severity = 'high';
-    label = 'AVID Bilgisi Eksik';
+    // Fallback: if no avidVerificationStatus, default to verified (vehicleId exists)
+    // unless risk is very high, which indicates potential mismatch
+    if (vehicle.riskScore > 75) {
+      status = 'mismatch';
+      severity = 'high';
+      label = 'Yüksek Risk - Eşleşme Sorunlu';
+    } else {
+      status = 'verified';
+      severity = 'low';
+      label = 'AVID Doğrulanmış';
+    }
   }
   
   // Domain isolation: if vehicle has active rental or maintenance, restrict data sharing
@@ -295,6 +323,71 @@ function getOperationalReadiness(vehicle: Vehicle, contracts: RentalContract[]):
   };
 }
 
+// ========== CONTRACT CREATION HELPERS ==========
+
+/**
+ * Generate a deterministic contract ID from safe fields
+ * Uses: vehicleId, startDate, endDate, contracts.length
+ * Deterministic - no runtime generation
+ */
+function generateContractId(vehicleId: string, startDate: string, endDate: string, contractsCount: number): string {
+  return `fleet-contract-${vehicleId}-${startDate}-${endDate}-${contractsCount + 1}`;
+}
+
+/**
+ * Format date string to Turkish locale format without runtime date parsing
+ * Handles YYYY-MM-DD and ISO-like strings deterministically
+ * Example: '2025-01-20' -> '20.01.2025'
+ */
+function formatDateTR(dateString: string | undefined): string {
+  if (!dateString) return 'Tarih Yok';
+  try {
+    // Extract YYYY-MM-DD from various formats
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return 'Tarih Yok';
+    const [, year, month, day] = match;
+    return `${day}.${month}.${year}`;
+  } catch (e) {
+    return 'Tarih Yok';
+  }
+}
+
+/**
+ * Create a local contract record for ready/monitored vehicles
+ * Safe fields only - no customer PII or identifiers beyond what's needed for UI display
+ */
+function createLocalContract(
+  vehicleId: string,
+  fleetId: string,
+  startDate: string,
+  endDate: string,
+  contractsCount: number,
+  selectedVehicle?: Vehicle
+): RentalContract {
+  const contractId = generateContractId(vehicleId, startDate, endDate, contractsCount);
+  
+  // Use startDate as timestamp reference - deterministic timestamp
+  // Ensure it's in ISO format with time component
+  const timestamp = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+  
+  return {
+    contractId,
+    fleetId,
+    vehicleId,
+    customerName: `Kiracı - ${vehicleId}`, // Local display placeholder, not sent to Data Engine
+    startDate,
+    endDate,
+    dailyRate: selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 600 : 500, // Safe calculation based on risk
+    monthlyRate: selectedVehicle?.riskScore && selectedVehicle.riskScore > 60 ? 13200 : 11000,
+    kmLimit: 10000,
+    depositAmount: 5000,
+    status: 'ACTIVE',
+    createdBy: 'fleet-rental-ui',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 export default function FleetRental() {
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
@@ -348,6 +441,7 @@ export default function FleetRental() {
 
   // V2.5 Breakdown Incident Modal
   const [showBreakdownModal, setShowBreakdownModal] = useState(false);
+  const generateIncidentId = () => `INC-${vehicles.length}-${contracts.length}`;
   const [breakdownForm, setBreakdownForm] = useState<{
     incidentId: string;
     title: string;
@@ -356,7 +450,7 @@ export default function FleetRental() {
     locationCity: string;
     selectedServicePointId: string | null;
   }>({
-    incidentId: 'INC-' + Math.random().toString(36).substr(2, 9),
+    incidentId: generateIncidentId(),
     title: '',
     symptom: '',
     severity: 'Medium',
@@ -388,6 +482,276 @@ export default function FleetRental() {
     monthlyRate: 22000,
     depositAmount: 5000,
   });
+
+  // Event feedback state
+  const [eventFeedback, setEventFeedback] = useState<{ vehicleId: string; message: string; type: 'success' | 'error' } | null>(null);
+
+  // ========== ACTION HANDLERS (AVID-Safe Event Binding) ==========
+  
+  /**
+   * Handle approval request action
+   * Emit FLEET_APPROVAL_REQUESTED when manager approval is needed
+   */
+  const handleRequestApproval = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      await emitFleetRentalEvent('FLEET_APPROVAL_REQUESTED', vehicle, {
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        approvalLevel: 'manager_approval',
+        approvalReasonCodes: readiness.reasons.map(r => r.split(' - ')[0] || 'unknown').slice(0, 5),
+        decisionSource: 'avid-readiness-gate',
+      });
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Onay talebi veri motoruna iletildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Onay talebi gönderilemedi', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle escalation action
+   * Emit FLEET_APPROVAL_ESCALATED when compliance escalation is needed
+   */
+  const handleEscalateApproval = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      await emitFleetRentalEvent('FLEET_APPROVAL_ESCALATED', vehicle, {
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        approvalLevel: 'compliance_escalation',
+        approvalReasonCodes: readiness.reasons.map(r => r.split(' - ')[0] || 'unknown').slice(0, 5),
+        decisionSource: 'avid-readiness-gate',
+      });
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Kritik onay talebi veri motoruna iletildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Kritik onay talebi gönderilemedi', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle maintenance request action
+   * Emit FLEET_VEHICLE_MAINTENANCE_REQUESTED
+   */
+  const handleRequestMaintenance = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      await emitFleetRentalEvent('FLEET_VEHICLE_MAINTENANCE_REQUESTED', vehicle, {
+        maintenanceSignal: 'scheduled',
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        riskScore: vehicle.riskScore,
+        identityStatus: deriveAvidIdentity(vehicle).status,
+        decisionSource: 'operational-readiness-check',
+      });
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Bakım talebi veri motoruna iletildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Bakım talebi gönderilemedi', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle service redirect action
+   * Emit FLEET_VEHICLE_SERVICE_REDIRECTED
+   */
+  const handleRedirectToService = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      await emitFleetRentalEvent('FLEET_VEHICLE_SERVICE_REDIRECTED', vehicle, {
+        serviceRedirectStatus: 'initiated',
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        identityStatus: deriveAvidIdentity(vehicle).status,
+        decisionSource: 'operational-action',
+      });
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Servis yönlendirmesi veri motoruna iletildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Servis yönlendirmesi gönderilemedi', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle contract start action
+   * Emit FLEET_CONTRACT_STARTED and FLEET_VEHICLE_RENTED
+   * For monitored status, include warning acknowledgement metadata
+   */
+  const handleContractStart = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      // Build base payload
+      const basePayload = {
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        decisionSource: 'user-action-contract-start',
+      };
+
+      // For monitored status, include warning acknowledgement metadata
+      if (readiness.status === 'monitored') {
+        const warningPayload = {
+          ...basePayload,
+          operationStatus: 'rented_with_warning',
+          warningAcknowledged: true,
+          approvalLevel: 'warning_acknowledgement',
+          approvalReasonCodes: readiness.reasons.map(r => r.split(' - ')[0] || 'unknown').slice(0, 5),
+        };
+
+        await Promise.all([
+          emitFleetRentalEvent('FLEET_CONTRACT_STARTED', vehicle, warningPayload),
+          emitFleetRentalEvent('FLEET_VEHICLE_RENTED', vehicle, warningPayload),
+        ]);
+
+        setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Uyarı kabul edilerek sözleşme başlatıldı ve araç kiralama motoruna bildirildi', type: 'success' });
+      } else {
+        // Ready status - standard rental
+        const rentalPayload = {
+          ...basePayload,
+          operationStatus: 'rented',
+        };
+
+        await Promise.all([
+          emitFleetRentalEvent('FLEET_CONTRACT_STARTED', vehicle, { ...rentalPayload, operationStatus: 'rental_initiated' }),
+          emitFleetRentalEvent('FLEET_VEHICLE_RENTED', vehicle, rentalPayload),
+        ]);
+
+        setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Sözleşme başlatıldı ve araç kiralama motoruna bildirildi', type: 'success' });
+      }
+
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Sözleşme başlatılamadı', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle contract end action
+   * Emit FLEET_CONTRACT_ENDED and FLEET_VEHICLE_RETURNED
+   * Update local contract status from ACTIVE to COMPLETED
+   */
+  const handleContractEnd = async (vehicle: Vehicle) => {
+    try {
+      await Promise.all([
+        emitFleetRentalEvent('FLEET_CONTRACT_ENDED', vehicle, {
+          operationStatus: 'rental_ended',
+          decisionSource: 'user-action-contract-end',
+        }),
+        emitFleetRentalEvent('FLEET_VEHICLE_RETURNED', vehicle, {
+          operationStatus: 'returned',
+          decisionSource: 'user-action-contract-end',
+        }),
+      ]);
+      
+      // Update local contract status from ACTIVE to COMPLETED
+      const activeContractIndex = contracts.findIndex(
+        c => c.vehicleId === vehicle.vehicleId && c.status === 'ACTIVE'
+      );
+      if (activeContractIndex >= 0) {
+        const updatedContracts = [...contracts];
+        const contract = updatedContracts[activeContractIndex];
+        // Use contract's endDate as timestamp reference - deterministic timestamp
+        const timestamp = contract.endDate.includes('T') ? contract.endDate : `${contract.endDate}T23:59:59Z`;
+        updatedContracts[activeContractIndex] = {
+          ...contract,
+          status: 'COMPLETED',
+          updatedAt: timestamp,
+        };
+        setContracts(updatedContracts);
+      }
+      
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Araç iade alındı ve veri motoruna bildirildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Araç iade alınamadı', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle damage report action
+   * Emit FLEET_VEHICLE_DAMAGE_REPORTED
+   */
+  const handleReportDamage = async (vehicle: Vehicle, readiness: { status: string; label: string; reasons: string[] }) => {
+    try {
+      await emitFleetRentalEvent('FLEET_VEHICLE_DAMAGE_REPORTED', vehicle, {
+        maintenanceSignal: 'damage_reported',
+        readinessStatus: readiness.status,
+        readinessLabel: readiness.label,
+        riskScore: vehicle.riskScore,
+        decisionSource: 'user-action-incident-report',
+      });
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Arıza raporu veri motoruna iletildi', type: 'success' });
+      setTimeout(() => setEventFeedback(null), 3000);
+    } catch (error) {
+      setEventFeedback({ vehicleId: vehicle.vehicleId, message: 'Arıza raporu gönderilemedi', type: 'error' });
+    }
+  };
+
+  /**
+   * Handle contract creation workflow
+   * Routes through readiness gate and creates local contract for ready/monitored
+   * For other statuses, calls appropriate handler without creating contract
+   */
+  const handleContractCreation = async (
+    vehicle: Vehicle,
+    readiness: { status: string; label: string; reasons: string[] },
+    startDate: string,
+    endDate: string
+  ) => {
+    try {
+      if (readiness.status === 'ready' || readiness.status === 'monitored') {
+        // Create local ACTIVE contract for ready/monitored vehicles
+        const newContract = createLocalContract(
+          vehicle.vehicleId,
+          vehicle.fleetId,
+          startDate,
+          endDate,
+          contracts.length,
+          vehicle
+        );
+        
+        // Add to contracts state
+        setContracts([...contracts, newContract]);
+        
+        // Show feedback about contract creation
+        setEventFeedback({ 
+          vehicleId: vehicle.vehicleId, 
+          message: 'Sözleşme oluşturuldu ve Veri Motoru\'na iletildi', 
+          type: 'success' 
+        });
+        
+        // Emit Data Engine events
+        await handleContractStart(vehicle, readiness);
+        setTimeout(() => setEventFeedback(null), 3000);
+      } else if (readiness.status === 'approval_required') {
+        // Request approval without creating contract
+        setEventFeedback({ 
+          vehicleId: vehicle.vehicleId, 
+          message: 'Araç yetkili onayı gerektiriyor. Sözleşme başlatılmadı.', 
+          type: 'error' 
+        });
+        await handleRequestApproval(vehicle, readiness);
+      } else if (readiness.status === 'critical_approval_required') {
+        // Escalate without creating contract
+        setEventFeedback({ 
+          vehicleId: vehicle.vehicleId, 
+          message: 'Araç kritik onay gerektiriyor. Sözleşme başlatılmadı.', 
+          type: 'error' 
+        });
+        await handleEscalateApproval(vehicle, readiness);
+      } else if (readiness.status === 'maintenance') {
+        // Request maintenance without creating contract
+        setEventFeedback({ 
+          vehicleId: vehicle.vehicleId, 
+          message: 'Araç bakım gerektiriyor. Sözleşme başlatılmadı.', 
+          type: 'error' 
+        });
+        await handleRequestMaintenance(vehicle, readiness);
+      }
+    } catch (error) {
+      console.error('Contract creation error:', error);
+      setEventFeedback({ 
+        vehicleId: vehicle.vehicleId, 
+        message: 'İşlem başarısız oldu', 
+        type: 'error' 
+      });
+    }
+  };
 
   // ========== CORE DATA LOADING ==========
   useEffect(() => {
@@ -443,11 +807,22 @@ export default function FleetRental() {
     const totalVehicles = vehicles.length;
     const readyForRental = vehicles.filter(v => v.status === 'ACTIVE').length;
     const riskyButAvailable = vehicles.filter(v => v.status === 'ACTIVE' && v.riskScore > 60).length;
-    const onRental = vehicles.filter(v => v.status === 'ACTIVE').length; // Approx - no rental status on vehicle
     const inMaintenance = vehicles.filter(v => v.status === 'MAINTENANCE').length;
-    const avgRiskScore = vehicles.length > 0 ? Math.round(vehicles.reduce((sum, v) => sum + v.riskScore, 0) / vehicles.length) : 0;
+    
+    // Average risk score: only from vehicles with valid numeric riskScore
+    const vehiclesWithValidRisk = vehicles.filter(v => typeof v.riskScore === 'number' && !isNaN(v.riskScore));
+    const avgRiskScore = vehiclesWithValidRisk.length > 0 
+      ? Math.round(vehiclesWithValidRisk.reduce((sum, v) => sum + (v.riskScore || 0), 0) / vehiclesWithValidRisk.length)
+      : 'Veri Yok'; // Return string if no valid risk scores
+    
     const avergePerfRating = 85; // Placeholder
     const monthlyRevenue = contracts.filter(c => c.status === 'ACTIVE').reduce((sum, c) => sum + (c.monthlyRate || 0), 0);
+    
+    // Vehicles actually on rental (have ACTIVE contracts)
+    const onRental = vehicles.filter(v => {
+      const vehicleContracts = contracts.filter(c => c.vehicleId === v.vehicleId);
+      return vehicleContracts.some(c => c.status === 'ACTIVE');
+    }).length;
 
     // AVID & Operational Readiness Metrics
     const avidVerifiedVehicles = vehicles.filter(v => deriveAvidIdentity(v).status === 'verified').length;
@@ -460,11 +835,12 @@ export default function FleetRental() {
       return status === 'missing' || status === 'mismatch';
     }).length;
     
-    // Count vehicles that are genuinely ready (AVID verified + operational ready)
+    // Count vehicles that are genuinely ready (AVID verified + operational ready + not currently rented)
     const fullyReadyVehicles = vehicles.filter(v => {
       const avidStatus = deriveAvidIdentity(v);
       const readiness = getOperationalReadiness(v, contracts);
-      return avidStatus.status === 'verified' && readiness.status === 'ready';
+      const hasActiveContract = contracts.some(c => c.vehicleId === v.vehicleId && c.status === 'ACTIVE');
+      return avidStatus.status === 'verified' && readiness.status === 'ready' && !hasActiveContract;
     }).length;
     
     const complianceIssueVehicles = vehicles.filter(v => {
@@ -493,9 +869,22 @@ export default function FleetRental() {
 
   // ========== KANBAN BOARD CATEGORIZATION ==========
   const categorizeVehicles = () => {
+    // Vehicles currently on rental (with ACTIVE contracts)
+    const rented = vehicles.filter(v => {
+      return contracts.some(c => c.vehicleId === v.vehicleId && c.status === 'ACTIVE');
+    });
+
+    // Vehicles ready for rental (operational ready + AVID verified + not currently rented)
+    const ready = vehicles.filter(v => {
+      const avidStatus = deriveAvidIdentity(v);
+      const readiness = getOperationalReadiness(v, contracts);
+      const isRented = rented.some(r => r.vehicleId === v.vehicleId);
+      return !isRented && avidStatus.status === 'verified' && readiness.status === 'ready';
+    });
+
     return {
-      ready: vehicles.filter(v => v.status === 'ACTIVE' && v.riskScore <= 60),
-      rented: vehicles.filter(v => v.status === 'ACTIVE' && v.riskScore > 40), // Proxy for rented
+      ready,
+      rented,
       maintenance_warning: vehicles.filter(v => v.currentMileage > 50000 && v.status !== 'MAINTENANCE'),
       in_service: vehicles.filter(v => v.status === 'MAINTENANCE'),
       risky: vehicles.filter(v => v.riskScore > 60),
@@ -590,12 +979,17 @@ export default function FleetRental() {
       severity: 'medium',
     });
 
-    // Contract Signal
+    // Contract Signal - Only ACTIVE contracts within 7 days
+    // Use deterministic reference date for demo calculations
+    const CONTRACT_SIGNAL_REFERENCE_DATE = '2025-01-20';
     const endingContracts = contracts.filter(c => {
-      const endDate = new Date(c.endDate);
-      const today = new Date();
-      const daysUntilEnd = Math.floor((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      return daysUntilEnd > 0 && daysUntilEnd < 7;
+      if (c.status !== 'ACTIVE') return false; // Only count ACTIVE contracts
+      // Extract date strings and compare deterministically
+      const contractEndDate = c.endDate.substring(0, 10); // YYYY-MM-DD format
+      const refDate = CONTRACT_SIGNAL_REFERENCE_DATE;
+      // Simple string comparison for dates within same year/month range
+      const isWithinRange = contractEndDate > refDate && contractEndDate <= '2025-01-27';
+      return isWithinRange;
     }).length;
     if (endingContracts > 0) signals.push({
       type: 'contract',
@@ -629,7 +1023,7 @@ export default function FleetRental() {
         <KPICard label="Kimlik Doğrulama Bekleyen" value={kpis.avidPendingVehicles.toString()} icon={<Unlock size={24} />} color="amber" />
         <KPICard label="Uygunluk Sorunu Olan" value={kpis.complianceIssueVehicles.toString()} icon={<AlertTriangle size={24} />} color="red" />
         <KPICard label="Bakımda / Serviste" value={kpis.inMaintenance.toString()} icon={<Wrench size={24} />} color="purple" />
-        <KPICard label="Ortalama Risk Skoru" value={kpis.avgRiskScore.toString()} icon={<Shield size={24} />} color="red" />
+        <KPICard label="Ortalama Risk Skoru" value={typeof kpis.avgRiskScore === 'string' ? kpis.avgRiskScore : kpis.avgRiskScore.toString()} icon={<Shield size={24} />} color="red" />
         <KPICard label="Aylık Gelir" value={`₺${(kpis.monthlyRevenue / 1000).toFixed(0)}K`} icon={<DollarSign size={24} />} color="emerald" />
       </div>
 
@@ -702,18 +1096,43 @@ export default function FleetRental() {
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-1">Kiralama Uygunluğu</p>
-                <p className="text-2xl font-black text-emerald-600">{selectedVehicle.status === 'ACTIVE' ? 'Uygun' : 'Uygun Değil'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Bakım Sağlığı</p>
-                <p className="text-sm font-bold text-slate-900">{selectedVehicle.currentMileage} km</p>
-                <p className={`text-xs font-bold ${selectedVehicle.currentMileage > 50000 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {selectedVehicle.currentMileage > 50000 ? 'Bakım Gerekli' : 'İyi Durumda'}
+                <p className={`text-2xl font-black ${
+                  readiness.status === 'ready' || readiness.status === 'monitored' ? 'text-emerald-600' :
+                  readiness.status === 'maintenance' ? 'text-amber-600' :
+                  'text-red-600'
+                }`}>
+                  {readiness.label}
                 </p>
               </div>
               <div>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Bakım Sağlığı</p>
+                {(() => {
+                  const hasValidMileage = typeof selectedVehicle.currentMileage === 'number' && !isNaN(selectedVehicle.currentMileage);
+                  return (
+                    <>
+                      <p className="text-sm font-bold text-slate-900">
+                        {hasValidMileage ? `${selectedVehicle.currentMileage} km` : 'Kilometre Verisi Yok'}
+                      </p>
+                      <p className={`text-xs font-bold ${
+                        !hasValidMileage ? 'text-slate-600' :
+                        selectedVehicle.currentMileage > 50000 ? 'text-red-600' :
+                        'text-emerald-600'
+                      }`}>
+                        {!hasValidMileage ? 'Değerlendirilemiyor' :
+                         selectedVehicle.currentMileage > 50000 ? 'Bakım Gerekli' :
+                         'İyi Durumda'}
+                      </p>
+                    </>
+                  );
+                })()}
+              </div>
+              <div>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-1">Risk Zekâsı</p>
-                <p className="text-2xl font-black">{selectedVehicle.riskScore}/100</p>
+                <p className="text-2xl font-black">
+                  {typeof selectedVehicle.riskScore === 'number' && !isNaN(selectedVehicle.riskScore)
+                    ? `${selectedVehicle.riskScore}/100`
+                    : 'Veri Yok'}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-1">Servis Ağı</p>
@@ -721,9 +1140,66 @@ export default function FleetRental() {
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-1">Aksiyonlar</p>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Detay</button>
-                  <button className="px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">Sözleşmeye Ata</button>
+                <div className="flex gap-2 flex-wrap">
+                  {/* Ready / Monitored: Contract creation with optional warning */}
+                  {(readiness.status === 'ready' || readiness.status === 'monitored') && (
+                    <button 
+                      onClick={() => {
+                        // Open modal with selected vehicle prefilled - user enters dates manually
+                        setContractFormState({
+                          ...contractFormState,
+                          selectedVehicleId: selectedVehicle.vehicleId,
+                        });
+                        setShowContractForm(true);
+                      }}
+                      className="px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                      disabled={eventFeedback?.vehicleId === selectedVehicle.vehicleId}
+                    >
+                      {readiness.status === 'monitored' ? 'Uyarıyla Sözleşmeye Ata' : 'Sözleşmeye Ata'}
+                    </button>
+                  )}
+                  
+                  {/* Approval Required: Request manager approval (no duplicate button) */}
+                  {readiness.status === 'approval_required' && (
+                    <button 
+                      onClick={() => handleRequestApproval(selectedVehicle, readiness)}
+                      className="px-3 py-1 text-xs font-bold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                      disabled={eventFeedback?.vehicleId === selectedVehicle.vehicleId}
+                    >
+                      Yetkili Onayı İste
+                    </button>
+                  )}
+                  
+                  {/* Critical Approval Required: Request compliance escalation (no duplicate button) */}
+                  {readiness.status === 'critical_approval_required' && (
+                    <button 
+                      onClick={() => handleEscalateApproval(selectedVehicle, readiness)}
+                      className="px-3 py-1 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                      disabled={eventFeedback?.vehicleId === selectedVehicle.vehicleId}
+                    >
+                      Kritik Onaya Gönder
+                    </button>
+                  )}
+                  
+                  {/* Maintenance: Send to maintenance */}
+                  {(readiness.status === 'maintenance' || selectedVehicle.currentMileage > 50000) && (
+                    <button 
+                      onClick={() => handleRequestMaintenance(selectedVehicle, readiness)}
+                      className="px-3 py-1 text-xs font-bold bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
+                      disabled={eventFeedback?.vehicleId === selectedVehicle.vehicleId}
+                    >
+                      Bakıma Yönlendir
+                    </button>
+                  )}
+                  
+                  {/* Damage Report: Available for all states */}
+                  <button 
+                    onClick={() => handleReportDamage(selectedVehicle, readiness)}
+                    className="px-3 py-1 text-xs font-bold bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                    disabled={eventFeedback?.vehicleId === selectedVehicle.vehicleId}
+                  >
+                    Arıza Bildir
+                  </button>
                 </div>
               </div>
             </div>
@@ -801,6 +1277,16 @@ export default function FleetRental() {
                   </ul>
                 </div>
               )}
+              
+              {eventFeedback && eventFeedback.vehicleId === selectedVehicle.vehicleId && (
+                <div className={`p-3 rounded-lg border text-xs font-bold ${
+                  eventFeedback.type === 'success' 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {eventFeedback.message}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -862,6 +1348,17 @@ export default function FleetRental() {
     </div>
   );
 
+  // ========== CONTRACT FORM STATE MANAGEMENT ==========
+  const [contractFormState, setContractFormState] = useState<{
+    selectedVehicleId: string | null;
+    startDate: string;
+    endDate: string;
+  }>({
+    selectedVehicleId: null,
+    startDate: '2025-01-20', // Static default - users must set their own dates
+    endDate: '2025-01-27', // Static default - users must set their own dates
+  });
+
   // ========== RENDER: CONTRACTS SECTION ==========
   const renderContracts = () => (
     <div className="space-y-4">
@@ -874,6 +1371,160 @@ export default function FleetRental() {
           Yeni Sözleşme
         </button>
       </div>
+
+      {/* Contract Form Modal - Renders when showContractForm is true */}
+      {showContractForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-8 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900">Yeni Sözleşme Oluştur</h3>
+              <button
+                onClick={() => setShowContractForm(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition"
+              >
+                <X size={20} className="text-slate-600" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Vehicle Selection */}
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-2">Araç Seçimi</label>
+                <select
+                  value={contractFormState.selectedVehicleId || ''}
+                  onChange={(e) => setContractFormState({
+                    ...contractFormState,
+                    selectedVehicleId: e.target.value || null,
+                  })}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Araç Seçiniz...</option>
+                  {vehicles.map(vehicle => (
+                    <option key={vehicle.vehicleId} value={vehicle.vehicleId}>
+                      {vehicle.plateNumber} - {vehicle.brand} {vehicle.model}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Show readiness after vehicle selection */}
+              {contractFormState.selectedVehicleId && (() => {
+                const selectedVehicleData = vehicles.find(v => v.vehicleId === contractFormState.selectedVehicleId);
+                const vehicleContracts = contracts.filter(c => c.vehicleId === contractFormState.selectedVehicleId);
+                const readinessData = selectedVehicleData ? getOperationalReadiness(selectedVehicleData, vehicleContracts) : null;
+                const avidData = selectedVehicleData ? deriveAvidIdentity(selectedVehicleData) : null;
+
+                return (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-600 uppercase">Operasyonel Hazırlık</p>
+                      <p className={`text-sm font-bold ${
+                        readinessData?.status === 'ready' || readinessData?.status === 'monitored' ? 'text-emerald-600' :
+                        readinessData?.status === 'maintenance' ? 'text-amber-600' :
+                        'text-red-600'
+                      }`}>
+                        {readinessData?.label}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-600 uppercase">AVID Kodu</p>
+                      <p className="text-xs font-mono text-slate-700">{avidData?.avidCode}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Date fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-bold text-slate-700 block mb-2">Başlangıç Tarihi</label>
+                  <input
+                    type="date"
+                    value={contractFormState.startDate}
+                    onChange={(e) => setContractFormState({
+                      ...contractFormState,
+                      startDate: e.target.value,
+                    })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-700 block mb-2">Bitiş Tarihi</label>
+                  <input
+                    type="date"
+                    value={contractFormState.endDate}
+                    onChange={(e) => setContractFormState({
+                      ...contractFormState,
+                      endDate: e.target.value,
+                    })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-4 border-t border-slate-200">
+                <button
+                  onClick={async () => {
+                    if (!contractFormState.selectedVehicleId) {
+                      setEventFeedback({
+                        vehicleId: '',
+                        message: 'Araç seçimi gerekli',
+                        type: 'error',
+                      });
+                      return;
+                    }
+                    const selectedVehicleData = vehicles.find(v => v.vehicleId === contractFormState.selectedVehicleId);
+                    const vehicleContracts = contracts.filter(c => c.vehicleId === contractFormState.selectedVehicleId);
+                    const readinessData = selectedVehicleData ? getOperationalReadiness(selectedVehicleData, vehicleContracts) : null;
+
+                    if (!selectedVehicleData || !readinessData) {
+                      setEventFeedback({
+                        vehicleId: '',
+                        message: 'Araç bilgileri yüklenemedi',
+                        type: 'error',
+                      });
+                      return;
+                    }
+
+                    // Use unified contract creation handler
+                    await handleContractCreation(
+                      selectedVehicleData,
+                      readinessData,
+                      contractFormState.startDate,
+                      contractFormState.endDate
+                    );
+
+                    setShowContractForm(false);
+                    setContractFormState({
+                      selectedVehicleId: null,
+                      startDate: '2025-01-20', // Static default - users must set their own dates
+                      endDate: '2025-01-27', // Static default - users must set their own dates
+                    });
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold text-sm"
+                >
+                  Oluştur
+                </button>
+                <button
+                  onClick={() => {
+                    setShowContractForm(false);
+                    setContractFormState({
+                      selectedVehicleId: null,
+                      startDate: '2025-01-20', // Static default - users must set their own dates
+                      endDate: '2025-01-27', // Static default - users must set their own dates
+                    });
+                  }}
+                  className="flex-1 px-4 py-2 bg-slate-300 text-slate-900 rounded-lg hover:bg-slate-400 transition font-bold text-sm"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
@@ -884,23 +1535,40 @@ export default function FleetRental() {
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Başlangıç</th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Bitiş</th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">Günlük Ücret</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase">İşlemler</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {contracts.map(contract => (
-              <tr key={contract.contractId} className="hover:bg-slate-50 transition">
-                <td className="px-6 py-4 font-bold text-slate-900">{contract.customerName}</td>
-                <td className="px-6 py-4 text-sm text-slate-700">{contract.vehicleId}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${contract.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                    {contract.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-slate-700">{new Date(contract.startDate).toLocaleDateString('tr-TR')}</td>
-                <td className="px-6 py-4 text-sm text-slate-700">{new Date(contract.endDate).toLocaleDateString('tr-TR')}</td>
-                <td className="px-6 py-4 font-bold text-slate-900">₺{contract.dailyRate}</td>
-              </tr>
-            ))}
+            {contracts.map(contract => {
+              const contractVehicle = vehicles.find(v => v.vehicleId === contract.vehicleId);
+              return (
+                <tr key={contract.contractId} className="hover:bg-slate-50 transition">
+                  <td className="px-6 py-4 font-bold text-slate-900">{contract.customerName}</td>
+                  <td className="px-6 py-4 text-sm text-slate-700">{contract.vehicleId}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${contract.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                      {contract.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.startDate)}</td>
+                  <td className="px-6 py-4 text-sm text-slate-700">{formatDateTR(contract.endDate)}</td>
+                  <td className="px-6 py-4 font-bold text-slate-900">₺{contract.dailyRate}</td>
+                  <td className="px-6 py-4">
+                    {contract.status === 'ACTIVE' && contractVehicle && (
+                      <button
+                        onClick={() => handleContractEnd(contractVehicle)}
+                        className="text-red-600 hover:text-red-700 font-bold text-sm"
+                      >
+                        Araç İade Al
+                      </button>
+                    )}
+                    {contract.status !== 'ACTIVE' && (
+                      <span className="text-xs text-slate-500">-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -919,9 +1587,17 @@ export default function FleetRental() {
           </h3>
           <div className="space-y-2">
             {vehicles.filter(v => v.currentMileage > 50000).map(vehicle => (
-              <div key={vehicle.vehicleId} className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="font-bold text-slate-900">{vehicle.plateNumber}</p>
-                <p className="text-xs text-slate-600">{vehicle.currentMileage} km - Bakım Gerekli</p>
+              <div key={vehicle.vehicleId} className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex justify-between items-start">
+                <div>
+                  <p className="font-bold text-slate-900">{vehicle.plateNumber}</p>
+                  <p className="text-xs text-slate-600">{vehicle.currentMileage} km - Bakım Gerekli</p>
+                </div>
+                <button
+                  onClick={() => handleRedirectToService(vehicle, getOperationalReadiness(vehicle, contracts.filter(c => c.vehicleId === vehicle.vehicleId)))}
+                  className="px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition whitespace-nowrap ml-2"
+                >
+                  Servise Yönlendir
+                </button>
               </div>
             ))}
           </div>
@@ -933,9 +1609,11 @@ export default function FleetRental() {
           </h3>
           <div className="space-y-2">
             {vehicles.filter(v => v.status === 'MAINTENANCE').map(vehicle => (
-              <div key={vehicle.vehicleId} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="font-bold text-slate-900">{vehicle.plateNumber}</p>
-                <p className="text-xs text-slate-600">Servis Durumunda</p>
+              <div key={vehicle.vehicleId} className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-start">
+                <div>
+                  <p className="font-bold text-slate-900">{vehicle.plateNumber}</p>
+                  <p className="text-xs text-slate-600">Servis Durumunda</p>
+                </div>
               </div>
             ))}
           </div>

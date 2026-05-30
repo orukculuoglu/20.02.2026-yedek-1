@@ -26,6 +26,7 @@ export interface Vehicle {
   nextMaintenanceKm: number;
   nextMaintenanceDate: string; // ISO date
   riskScore: number; // 0-100
+  avidVerificationStatus?: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated'; // AVID verification state
 }
 
 export interface RentalContract {

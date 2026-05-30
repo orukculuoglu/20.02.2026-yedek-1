@@ -65,7 +65,8 @@ export const MOCK_VEHICLES: Vehicle[] = [
     status: 'ACTIVE',
     nextMaintenanceKm: 50000,
     nextMaintenanceDate: '2026-03-15',
-    riskScore: 32,
+    riskScore: 25,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-002',
@@ -79,7 +80,8 @@ export const MOCK_VEHICLES: Vehicle[] = [
     status: 'ACTIVE',
     nextMaintenanceKm: 70000,
     nextMaintenanceDate: '2026-04-10',
-    riskScore: 45,
+    riskScore: 62,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-003',
@@ -94,6 +96,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 40000,
     nextMaintenanceDate: '2026-02-28',
     riskScore: 22,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-004',
@@ -107,7 +110,8 @@ export const MOCK_VEHICLES: Vehicle[] = [
     status: 'ACTIVE',
     nextMaintenanceKm: 80000,
     nextMaintenanceDate: '2026-03-05',
-    riskScore: 58,
+    riskScore: 76,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-005',
@@ -122,6 +126,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 45000,
     nextMaintenanceDate: '2026-04-20',
     riskScore: 38,
+    avidVerificationStatus: 'missing',
   },
   // FLEET-002
   {
@@ -137,6 +142,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 20000,
     nextMaintenanceDate: '2026-05-10',
     riskScore: 25,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-007',
@@ -151,6 +157,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 60000,
     nextMaintenanceDate: '2026-03-25',
     riskScore: 42,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-008',
@@ -165,6 +172,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 45000,
     nextMaintenanceDate: '2026-02-27',
     riskScore: 68,
+    avidVerificationStatus: 'missing',
   },
   {
     vehicleId: 'VEH-009',
@@ -179,6 +187,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 75000,
     nextMaintenanceDate: '2026-03-12',
     riskScore: 55,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-010',
@@ -193,6 +202,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 30000,
     nextMaintenanceDate: '2026-04-30',
     riskScore: 30,
+    avidVerificationStatus: 'missing',
   },
   // FLEET-003
   {
@@ -208,6 +218,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 25000,
     nextMaintenanceDate: '2026-06-01',
     riskScore: 20,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-012',
@@ -222,6 +233,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 55000,
     nextMaintenanceDate: '2026-03-20',
     riskScore: 35,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-013',
@@ -236,6 +248,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 70000,
     nextMaintenanceDate: '2026-04-05',
     riskScore: 52,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-014',
@@ -250,6 +263,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 90000,
     nextMaintenanceDate: '2026-02-28',
     riskScore: 61,
+    avidVerificationStatus: 'verified',
   },
   {
     vehicleId: 'VEH-015',
@@ -264,6 +278,7 @@ export const MOCK_VEHICLES: Vehicle[] = [
     nextMaintenanceKm: 30000,
     nextMaintenanceDate: '2026-05-15',
     riskScore: 28,
+    avidVerificationStatus: 'verified',
   },
 ];
 

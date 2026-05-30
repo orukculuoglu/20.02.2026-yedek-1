@@ -17,17 +17,19 @@ export interface Fleet {
 }
 
 export interface Vehicle {
-  vehicleId: string;         // UUID
+  vehicleId: string;         // UUID / AVID identifier (operational context)
   fleetId: string;           // FK to Fleet
   plateNumber: string;       // Unique within fleet
   brand: string;             // Ford, Hyundai, etc.
   model: string;             // Transit, Santa Fe, etc.
   year: number;              // 2020, 2021, etc.
-  vin: string;               // Vehicle Identification Number
+  vin: string;               // Vehicle Identification Number (internal display only)
   currentMileage: number;    // km
   status: 'ACTIVE' | 'MAINTENANCE' | 'OUT_OF_SERVICE' | 'RETIRED';
   nextMaintenanceKm: number; // Backup km-based trigger
   nextMaintenanceDate: string; // ISO date (time-based trigger)
+  avidVerificationStatus?: 'verified' | 'pending' | 'missing' | 'mismatch' | 'isolated'; // AVID verification state
+  riskScore?: number;        // 0-100 operational risk score
 }
 
 export interface RentalContract {
