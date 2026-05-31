@@ -5,6 +5,36 @@ import { generateVehicleId } from '../services/anonymizer';
 import { addSearchedVehicle } from '../services/dataService';
 import { recordQueryActivity, getCurrentUserSecurity, calculatePrivacyContext } from '../services/securityService';
 
+/**
+ * DETERMINISTIC MANUAL VEHICLE ID GENERATOR
+ * 
+ * Pure, deterministic hash-based ID generation for manual vehicle entries.
+ * Uses stable input fields only (brand, model, year, km, city, userId).
+ * No randomness, no timestamps - same inputs always produce same output.
+ * Complies with KVKK determinism requirement.
+ */
+const generateManualVehicleId = async (
+    brand: string,
+    model: string,
+    year: string,
+    km: string,
+    city: string,
+    userId: string
+): Promise<string> => {
+    // Build stable seed from form fields only
+    const seed = `${brand.trim().toUpperCase()}|${model.trim().toUpperCase()}|${year}|${km}|${city}|${userId}|MANUAL`;
+    
+    // Deterministic SHA-256 hash
+    const encoder = new TextEncoder();
+    const data = encoder.encode(seed);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // Format as MANUAL-{8-char}-{4-char}-{4-char}
+    return `MANUAL-${hashHex.substring(0, 8)}-${hashHex.substring(8, 12)}-${hashHex.substring(12, 16)}`;
+};
+
 interface VinInputModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -74,8 +104,14 @@ export const VinInputModal: React.FC<VinInputModalProps> = ({ isOpen, onClose, o
           vehicleId = await generateVehicleId(vin, currentUser.department, currentUser.id);
       } else {
           await new Promise(r => setTimeout(r, 500));
-          const randomSuffix = Math.random().toString(16).substring(2, 6).toUpperCase();
-          vehicleId = `MANUAL-${manualData.brand.substring(0,3).toUpperCase()}-${randomSuffix}`;
+          vehicleId = await generateManualVehicleId(
+              manualData.brand,
+              manualData.model,
+              manualData.year,
+              manualData.km,
+              manualData.city,
+              currentUser.id
+          );
       }
       
       setStep('FETCHING');
