@@ -3,6 +3,12 @@ import React, { useEffect, useState } from 'react';
 import { Search, Filter, FileText, Settings, Eye, MoreHorizontal, Globe, Cpu } from 'lucide-react';
 import { ViewState } from '../types';
 import { getVehicleList } from '../services/dataService';
+import { getFleetRentalMembershipStatus, createFleetRentalBindingFromLibrary } from '../services/fleetRentalBindingService';
+
+// Deterministic constants for binding context
+const DEFAULT_FLEET_RENTAL_FLEET_ID = 'FLEET001';
+const DEFAULT_BINDING_OPERATOR_ID = 'system-operator';
+const DEFAULT_BINDING_EFFECTIVE_AT = '2026-06-01T00:00:00Z';
 
 interface VehicleListProps {
   onSelectVehicle: (id: string) => void;
@@ -10,10 +16,55 @@ interface VehicleListProps {
 
 export const VehicleList: React.FC<VehicleListProps> = ({ onSelectVehicle }) => {
   const [vehicles, setVehicles] = useState<any[]>([]);
+  const [bindingStatusVersion, setBindingStatusVersion] = useState(0);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string; vehicleId?: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     getVehicleList().then(setVehicles);
   }, []);
+
+  const handleAddToFleet = async (vehicle: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsProcessing(true);
+    
+    try {
+      const result = await createFleetRentalBindingFromLibrary({
+        libraryVehicle: vehicle,
+        fleetId: DEFAULT_FLEET_RENTAL_FLEET_ID,
+        bindingEffectiveAt: DEFAULT_BINDING_EFFECTIVE_AT,
+        bindingCreatedBy: DEFAULT_BINDING_OPERATOR_ID
+      });
+      
+      if (result.success) {
+        setActionFeedback({
+          type: 'success',
+          message: `${vehicle.brand} ${vehicle.model} başarıyla filoya eklendi.`,
+          vehicleId: vehicle.vehicle_id
+        });
+        // Increment version to trigger re-render and update status
+        setBindingStatusVersion(v => v + 1);
+        // Clear feedback after 3 seconds
+        setTimeout(() => setActionFeedback(null), 3000);
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: result.message || 'Filoya ekleme işlemi başarısız oldu.',
+          vehicleId: vehicle.vehicle_id
+        });
+        setTimeout(() => setActionFeedback(null), 4000);
+      }
+    } catch (error) {
+      setActionFeedback({
+        type: 'error',
+        message: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+        vehicleId: vehicle.vehicle_id
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="p-8">
@@ -33,6 +84,13 @@ export const VehicleList: React.FC<VehicleListProps> = ({ onSelectVehicle }) => 
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Action Feedback */}
+        {actionFeedback && (
+          <div className={`px-6 py-3 border-b ${actionFeedback.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm font-medium`}>
+            {actionFeedback.message}
+          </div>
+        )}
+        
         {/* Table Toolbar */}
         <div className="p-4 border-b border-slate-100 flex items-center gap-4">
             <div className="relative flex-1 max-w-md">
@@ -54,6 +112,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ onSelectVehicle }) => 
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Vehicle ID (SafeCore™)</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Yıl</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk / Kaynak</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Filo Kiralama</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">İşlemler</th>
                 </tr>
             </thead>
@@ -87,6 +146,16 @@ export const VehicleList: React.FC<VehicleListProps> = ({ onSelectVehicle }) => 
                                 )}
                             </div>
                         </td>
+                        <td className="px-6 py-4">
+                            {(() => {
+                                const membership = getFleetRentalMembershipStatus(v.vehicle_id);
+                                return (
+                                    <span className={`inline-flex items-center w-fit px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${membership.bound ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                        {membership.bound ? 'Aktif' : 'Pasif'}
+                                    </span>
+                                );
+                            })()}
+                        </td>
                         <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                                 <button 
@@ -99,14 +168,26 @@ export const VehicleList: React.FC<VehicleListProps> = ({ onSelectVehicle }) => 
                                 >
                                     <Eye size={18} />
                                 </button>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                    }}
-                                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    <MoreHorizontal size={18} />
-                                </button>
+                                {(() => {
+                                    const membership = getFleetRentalMembershipStatus(v.vehicle_id);
+                                    if (membership.bound) {
+                                      return (
+                                        <span className="text-xs font-bold text-slate-400 px-2 py-1.5">
+                                          Filoda Mevcut
+                                        </span>
+                                      );
+                                    } else {
+                                      return (
+                                        <button
+                                          onClick={(e) => handleAddToFleet(v, e)}
+                                          disabled={isProcessing}
+                                          className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2 py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                          Filoya Dahil Et
+                                        </button>
+                                      );
+                                    }
+                                })()}
                             </div>
                         </td>
                     </tr>
