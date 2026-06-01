@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { listFleets, listVehicles, listContracts, createContract, getVehicleSummary, setContext, getContext, getFleetPolicy, updateFleetPolicy, listServiceRedirects, createServiceRedirect, createWorkOrder, getWorkOrder, updateWorkOrder, addLineItem, applyCost, updateFleetPolicyWithCosts, requestApproval, approveWorkOrder, rejectWorkOrder } from '../services/fleetRentalService';
+import { getFleetRentalBoundVehicles } from '../services/fleetRentalBindingService';
 import type { Fleet, Vehicle, RentalContract, CreateContractPayload, VehicleSummary, FleetPolicy, ServiceRedirect, WorkOrder, WorkOrderLineItem, ContractLocationCode } from '../types/fleetRental';
 import { FleetIntelligenceRiskPanel } from './FleetIntelligenceRiskPanel';
 import { AlertTriangle, CheckCircle, TrendingUp, AlertCircle, Settings, DollarSign, Database, Briefcase, Calendar, Wrench, Shield, Users, TrendingDown, Eye, X, Lock, Unlock, ShieldAlert } from 'lucide-react';
@@ -843,8 +844,18 @@ export default function FleetRental() {
           listContracts(fleetsData[0].fleetId),
         ]);
         
+        // Fetch bound vehicles from Library bindings
+        const boundVehicles = getFleetRentalBoundVehicles(fleetsData[0].fleetId);
+        
+        // Merge API vehicles with bound vehicles (avoid duplicates by vehicleId)
+        const mergedVehicles = [...(vehiclesData || []), ...boundVehicles];
+        // Deduplicate: keep first occurrence by vehicleId
+        const uniqueVehicles = Array.from(
+          new Map(mergedVehicles.map(v => [v.vehicleId, v])).values()
+        );
+        
         // Empty arrays are not errors
-        setVehicles(vehiclesData || []);
+        setVehicles(uniqueVehicles);
         setContracts(contractsData || []);
 
         setApiStatus({ fleet: 'success', vehicles: 'success', contracts: 'success' });

@@ -56,6 +56,19 @@ interface VehicleFleetRentalBinding {
  */
 const MOCK_FLEET_RENTAL_BINDINGS: VehicleFleetRentalBinding[] = [];
 
+/**
+ * In-memory storage for bound Fleet Rental vehicles.
+ * Service-internal only - not exported to UI or other modules.
+ * Stores only safe Fleet Rental Vehicle objects (no Library ID fields, no PII).
+ * 
+ * When a Library vehicle is bound to Fleet Rental, the generated Fleet vehicle
+ * is stored here for retrieval by FleetRental.tsx component.
+ * 
+ * Key point: This stores ONLY the Fleet Rental vehicle object,
+ * not the cross-domain binding metadata.
+ */
+const MOCK_BOUND_FLEET_RENTAL_VEHICLES: Vehicle[] = [];
+
 // ============================================================================
 // DETERMINISTIC HELPERS (NO RANDOMNESS)
 // ============================================================================
@@ -329,11 +342,44 @@ export function createFleetRentalBindingFromLibrary(input: {
   // Store binding in registry
   MOCK_FLEET_RENTAL_BINDINGS.push(binding);
 
+  // Store bound Fleet vehicle for retrieval by Fleet Rental UI
+  // Deduplicate by fleetId + vehicleId to avoid storing same vehicle twice
+  const existingBoundVehicle = MOCK_BOUND_FLEET_RENTAL_VEHICLES.find(
+    v => v.fleetId === input.fleetId && v.vehicleId === fleetVehicle.vehicleId
+  );
+  if (!existingBoundVehicle) {
+    MOCK_BOUND_FLEET_RENTAL_VEHICLES.push(fleetVehicle);
+  }
+
   return {
     success: true,
     message: 'Araç filo kiralama sistemine başarıyla eklendi',
     bindingId,
     fleetVehicle, // ← Fleet vehicle object for downstream processing
   };
+}
+
+// ============================================================================
+// BOUND VEHICLE RETRIEVAL (FOR FLEET RENTAL UI)
+// ============================================================================
+
+/**
+ * getFleetRentalBoundVehicles
+ * 
+ * Get all Fleet Rental vehicles created from Library bindings for a specific fleet.
+ * 
+ * SAFETY:
+ * - Returns ONLY safe Fleet Rental Vehicle objects.
+ * - Does NOT expose Library ID fields.
+ * - Does NOT expose bindingId.
+ * - Does NOT expose source/target ID mapping together.
+ * - Uses F-domain vehicleId only.
+ * 
+ * @param fleetId - Target fleet ID (e.g., 'FLEET001')
+ * @returns Array of bound Fleet Rental vehicles (safe F-prefixed vehicleId)
+ */
+export function getFleetRentalBoundVehicles(fleetId: string): Vehicle[] {
+  // Return only vehicles for the requested fleet
+  return MOCK_BOUND_FLEET_RENTAL_VEHICLES.filter(v => v.fleetId === fleetId);
 }
 
