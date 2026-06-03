@@ -6,7 +6,7 @@ import { getVehicleList } from '../services/dataService';
 import { getFleetRentalMembershipStatus, createFleetRentalBindingFromLibrary } from '../services/fleetRentalBindingService';
 
 // Deterministic constants for binding context
-const DEFAULT_FLEET_RENTAL_FLEET_ID = 'FLEET001';
+const DEFAULT_FLEET_RENTAL_FLEET_ID = 'FLEET-001';
 const DEFAULT_BINDING_OPERATOR_ID = 'system-operator';
 const DEFAULT_BINDING_EFFECTIVE_AT = '2026-06-01T00:00:00Z';
 
