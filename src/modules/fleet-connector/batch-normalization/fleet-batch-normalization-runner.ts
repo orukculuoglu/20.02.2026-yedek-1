@@ -17,8 +17,9 @@
 
 import { normalizeExternalFleetVehicleRecord } from '../normalization';
 
+import { FleetBatchNormalizationRuntimeInput } from './fleet-batch-normalization-runner.input';
+
 import {
-  FleetBatchNormalizationRuntimeInput,
   FleetBatchNormalizationResult,
   FleetBatchNormalizationStatus,
   FleetBatchNormalizationRejectReason,
