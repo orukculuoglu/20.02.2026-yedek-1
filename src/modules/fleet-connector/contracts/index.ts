@@ -76,3 +76,38 @@ export {
   FleetServiceOutcomeNextAction,
   type FleetServiceRoutingOutcome,
 } from './fleet-service-outcome.contract';
+
+// Fleet Intake Evaluation Contracts
+export {
+  FleetIntakeEvaluationSource,
+  type FleetIntakeEvaluationInput,
+} from './fleet-intake-evaluation-input.contract';
+
+export {
+  FleetIntakeDataQualitySeverity,
+  FleetIntakeDataQualityCode,
+  type FleetIntakeDataQualityFinding,
+} from './fleet-intake-data-quality.contract';
+
+export {
+  FleetIntakeReadinessSignalType,
+  FleetIntakeReadinessReasonCode,
+  type FleetIntakeReadinessSignal,
+} from './fleet-intake-readiness-signal.contract';
+
+export {
+  FleetIntakeServiceCandidateStatus,
+  type FleetIntakeServiceRoutingCandidate,
+} from './fleet-intake-service-candidate.contract';
+
+export {
+  FleetIntakeEvaluationStatus,
+  FleetIntakeOutcomeEligibility,
+  type FleetIntakeEvaluationResult,
+} from './fleet-intake-evaluation-result.contract';
+
+export {
+  FleetIntakeEvaluationPolicyStatus,
+  FleetIntakeEvaluationRule,
+  type FleetIntakeEvaluationPolicy,
+} from './fleet-intake-evaluation-policy.contract';
