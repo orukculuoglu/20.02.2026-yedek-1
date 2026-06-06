@@ -89,7 +89,6 @@ export enum FleetSyncErrorCode {
  * - Monitoring data quality
  * 
  * Security:
- * - No raw external payload
  * - No credential information
  * - Only summary counts and status
  * 

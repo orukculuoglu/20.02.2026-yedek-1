@@ -27,6 +27,30 @@ export {
   type ExternalFleetVehicleRecord,
 } from './fleet-external-record.contract';
 
+// Fleet Normalization Contracts
+export {
+  FleetNormalizedVehicleSource,
+  FleetNormalizedRecordStatus,
+  type FleetNormalizedVehicleRecord,
+} from './fleet-normalized-vehicle.contract';
+
+export {
+  FleetNormalizationIssueSeverity,
+  FleetNormalizationIssueCode,
+  type FleetNormalizationIssue,
+} from './fleet-normalization-issue.contract';
+
+export {
+  FleetNormalizationResultStatus,
+  type FleetNormalizationResult,
+} from './fleet-normalization-result.contract';
+
+export {
+  FleetNormalizationPolicyStatus,
+  FleetNormalizationRequiredField,
+  type FleetNormalizationPolicy,
+} from './fleet-normalization-policy.contract';
+
 // Fleet Synchronization Record Contracts
 export {
   FleetSyncDirection,

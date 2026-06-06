@@ -8,7 +8,6 @@
  * 
  * Safety:
  * - No direct sensitive vehicle identity fields
- * - No customer information
  * - Only safe operational references and statuses
  * - Timestamps from external source, as-is
  */
@@ -89,8 +88,6 @@ export enum ExternalFleetMaintenanceStatus {
  * 
  * Security:
  * - No direct sensitive vehicle identity fields
- * - No customer information
- * - No raw external payload
  * - internalOnlyPlateRef is a reference only, not a direct value
  * 
  * Timestamps:
@@ -141,18 +138,16 @@ export interface ExternalFleetVehicleRecord {
   lastUpdatedAt: string;
   
   /**
-   * Internal reference for plate matching purposes only.
+   * Internal reference for vehicle matching purposes only.
    * 
-   * This is NOT the plate value itself, only a reference key
-   * for matching against our internal fleet vehicle records.
-   * 
+   * This is only a reference key for matching against internal records.
    * Used to determine if external record maps to a known internal vehicle.
    * 
    * Examples:
-   * - "internal-plate-ref:12345" (internal identifier)
+   * - "internal-ref:12345" (internal identifier)
    * - "match-key:ABC1234" (normalized matching reference)
    * 
-   * Never contains actual plate value.
+   * Never contains sensitive identifiers or values.
    */
   internalOnlyPlateRef?: string;
 }

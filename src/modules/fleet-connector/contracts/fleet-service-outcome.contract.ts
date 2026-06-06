@@ -8,7 +8,6 @@
  * 
  * Scope:
  * - Internal outcomes only
- * - No customer information
  * - No unstructured text fields
  * - Decision and outcome tracking only
  */
@@ -94,7 +93,6 @@ export enum FleetServiceOutcomeNextAction {
  * 
  * Security:
  * - No unstructured text fields
- * - No customer information
  * - No external update fields
  * - Result remains internal to our system
  * 

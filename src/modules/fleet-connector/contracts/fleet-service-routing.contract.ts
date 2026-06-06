@@ -150,7 +150,6 @@ export enum FleetServiceTargetType {
  * 
  * Security:
  * - No unstructured text fields
- * - No direct customer identifiers
  * - vehicleId is Fleet domain operational identity only
  * - No Data Engine event emission in this step
  * 
@@ -182,7 +181,7 @@ export interface FleetServiceRoutingRequest {
   /** What triggered this routing request */
   source: FleetServiceRoutingSource;
   
-  /** Why the vehicle needs service (driving reason code) */
+  /** Why the vehicle needs service (service reason code) */
   reasonCode: FleetServiceRoutingReasonCode;
   
   /** Priority/urgency of the request */
