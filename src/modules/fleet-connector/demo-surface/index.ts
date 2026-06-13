@@ -5,6 +5,7 @@
  *
  * Exports:
  * - FleetConnectorInsightDemoSurface: React component for insight visualization
+ * - FleetConnectorInsightDemoSurfaceProps: Props interface for the component
  */
 
-export { FleetConnectorInsightDemoSurface } from './FleetConnectorInsightDemoSurface';
+export { FleetConnectorInsightDemoSurface, type FleetConnectorInsightDemoSurfaceProps } from './FleetConnectorInsightDemoSurface';

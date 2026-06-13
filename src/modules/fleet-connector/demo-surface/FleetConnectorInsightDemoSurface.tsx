@@ -3,8 +3,8 @@
  *
  * Read-only UI component that displays normalized fleet insight.
  *
- * This demo surface:
- * - Runs the deterministic normalization demo chain locally
+ * This component:
+ * - Accepts aggregate normalized data via props
  * - Derives multi-dimensional operational insight
  * - Displays aggregate summary in read-only format
  * - Never exposes raw external records
@@ -15,25 +15,16 @@
 
 import React from 'react';
 
-import { runFleetNormalizationDemo } from '../demo-normalization';
-import { createFleetNormalizationInsightModel, FleetNormalizationInsightLevel } from '../insight-models';
+import { createFleetNormalizationInsightModel, FleetNormalizationInsightLevel, FleetNormalizationInsightCode } from '../insight-models';
+import type { FleetNormalizationReadModel } from '../read-models';
 
 /**
- * Static demo constants - caller-provided context
- *
- * All IDs and timestamps are static demo values provided at component level,
- * never generated internally.
+ * Props for FleetConnectorInsightDemoSurface
  */
-const DEMO_TENANT_ID = 'TENANT-DEMO-001';
-const DEMO_FLEET_ID = 'FLEET-001';
-const DEMO_NORMALIZED_AT = '2026-06-06T12:00:00Z';
-const DEMO_NORMALIZED_RECORD_IDS = [
-  'NORM-FLEET-DEMO-001',
-  'NORM-FLEET-DEMO-002',
-  'NORM-FLEET-DEMO-003',
-  'NORM-FLEET-DEMO-004',
-  'NORM-FLEET-DEMO-005',
-];
+export interface FleetConnectorInsightDemoSurfaceProps {
+  readModel: FleetNormalizationReadModel;
+  batchStatus?: string;
+}
 
 /**
  * Helper: Translate insight level to Turkish display text
@@ -76,36 +67,134 @@ function getLevelClassName(level: FleetNormalizationInsightLevel): string {
 }
 
 /**
+ * Helper: Calculate display-level severity for maintenance pressure.
+ * Applies conservative rules to avoid overstating criticality for partial maintenance.
+ */
+function calculateDisplayMaintenancePressure(
+  totalVehicles: number,
+  maintenanceCount: number
+): FleetNormalizationInsightLevel {
+  if (totalVehicles === 0) {
+    return FleetNormalizationInsightLevel.Unknown;
+  }
+  if (maintenanceCount === 0) {
+    return FleetNormalizationInsightLevel.Good;
+  }
+  if (maintenanceCount === totalVehicles) {
+    return FleetNormalizationInsightLevel.Critical;
+  }
+  // Partial maintenance: only escalate to warning if >= 50% are affected
+  const maintenancePercentage = (maintenanceCount / totalVehicles) * 100;
+  if (maintenancePercentage >= 50 && totalVehicles > 1) {
+    return FleetNormalizationInsightLevel.Warning;
+  }
+  // Some vehicles in maintenance but < 50%
+  return FleetNormalizationInsightLevel.Watch;
+}
+
+/**
+ * Helper: Calculate display-level severity for overall health.
+ * Applies conservative rules to avoid overstating criticality for operational situations.
+ */
+function calculateDisplayOverallHealth(
+  totalVehicles: number,
+  availableCount: number,
+  activeCount: number,
+  maintenanceCount: number,
+  blockedCount: number
+): FleetNormalizationInsightLevel {
+  // Critical only for actual crisis situations
+  const isCriticalSituation =
+    totalVehicles === 0 ||
+    activeCount === 0 ||
+    availableCount === 0 ||
+    maintenanceCount === totalVehicles;
+
+  if (isCriticalSituation) {
+    return FleetNormalizationInsightLevel.Critical;
+  }
+
+  // Warning if vehicles are blocked
+  if (blockedCount > 0) {
+    return FleetNormalizationInsightLevel.Warning;
+  }
+
+  // Watch if some vehicles are in maintenance but not a crisis
+  if (maintenanceCount > 0) {
+    return FleetNormalizationInsightLevel.Watch;
+  }
+
+  return FleetNormalizationInsightLevel.Good;
+}
+
+/**
  * FleetConnectorInsightDemoSurface
  *
  * Read-only demo component that displays fleet normalization insight.
  *
- * Runs normalized data transformation pipeline deterministically and displays
+ * Accepts pre-computed aggregate read model as props and displays
  * multi-dimensional operational insight. Component is purely read-only with
  * no inputs, forms, or side effects.
  */
-export function FleetConnectorInsightDemoSurface() {
-  // Run the deterministic normalization demo chain
-  const demoResult = runFleetNormalizationDemo({
-    normalizedRecordIds: DEMO_NORMALIZED_RECORD_IDS,
-    tenantId: DEMO_TENANT_ID,
-    fleetId: DEMO_FLEET_ID,
-    normalizedAt: DEMO_NORMALIZED_AT,
-  });
+export function FleetConnectorInsightDemoSurface(props: FleetConnectorInsightDemoSurfaceProps) {
+  // Use readModel from props
+  const readModel = props.readModel;
 
   // Derive operational insight from the aggregate read model
-  const insight = createFleetNormalizationInsightModel(demoResult.readModel);
+  const insight = createFleetNormalizationInsightModel(readModel);
 
-  // Extract read model for easy reference
-  const readModel = demoResult.readModel;
+  // Calculate display-level values for UI rendering (non-mutating)
+  // Extract counts from readModel distributions (distributions are arrays of {status, count})
+  const totalVehicles = readModel.totalNormalizedRecords;
+  
+  // Maintenance count: sum overdue, due-soon, and service-open
+  const maintenanceCount =
+    (readModel.maintenanceStatusDistribution?.find(d => d.status === 'overdue')?.count ?? 0) +
+    (readModel.maintenanceStatusDistribution?.find(d => d.status === 'due-soon')?.count ?? 0) +
+    (readModel.maintenanceStatusDistribution?.find(d => d.status === 'service-open')?.count ?? 0);
+  
+  // Available and blocked counts from rental distribution
+  const availableCount = readModel.rentalStatusDistribution?.find(d => d.status === 'available')?.count ?? 0;
+  const blockedCount = readModel.rentalStatusDistribution?.find(d => d.status === 'blocked')?.count ?? 0;
+  
+  // Active count from operational distribution
+  const activeCount = readModel.operationalStatusDistribution?.find(d => d.status === 'active')?.count ?? 0;
+
+  // Calculate display severity levels (for UI only, does not mutate insight)
+  const displayMaintenancePressure = calculateDisplayMaintenancePressure(
+    totalVehicles,
+    maintenanceCount
+  );
+  const displayOverallHealth = calculateDisplayOverallHealth(
+    totalVehicles,
+    availableCount,
+    activeCount,
+    maintenanceCount,
+    blockedCount
+  );
+
+  // Create display versions of insights (for insight list items only)
+  const displayInsightItems = insight.insights.map((item) => {
+    // If maintenance-pressure-present shows as critical but we have partial maintenance,
+    // display it as watch instead
+    if (
+      item.code === FleetNormalizationInsightCode.MaintenancePressurePresent &&
+      item.level === FleetNormalizationInsightLevel.Critical &&
+      maintenanceCount > 0 &&
+      maintenanceCount < totalVehicles
+    ) {
+      return { ...item, level: FleetNormalizationInsightLevel.Watch };
+    }
+    return item;
+  });
 
   return (
     <div className="fleet-connector-demo-surface">
       <div className="demo-section">
         <div className="demo-header">
-          <h2>Filo Connector Demo İçgörüleri</h2>
+          <h2>Filo Connector Operasyon İçgörüleri</h2>
           <p className="demo-subtitle">
-            Dış sistemden gelen örnek filo kayıtlarının normalize edilmiş özet görünümü.
+            Bu panel mevcut Filo Kiralama ekranındaki canlı operasyon verilerinden türetilmiştir.
           </p>
         </div>
 
@@ -141,9 +230,9 @@ export function FleetConnectorInsightDemoSurface() {
             <div className="content-column">
               <h3>Sağlık Düzeyleri</h3>
 
-              <div className={`metric-row level-display ${getLevelClassName(insight.overallHealth)}`}>
+              <div className={`metric-row level-display ${getLevelClassName(displayOverallHealth)}`}>
                 <span className="metric-label">Genel Sağlık:</span>
-                <span className="metric-value">{getLevelText(insight.overallHealth)}</span>
+                <span className="metric-value">{getLevelText(displayOverallHealth)}</span>
               </div>
 
               <div className={`metric-row level-display ${getLevelClassName(insight.dataQualityLevel)}`}>
@@ -156,9 +245,9 @@ export function FleetConnectorInsightDemoSurface() {
                 <span className="metric-value">{getLevelText(insight.operationalAvailabilityLevel)}</span>
               </div>
 
-              <div className={`metric-row level-display ${getLevelClassName(insight.maintenancePressureLevel)}`}>
+              <div className={`metric-row level-display ${getLevelClassName(displayMaintenancePressure)}`}>
                 <span className="metric-label">Bakım Baskısı:</span>
-                <span className="metric-value">{getLevelText(insight.maintenancePressureLevel)}</span>
+                <span className="metric-value">{getLevelText(displayMaintenancePressure)}</span>
               </div>
 
               <div className={`metric-row level-display ${getLevelClassName(insight.rentalAvailabilityLevel)}`}>
@@ -169,11 +258,11 @@ export function FleetConnectorInsightDemoSurface() {
           </div>
 
           {/* Insights List */}
-          {insight.insights.length > 0 && (
+          {displayInsightItems.length > 0 && (
             <div className="insights-section">
               <h3>Operasyonel Bulgular</h3>
               <div className="insights-list">
-                {insight.insights.map((item, index) => (
+                {displayInsightItems.map((item, index) => (
                   <div key={index} className={`insight-item ${getLevelClassName(item.level)}`}>
                     <span className="insight-code">{item.code}</span>
                     <span className="insight-level">{getLevelText(item.level)}</span>
