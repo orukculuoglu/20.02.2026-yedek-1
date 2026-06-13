@@ -1,7 +1,7 @@
 /**
- * Fleet Connector Insight Demo Surface
+ * Fleet Connector Operation Insight Surface
  *
- * Read-only UI component that displays normalized fleet insight.
+ * Read-only UI component that displays normalized fleet operation insight.
  *
  * This component:
  * - Accepts aggregate normalized data via props
@@ -19,9 +19,9 @@ import { createFleetNormalizationInsightModel, FleetNormalizationInsightLevel, F
 import type { FleetNormalizationReadModel } from '../read-models';
 
 /**
- * Props for FleetConnectorInsightDemoSurface
+ * Props for FleetConnectorOperationInsightSurface
  */
-export interface FleetConnectorInsightDemoSurfaceProps {
+export interface FleetConnectorOperationInsightSurfaceProps {
   readModel: FleetNormalizationReadModel;
   batchStatus?: string;
 }
@@ -128,15 +128,15 @@ function calculateDisplayOverallHealth(
 }
 
 /**
- * FleetConnectorInsightDemoSurface
+ * FleetConnectorOperationInsightSurface
  *
- * Read-only demo component that displays fleet normalization insight.
+ * Read-only component that displays fleet operation normalization insight.
  *
  * Accepts pre-computed aggregate read model as props and displays
  * multi-dimensional operational insight. Component is purely read-only with
  * no inputs, forms, or side effects.
  */
-export function FleetConnectorInsightDemoSurface(props: FleetConnectorInsightDemoSurfaceProps) {
+export function FleetConnectorOperationInsightSurface(props: FleetConnectorOperationInsightSurfaceProps) {
   // Use readModel from props
   const readModel = props.readModel;
 
@@ -189,7 +189,7 @@ export function FleetConnectorInsightDemoSurface(props: FleetConnectorInsightDem
   });
 
   return (
-    <div className="fleet-connector-demo-surface">
+    <div className="fleet-connector-operation-insight-surface">
       <div className="demo-section">
         <div className="demo-header">
           <h2>Filo Connector Operasyon İçgörüleri</h2>
@@ -276,7 +276,7 @@ export function FleetConnectorInsightDemoSurface(props: FleetConnectorInsightDem
       </div>
 
       <style>{`
-        .fleet-connector-demo-surface {
+        .fleet-connector-operation-insight-surface {
           padding: 16px;
           background-color: #f5f5f5;
           border-radius: 4px;

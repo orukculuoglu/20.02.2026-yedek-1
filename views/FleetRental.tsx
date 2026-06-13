@@ -3,7 +3,7 @@ import { listFleets, listVehicles, listContracts, createContract, getVehicleSumm
 import { getFleetRentalBoundVehicles } from '../services/fleetRentalBindingService';
 import type { Fleet, Vehicle, RentalContract, CreateContractPayload, VehicleSummary, FleetPolicy, ServiceRedirect, WorkOrder, WorkOrderLineItem, ContractLocationCode } from '../types/fleetRental';
 import { FleetIntelligenceRiskPanel } from './FleetIntelligenceRiskPanel';
-import { FleetConnectorInsightDemoSurface, type FleetConnectorInsightDemoSurfaceProps } from '../src/modules/fleet-connector/demo-surface';
+import { FleetConnectorOperationInsightSurface, type FleetConnectorOperationInsightSurfaceProps } from '../src/modules/fleet-connector/operation-insight-surface';
 import type { FleetNormalizationReadModel } from '../src/modules/fleet-connector/read-models';
 import { ExternalFleetOperationalStatus, ExternalFleetRentalStatus, ExternalFleetMaintenanceStatus } from '../src/modules/fleet-connector/contracts/fleet-external-record.contract';
 import { AlertTriangle, CheckCircle, TrendingUp, AlertCircle, Settings, DollarSign, Database, Briefcase, Calendar, Wrench, Shield, Users, TrendingDown, Eye, X, Lock, Unlock, ShieldAlert } from 'lucide-react';
@@ -1476,7 +1476,7 @@ export default function FleetRental() {
       {(() => {
         const fleetConnectorReadModel = deriveFleetNormalizationReadModel(vehicles, contracts);
         return (
-          <FleetConnectorInsightDemoSurface
+          <FleetConnectorOperationInsightSurface
             readModel={fleetConnectorReadModel}
             batchStatus="LIVE"
           />
